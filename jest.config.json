@@ -1,0 +1,33 @@
+{
+  "clearMocks": true,
+  "resetMocks": true,
+  "restoreMocks": true,
+  "collectCoverageFrom": [
+    "<rootDir>/src/**/*.(t|j)s"
+  ],
+  "coveragePathIgnorePatterns": [
+    "schemas/",
+    "schemas\\.ts",
+    "local\\.ts",
+    "global\\.d\\.ts"
+  ],
+  "coverageReporters": [
+    "lcov",
+    "json",
+    "text-summary"
+  ],
+  "moduleDirectories": ["node_modules", "src"],
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts"
+  ],
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/src/$1",
+    "^\\?/(.*)$": "<rootDir>/test/$1"
+  },
+  "testEnvironment": "node",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  }
+}

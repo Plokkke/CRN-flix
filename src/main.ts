@@ -1,0 +1,24 @@
+import { NestFactory } from '@nestjs/core';
+import { WinstonModule } from 'nest-winston';
+
+import { configureAppModule } from '@/app.module';
+import { loadEnv } from '@/environment';
+
+import { logger } from './services/logger';
+
+(async () => {
+  const env = loadEnv();
+
+  const app = await NestFactory.createApplicationContext(configureAppModule(env), {
+    logger: WinstonModule.createLogger({
+      instance: logger,
+    }),
+  });
+
+  await app.init();
+
+  process.on('SIGINT', async () => {
+    await app.close();
+    process.exit(0);
+  });
+})();

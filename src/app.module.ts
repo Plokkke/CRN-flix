@@ -1,0 +1,74 @@
+import { Module, NestModule } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { z } from 'zod';
+
+import { AppService } from '@/app.service';
+import { EnvironmentVariables } from '@/environment';
+import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
+import { configSchema as traktConfigSchema } from '@/modules/trakt/TraktApi';
+import { repositoryProviders } from '@/providers/database';
+import { discordProvider } from '@/providers/discord';
+import { jellyfinProvider } from '@/providers/jellyfin';
+import { allUserMessagingProvider } from '@/providers/messaging/all';
+import { discordUserMessagingProvider } from '@/providers/messaging/user';
+import { syncProvider } from '@/providers/sync';
+import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
+import { traktProvider } from '@/providers/trakt';
+import { traktPluginProvider } from '@/providers/traktPlugin';
+import { discordConfigSchema } from '@/services/discord';
+import { configSchema as syncConfigSchema } from '@/services/sync';
+
+export const configSchema = z.object({
+  trakt: traktConfigSchema,
+  sync: syncConfigSchema,
+  'sync-datasource': syncDataSourceConfigSchema,
+  jellyfin: jellyfinConfigSchema,
+  discord: discordConfigSchema,
+  administration: z.object({
+    discordChannelId: z.string(),
+  }),
+});
+
+export type Config = z.infer<typeof configSchema>;
+
+export function loadConfig(env: EnvironmentVariables): Config {
+  return configSchema.parse({
+    trakt: env.trakt,
+    sync: {},
+    'sync-datasource': {
+      database: 'trakt-sync',
+      username: 'root',
+      password: 'password',
+      ssl: false,
+    },
+    jellyfin: env.jellyfin,
+    discord: env.discord,
+    administration: {
+      discordChannelId: env.discord.channelId,
+    },
+  });
+}
+
+export function configureAppModule(env: EnvironmentVariables): new () => NestModule {
+  @Module({
+    imports: [ConfigModule.forRoot({ load: [() => loadConfig(env)] })],
+    providers: [
+      AppService,
+      traktProvider,
+      syncDataSourceProvider,
+      ...repositoryProviders,
+      syncProvider,
+      jellyfinProvider,
+      traktPluginProvider,
+      discordProvider,
+      discordUserMessagingProvider,
+      allUserMessagingProvider,
+      // adminMessagingProvider,
+    ],
+  })
+  class App implements NestModule {
+    configure(): void {}
+  }
+
+  return App;
+}

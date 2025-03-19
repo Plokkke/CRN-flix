@@ -1,0 +1,25 @@
+.idea
+.vscode
+
+/dist
+/node_modules
+/reports
+
+# OS
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Secrets
+.env
+.npmrc
+
+.stryker-tmp/
+local.ts
