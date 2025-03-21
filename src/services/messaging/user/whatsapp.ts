@@ -1,6 +1,7 @@
 import { Client } from 'whatsapp-web.js';
 
 import { AuthDevicePublicCtxt } from '@/modules/trakt/types';
+import { MediaRequestEntity } from '@/services/database/mediaRequests';
 
 import { UserMessaging } from '.';
 
@@ -29,8 +30,8 @@ export class WhatsAppUserMessaging extends UserMessaging<string> {
     await this.client.sendMessage(phoneNumber, `Please link your Trakt account: ${url}`);
   }
 
-  async mediaRequestUpdated(phoneNumber: string, mediaTitle: string, status: string): Promise<void> {
-    await this.client.sendMessage(phoneNumber, `Media update: ${mediaTitle} - Status: ${status}`);
+  async mediaRequestUpdated(phoneNumber: string, request: MediaRequestEntity): Promise<void> {
+    await this.client.sendMessage(phoneNumber, `Media update: ${request.title} - Status: ${request.status}`);
   }
 
   onJoin(handler: (id: string) => void): void {

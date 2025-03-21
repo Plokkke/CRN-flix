@@ -1,5 +1,6 @@
 import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
 import { AuthDevicePublicCtxt } from '@/modules/trakt/types';
+import { MediaRequestEntity } from '@/services/database/mediaRequests';
 
 import { UserMessaging } from '.';
 
@@ -41,9 +42,9 @@ export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
     await messaging.traktLinkRequest(ctxt.id, authCtxt);
   }
 
-  async mediaRequestUpdated(ctxt: UserMessagingCtxt, mediaTitle: string, status: string): Promise<void> {
+  async mediaRequestUpdated(ctxt: UserMessagingCtxt, request: MediaRequestEntity): Promise<void> {
     const messaging = this.getMessaging(ctxt.key);
-    await messaging.mediaRequestUpdated(ctxt.id, mediaTitle, status);
+    await messaging.mediaRequestUpdated(ctxt.id, request);
   }
 
   onJoin(handler: (ctxt: UserMessagingCtxt) => void): void {

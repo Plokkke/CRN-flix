@@ -1,4 +1,4 @@
-import { Logger } from "@nestjs/common";
+import { PoolClient, Pool } from 'pg';
 
 export function upsertQuery(table: string, record: Record<string, unknown>): string;
 export function upsertQuery(table: string, record: Record<string, unknown>, primaryKeys: string[]): string;
@@ -38,4 +38,20 @@ export function upsertQuery(
        ${conflictClause}
        RETURNING *`;
   return query;
+}
+
+export async function transaction(pool: Pool, runner: (client: PoolClient) => Promise<void>): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    await runner(client);
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }

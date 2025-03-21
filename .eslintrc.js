@@ -62,6 +62,7 @@ module.exports = {
     'object-curly-newline': ['error', { consistent: true }],
     'prefer-const': ['error', { destructuring: 'all' }],
     'prefer-destructuring': 'off',
+    'prettier/prettier': 'error',
     radix: ['error'],
     semi: ['error', 'always', { omitLastInOneLineBlock: true }],
     '@typescript-eslint/explicit-function-return-type': 'off',

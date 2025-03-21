@@ -1,36 +1,38 @@
-import { ChannelType, EmbedBuilder, Message, TextChannel, ThreadAutoArchiveDuration } from 'discord.js';
+import { Logger } from '@nestjs/common';
+import { ChannelType, EmbedBuilder, TextChannel, ThreadAutoArchiveDuration } from 'discord.js';
 
 import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
-import { MediaRequestEntity } from '@/services/database/mediaRequests';
+import { MediaRequestEntity, RequestStatus } from '@/services/database/mediaRequests';
+import { UserEntity } from '@/services/database/users';
 import { DiscordService } from '@/services/discord';
 
 export type Config = {
   channelId: string;
 };
 
-export const REQUEST_STATUS = ['requested', 'in_progress', 'completed', 'not_found', 'unacceptable'] as const;
-export type RequestStatus = (typeof REQUEST_STATUS)[number];
-
 export const EMOJI_BY_STATUS: Record<RequestStatus, string> = {
-  requested: '⏳',
+  pending: '⏳',
   in_progress: '👀',
-  completed: '✅',
-  not_found: '🫥',
-  unacceptable: '🚫',
+  fulfilled: '✅',
+  missing: '🫥',
+  rejected: '⛔️',
+  canceled: '🗑️',
 } as const;
 export const EMOJI_NAME_BY_STATUS: Record<RequestStatus, string> = {
-  requested: 'sandglass',
+  pending: 'sandglass',
   in_progress: 'eyes',
-  completed: 'white_check_mark',
-  not_found: 'question',
-  unacceptable: 'x',
+  fulfilled: 'white_check_mark',
+  missing: 'question',
+  rejected: 'x',
+  canceled: 'wastebasket',
 } as const;
 export const LABEL_BY_STATUS: Record<RequestStatus, string> = {
-  requested: 'En attente',
+  pending: 'Enregistrée',
   in_progress: 'En cours',
-  completed: 'Traité',
-  not_found: 'Introuvable',
-  unacceptable: 'Inacceptable',
+  fulfilled: 'Disponible',
+  missing: 'Introuvable',
+  rejected: 'Rejetée',
+  canceled: 'Annulée',
 } as const;
 
 export type NewRequestContext = {
@@ -46,7 +48,29 @@ export type RequestContext = {
   users: JellyfinUser[];
 };
 
+function setEmbedField(embed: EmbedBuilder, request: MediaRequestEntity) {
+  embed
+    .setTitle(`${request.title} (${request.year})`)
+    .setURL(`https://www.imdb.com/fr/title/${request.imdbId}/`)
+    .addFields({ name: 'Status', value: `${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}` });
+
+  if (request.type === 'episode') {
+    embed.addFields(
+      { name: 'Saisons', value: `${request.seasonNumber}`, inline: true },
+      { name: 'Episode', value: `${request.episodeNumber}`, inline: true },
+    );
+  }
+
+  if (request.status === 'pending') {
+    embed.addFields({ name: 'Utilisateurs', value: request.users?.map((user) => user.name).join(', ') ?? 'N/A' });
+  }
+
+  return embed;
+}
+
 export class DiscordAdminMessaging {
+  static readonly logger = new Logger(DiscordAdminMessaging.name);
+
   static async create(discordService: DiscordService, config: Config): Promise<DiscordAdminMessaging> {
     const channel = await discordService.getChannel(config.channelId);
     if (channel.type !== ChannelType.GuildText) {
@@ -57,64 +81,50 @@ export class DiscordAdminMessaging {
 
   private constructor(private readonly channel: TextChannel) {}
 
-  private async updateMessageStatus(message: Message, status: RequestStatus) {
-    const embed = message.embeds[0];
-    const fields = embed.fields;
-    const statusField = fields?.find((field) => field.name === 'Status');
-    if (statusField) {
-      statusField.value = `${EMOJI_BY_STATUS[status]} ${LABEL_BY_STATUS[status]}`;
-    }
-    await message.edit({ embeds: [embed] });
-    await message.reactions.removeAll();
-    await message.react(EMOJI_BY_STATUS[status]);
-  }
+  async newMediaRequest(request: MediaRequestEntity): Promise<{ threadId: string }> {
+    const embed = new EmbedBuilder().setColor('#3498db');
 
-  async newMediaRequest(request: NewRequestContext): Promise<{ threadId: string; messageId: string }> {
-    const { media, users } = request;
-    const embed = new EmbedBuilder()
-      .setColor('#3498db')
-      .setTitle(`Nouvelle demande: ${media.title}`)
-      .setDescription(`Un nouveau média a été ajouté à la liste de synchronisation.`)
-      .addFields(
-        { name: 'ID', value: media.imdbId },
-        { name: 'Type', value: media.type === 'movie' ? 'Film' : 'Série' },
-        { name: 'Année', value: media.year?.toString() ?? 'N/A' },
-      );
-
-    if (media.type === 'show') {
-      if (media.seasonNumber) {
-        embed.addFields({ name: 'Saisons', value: `${media.seasonNumber}` });
-      }
-      if (media.episodeNumber) {
-        embed.addFields({ name: 'Episodes', value: `${media.episodeNumber}` });
-      }
-    }
-    embed.addFields(
-      { name: 'Utilisateurs', value: users.map((user) => user.name).join(', ') },
-      { name: 'Status', value: `${EMOJI_BY_STATUS.requested} ${LABEL_BY_STATUS.requested}` },
-    );
-
-    const message = await this.channel.send({ embeds: [embed] });
-    await message.react(EMOJI_BY_STATUS.requested);
+    const message = await this.channel.send({ embeds: [setEmbedField(embed, request)] });
+    await message.react(EMOJI_BY_STATUS[request.status]);
 
     const thread = await message.startThread({
-      name: `Suivi: ${media.title} (${media.year})`,
+      name: `Suivi: ${request.title} (${request.year})`,
       autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
     });
 
     return {
       threadId: thread.id,
-      messageId: message.id,
     };
   }
 
-  async updateMediaStatus(request: RequestContext): Promise<void> {
-    const { threadId, messageId, status } = request;
+  async updateMediaStatus(request: MediaRequestEntity): Promise<void> {
+    if (!request.threadId) {
+      DiscordAdminMessaging.logger.warn(`Request ${request.id} has no thread ID`);
+      return;
+    }
 
-    const thread = await DiscordService.getThread(this.channel, threadId);
-    await thread.send(`Statut mis à jour: ${EMOJI_BY_STATUS[status]} ${LABEL_BY_STATUS[status]}`);
+    const thread = await DiscordService.getThread(this.channel, request.threadId);
+    await thread.send(`Statut mis à jour: ${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}`);
 
-    const message = await DiscordService.getMessage(this.channel, messageId);
-    await this.updateMessageStatus(message, status);
+    const head = await DiscordService.getHeadOfThread(this.channel, request.threadId);
+
+    await head.edit({ embeds: [setEmbedField(EmbedBuilder.from(head.embeds[0]), request)] });
+
+    await head.reactions.removeAll();
+    await head.react(EMOJI_BY_STATUS[request.status]);
+  }
+
+  async updateRequesters(request: MediaRequestEntity, users: UserEntity[]): Promise<void> {
+    if (!request.threadId) {
+      DiscordAdminMessaging.logger.warn(`Request ${request.id} has no thread ID`);
+      return;
+    }
+
+    const thread = await DiscordService.getThread(this.channel, request.threadId);
+    await thread.send(`Changement de demandeurs: ${users.map((user) => user.name).join(', ')}`);
+
+    const head = await DiscordService.getHeadOfThread(this.channel, request.threadId);
+
+    await head.edit({ embeds: [setEmbedField(EmbedBuilder.from(head.embeds[0]), request)] });
   }
 }

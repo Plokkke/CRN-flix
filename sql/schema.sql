@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS media_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   imdb_id VARCHAR(20) NOT NULL,
-  status VARCHAR(10) NOT NULL CHECK (status IN ('missing', 'overaged')),
-  type VARCHAR(10) NOT NULL CHECK (type IN ('movie', 'show', 'season', 'episode')),
+  status VARCHAR(10) NOT NULL CHECK (status IN ('pending', 'in_progress', 'fulfilled', 'missing', 'rejected', 'canceled')),
+  type VARCHAR(10) NOT NULL CHECK (type IN ('movie', 'episode')),
   title VARCHAR(255) NOT NULL,
   year INTEGER,
   season_number INTEGER,

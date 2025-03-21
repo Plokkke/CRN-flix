@@ -9,6 +9,7 @@ import { configSchema as traktConfigSchema } from '@/modules/trakt/TraktApi';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
 import { jellyfinProvider } from '@/providers/jellyfin';
+import { adminMessagingProvider } from '@/providers/messaging/admin';
 import { allUserMessagingProvider } from '@/providers/messaging/all';
 import { discordUserMessagingProvider } from '@/providers/messaging/user';
 import { syncProvider } from '@/providers/sync';
@@ -63,7 +64,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       discordProvider,
       discordUserMessagingProvider,
       allUserMessagingProvider,
-      // adminMessagingProvider,
+      adminMessagingProvider,
     ],
   })
   class App implements NestModule {

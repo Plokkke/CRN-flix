@@ -3,8 +3,7 @@ import { WinstonModule } from 'nest-winston';
 
 import { configureAppModule } from '@/app.module';
 import { loadEnv } from '@/environment';
-
-import { logger } from './services/logger';
+import { logger } from '@/services/logger';
 
 (async () => {
   const env = loadEnv();

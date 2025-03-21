@@ -71,6 +71,15 @@ export class DiscordService implements OnModuleDestroy {
     return thread;
   }
 
+  static async getHeadOfThread(channel: TextChannel, threadId: string): Promise<Message> {
+    const thread = await this.getThread(channel, threadId);
+    const message = await thread.fetchStarterMessage();
+    if (!message) {
+      throw new Error(`Message with ID ${threadId} not found`);
+    }
+    return message;
+  }
+
   private readonly client: Client;
 
   private constructor(private config: DiscordConfig) {

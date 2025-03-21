@@ -3,7 +3,8 @@ import * as _ from 'lodash';
 import { z } from 'zod';
 
 import { TraktApi } from '@/modules/trakt/TraktApi';
-import { Media, ProgressShow, ReleasedMedia, Show, UserAuthCtxt, WantedMedia } from '@/modules/trakt/types';
+import { Media, ProgressShow, ReleasedMedia, UserAuthCtxt, Show } from '@/modules/trakt/types';
+import { MediaRequestInfos } from '@/services/database/mediaRequests';
 
 export const configSchema = z.object({
   ratingThreshold: z.number().int().optional().default(10),
@@ -15,74 +16,26 @@ export const configSchema = z.object({
 
 export type Config = z.infer<typeof configSchema>;
 
-function isMovie(media: Media, id: number): boolean {
-  return media.type === 'movie' && media.movie.ids.trakt === id;
+function mediaRequestPusherFor(user: UserAuthCtxt) {
+  return (mediaRequests: MediaRequestInfos[], media: MediaRequestInfos): MediaRequestInfos[] =>
+    pushMediaRequest(mediaRequests, media, user);
 }
 
-function isShow(media: Media, id: number): boolean {
-  return media.type === 'show' && media.show.ids.trakt === id;
-}
-
-function isSeason(media: Media, showId: number, seasonNumber: number): boolean {
-  return media.type === 'season' && media.show.ids.trakt === showId && media.season.number === seasonNumber;
-}
-
-function isEpisode(media: Media, showId: number, seasonNumber: number, episodeNumber: number): boolean {
-  return (
-    media.type === 'episode' &&
-    media.show.ids.trakt === showId &&
-    media.episode.season === seasonNumber &&
-    media.episode.number === episodeNumber
-  );
-}
-
-function isPartOfShow(media: Media, showId: number): boolean {
-  return (media.type === 'season' || media.type === 'episode') && media.show.ids.trakt === showId;
-}
-
-function isPartOfSeason(media: Media, showId: number, seasonNumber: number): boolean {
-  return media.type === 'episode' && media.show.ids.trakt === showId && media.episode.season === seasonNumber;
-}
-
-function wantedMediaPusherFor(user: UserAuthCtxt) {
-  return (wantedMedias: WantedMedia[], media: Media): WantedMedia[] => pushWantedMedia(wantedMedias, media, user);
-}
-
-function pushWantedMedia(wantedMedias: WantedMedia[], media: Media, user: UserAuthCtxt): WantedMedia[] {
-  let matchingMedia: WantedMedia | undefined;
-  let replacingMedias: WantedMedia[] = [];
-
-  if (media.type === 'movie') {
-    matchingMedia = wantedMedias.find((m) => isMovie(m.media, media.movie.ids.trakt));
-  } else if (media.type === 'show') {
-    matchingMedia = wantedMedias.find((m) => isShow(m.media, media.show.ids.trakt));
-    replacingMedias = wantedMedias.filter((m) => isPartOfShow(m.media, media.show.ids.trakt));
-  } else if (media.type === 'season') {
-    matchingMedia = wantedMedias.find(
-      (m) => isShow(m.media, media.show.ids.trakt) && isSeason(m.media, media.show.ids.trakt, media.season.number),
-    );
-    replacingMedias = wantedMedias.filter((m) => isPartOfSeason(m.media, media.show.ids.trakt, media.season.number));
-  } else if (media.type === 'episode') {
-    matchingMedia = wantedMedias.find(
-      (m) =>
-        isShow(m.media, media.show.ids.trakt) ||
-        isSeason(m.media, media.show.ids.trakt, media.episode.season) ||
-        isEpisode(m.media, media.show.ids.trakt, media.episode.season, media.episode.number),
-    );
-  }
+function pushMediaRequest(
+  mediaRequests: MediaRequestInfos[],
+  mediaRequest: MediaRequestInfos,
+  user: UserAuthCtxt,
+): MediaRequestInfos[] {
+  let matchingMedia: MediaRequestInfos | undefined = mediaRequests.find((m) => m.imdbId === mediaRequest.imdbId);
 
   if (!matchingMedia) {
-    matchingMedia = { media, userIds: [] };
-    wantedMedias.push(matchingMedia);
+    matchingMedia = mediaRequest;
+    mediaRequests.push(matchingMedia);
   }
 
-  matchingMedia.userIds = _.uniq([...matchingMedia.userIds, replacingMedias.flatMap((m) => m.userIds), user.id].flat());
+  matchingMedia.userIds = _.uniq([...matchingMedia.userIds, user.id]);
 
-  for (const replacingMedia of replacingMedias) {
-    _.remove(wantedMedias, replacingMedia);
-  }
-
-  return wantedMedias;
+  return mediaRequests;
 }
 
 export class SyncService {
@@ -95,23 +48,26 @@ export class SyncService {
     configSchema.parse(config);
   }
 
-  async listTargetMedias(users: UserAuthCtxt[]): Promise<WantedMedia[]> {
-    return users.reduce(async (pWantedMedias: Promise<WantedMedia[]>, user: UserAuthCtxt): Promise<WantedMedia[]> => {
-      const userWantedMedias = await this.listTargetMediasFor(user);
-      return userWantedMedias.reduce(wantedMediaPusherFor(user), await pWantedMedias);
-    }, Promise.resolve([]));
+  async listTargetMedias(users: UserAuthCtxt[]): Promise<MediaRequestInfos[]> {
+    return users.reduce(
+      async (pMediaRequests: Promise<MediaRequestInfos[]>, user: UserAuthCtxt): Promise<MediaRequestInfos[]> => {
+        const userWantedMedias = await this.listTargetMediasFor(user);
+        return userWantedMedias.reduce(mediaRequestPusherFor(user), await pMediaRequests);
+      },
+      Promise.resolve([]),
+    );
   }
 
-  private async listTargetMediasFor(user: UserAuthCtxt): Promise<Media[]> {
+  private async listTargetMediasFor(user: UserAuthCtxt): Promise<MediaRequestInfos[]> {
     return [
       ...(await this.listProgressShows(user)),
       ...(await this.listWantedMedias(user)),
-      ...(await this.listHighRatedMedias(user)),
-      ...(await this.listListedMedias(user, 'Jellyfin')),
+      // ...(await this.listHighRatedMedias(user)),
+      // ...(await this.listListedMedias(user, 'Jellyfin')),
     ];
   }
 
-  private async listHighRatedMedias(user: UserAuthCtxt): Promise<Media[]> {
+  private async listHighRatedMedias(user: UserAuthCtxt): Promise<MediaRequestInfos[]> {
     const highRatedMedias: Media[] = _.take(
       _.orderBy(
         await this.traktClient.getHighRatedMedias(user, this.config.ratingThreshold),
@@ -124,7 +80,7 @@ export class SyncService {
     return this.expand(highRatedMedias, false);
   }
 
-  private async listWantedMedias(user: UserAuthCtxt): Promise<Media[]> {
+  private async listWantedMedias(user: UserAuthCtxt): Promise<MediaRequestInfos[]> {
     const listedMedias: ReleasedMedia[] = _.take(
       await this.traktClient.requestUserWatchlist(user, true),
       this.config.wantedLimit,
@@ -133,13 +89,13 @@ export class SyncService {
     return this.expand(listedMedias, true);
   }
 
-  private async listListedMedias(user: UserAuthCtxt, listName: string): Promise<Media[]> {
+  private async listListedMedias(user: UserAuthCtxt, listName: string): Promise<MediaRequestInfos[]> {
     const listedMedias: ReleasedMedia[] = _.take(await this.traktClient.requestUserList(user, listName), Infinity);
 
     return this.expand(listedMedias, false);
   }
 
-  private async listProgressShows(user: UserAuthCtxt): Promise<Media[]> {
+  private async listProgressShows(user: UserAuthCtxt): Promise<MediaRequestInfos[]> {
     const inProgressShows: ProgressShow[] = _.take(
       _.orderBy(await this.traktClient.getWatchingShows(user), ['last_watched_at'], ['desc']),
       this.config.progressLimit,
@@ -154,41 +110,57 @@ export class SyncService {
     return episodes.flat();
   }
 
-  async expand(medias: Media[], buffering: boolean = false): Promise<Media[]> {
-    const movies = medias.filter((media) => media.type === 'movie');
-    const shows = medias.filter((media) => media.type === 'show');
-    const seasons = medias.filter((media) => media.type === 'season');
-    const episodes = medias.filter((media) => media.type === 'episode');
+  private async expand(medias: Media[], buffering: boolean = false): Promise<MediaRequestInfos[]> {
+    const movies: MediaRequestInfos[] = medias
+      .filter((media) => media.type === 'movie')
+      .map((m) => ({
+        type: 'movie',
+        imdbId: m.movie.ids.imdb ?? '',
+        title: m.movie.title,
+        year: m.movie.year,
+        seasonNumber: null,
+        episodeNumber: null,
+        userIds: [],
+      }));
+    const episodes: MediaRequestInfos[] = medias
+      .filter((media) => media.type === 'episode')
+      .map((m) => ({
+        type: 'episode',
+        imdbId: m.episode.ids.imdb ?? '',
+        title: m.show.title,
+        year: m.show.year,
+        seasonNumber: m.episode.season,
+        episodeNumber: m.episode.number,
+        userIds: [],
+      }));
 
-    let expandedMedias: Promise<Media[]>[];
-    if (buffering) {
-      expandedMedias = [
-        ...shows.map((s) => this.bufferedExpansion(s.show)),
-        ...seasons.map((s) => this.bufferedExpansion(s.show, s.season.number)),
-      ];
-    } else {
-      expandedMedias = [
-        ...shows.map((s) => this.expandShow(s.show)),
-        ...seasons.map((s) => this.expandSeason(s.show, s.season.number)),
-      ];
-    }
+    const showExpender = buffering ? this.bufferedExpansion.bind(this) : this.expandShow.bind(this);
+    const seasonExpender = buffering ? this.bufferedExpansion.bind(this) : this.expandSeason.bind(this);
+    const expandedMedias: Promise<MediaRequestInfos[]>[] = [
+      ...medias.filter((media) => media.type === 'show').map((s) => showExpender(s.show)),
+      ...medias.filter((media) => media.type === 'season').map((s) => seasonExpender(s.show, s.season.number)),
+    ];
 
     return [...movies, ...episodes, ...(await Promise.all(expandedMedias)).flat()];
   }
 
-  async expandShow(show: Show): Promise<Media[]> {
+  private async expandShow(show: Show): Promise<MediaRequestInfos[]> {
     const seasons = await this.traktClient.requestShowSeasonsDetails(show.ids.trakt);
     const episodes = seasons.flatMap((season) => (season.number > 0 ? season.episodes : []));
 
     // TODO Limit aired episodes
     return episodes.map((episode) => ({
       type: 'episode',
-      show,
-      episode,
+      title: show.title,
+      year: show.year,
+      imdbId: episode.ids.imdb ?? '',
+      seasonNumber: episode.season,
+      episodeNumber: episode.number,
+      userIds: [],
     }));
   }
 
-  async expandSeason(show: Show, seasonNumber: number): Promise<Media[]> {
+  private async expandSeason(show: Show, seasonNumber: number): Promise<MediaRequestInfos[]> {
     const seasons = await this.traktClient.requestShowSeasonsDetails(show.ids.trakt);
     const season = seasons.find((s) => s.number === seasonNumber);
     if (!season) {
@@ -198,12 +170,20 @@ export class SyncService {
     // TODO Limit aired episodes
     return season.episodes.map((episode) => ({
       type: 'episode',
-      show,
-      episode,
+      title: show.title,
+      year: show.year,
+      imdbId: episode.ids.imdb ?? '',
+      seasonNumber: episode.season,
+      episodeNumber: episode.number,
+      userIds: [],
     }));
   }
 
-  async bufferedExpansion(show: Show, startSeason: number = 1, startEpisode: number = 1): Promise<Media[]> {
+  private async bufferedExpansion(
+    show: Show,
+    startSeason: number = 1,
+    startEpisode: number = 1,
+  ): Promise<MediaRequestInfos[]> {
     const showDetails = await this.traktClient.requestShowDetails(show.ids.trakt);
     const seasons = await this.traktClient.requestShowSeasonsDetails(show.ids.trakt);
     const count = showDetails.runtime ? Math.ceil(this.config.bufferDuration / showDetails.runtime) : 3;
@@ -216,8 +196,12 @@ export class SyncService {
     // TODO Limit aired episodes
     return episodes.slice(episodeIndex, episodeIndex + count).map((episode) => ({
       type: 'episode',
-      show,
-      episode,
+      title: show.title,
+      year: show.year,
+      imdbId: episode.ids.imdb ?? '',
+      seasonNumber: episode.season,
+      episodeNumber: episode.number,
+      userIds: [],
     }));
   }
 }

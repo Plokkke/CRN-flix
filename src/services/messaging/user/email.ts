@@ -1,6 +1,7 @@
 import * as nodemailer from 'nodemailer';
 
 import { AuthDevicePublicCtxt } from '@/modules/trakt/types';
+import { MediaRequestEntity } from '@/services/database/mediaRequests';
 
 import { UserMessaging } from '.';
 
@@ -58,12 +59,12 @@ export class EmailUserMessaging extends UserMessaging<string> {
     });
   }
 
-  async mediaRequestUpdated(email: string, mediaTitle: string, status: string): Promise<void> {
+  async mediaRequestUpdated(email: string, request: MediaRequestEntity): Promise<void> {
     await this.transporter.sendMail({
       to: email,
-      subject: `Media Update: ${mediaTitle}`,
-      text: `Media update: ${mediaTitle} - Status: ${status}`,
-      html: `<h1>Media Update</h1><p>${mediaTitle} - Status: ${status}</p>`,
+      subject: `Media Update: ${request.title}`,
+      text: `Media update: ${request.title} - Status: ${request.status}`,
+      html: `<h1>Media Update</h1><p>${request.title} - Status: ${request.status}</p>`,
     });
   }
 

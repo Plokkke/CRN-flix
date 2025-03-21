@@ -39,9 +39,9 @@ export type JellyfinMedia = {
   Name: string;
   ProductionYear: number;
   Type: 'Movie' | 'Episode';
-  SeriesName: string;
-  ParentIndexNumber: number;
-  IndexNumber: number;
+  SeriesName?: string;
+  ParentIndexNumber?: number;
+  IndexNumber?: number;
   ProviderIds: ExternalIds;
 };
 
@@ -110,7 +110,7 @@ export class JellyfinMediaService {
 
   async resetUserPassword(userId: string, password: string): Promise<void> {
     await this.api.post(`/Users/${userId}/Password`, {
-      resetPassword: true
+      resetPassword: true,
     });
     await this.api.post(`/Users/${userId}/Password`, {
       CurrentPw: '',
