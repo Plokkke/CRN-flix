@@ -33,6 +33,11 @@ export async function postgresFactory(config: PostgresConfig): Promise<Pool> {
     const client = await pool.connect();
 
     client.release();
+
+    pool.on('error', (err) => {
+      console.error('PostgreSQL pool error', err);
+    });
+
     return pool;
   } catch (error) {
     console.error('Failed to connect to PostgreSQL database', error);

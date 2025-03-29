@@ -17,6 +17,8 @@ export const syncDataSourceProvider = {
   inject: [ConfigService],
   useFactory: async (configService: ConfigService<Config, true>): Promise<Pool> => {
     const config = configService.get<Config['sync-datasource']>('sync-datasource');
-    return postgresFactory(config);
+    const pool = await postgresFactory(config);
+
+    return pool;
   },
 };

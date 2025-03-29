@@ -105,9 +105,11 @@ export class MediaRequestRepository {
     return rows.map(fromListRecord);
   }
 
-  async attachThread(request: MediaRequestEntity, threadId: string): Promise<void> {
+  async attachThread(request: MediaRequestEntity, threadId: string): Promise<MediaRequestEntity> {
     const updateQuery = `UPDATE media_requests SET thread_id = $2 WHERE id = $1`;
     await this.pool.query(updateQuery, [request.id, threadId]);
+    request.threadId = threadId;
+    return request;
   }
 
   async syncTargeted(infosList: MediaRequestInfos[]): Promise<{

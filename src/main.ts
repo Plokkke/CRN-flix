@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { WinstonModule } from 'nest-winston';
 
 import { configureAppModule } from '@/app.module';
@@ -8,7 +9,7 @@ import { logger } from '@/services/logger';
 (async () => {
   const env = loadEnv();
 
-  const app = await NestFactory.createApplicationContext(configureAppModule(env), {
+  const app = await NestFactory.create<NestExpressApplication>(configureAppModule(env), {
     logger: WinstonModule.createLogger({
       instance: logger,
     }),
@@ -20,4 +21,6 @@ import { logger } from '@/services/logger';
     await app.close();
     process.exit(0);
   });
+
+  await app.listen(7777);
 })();

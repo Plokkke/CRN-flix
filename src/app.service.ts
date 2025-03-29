@@ -79,8 +79,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     AppService.logger.log(`Inserting ${inserted.length} requests.`);
     for (const request of inserted) {
       request.users = request.userIds.map((id) => userById[id]);
-      const { threadId } = await this.adminsMessaging.newMediaRequest(request);
-      await this.mediaRequestsDB.attachThread(request, threadId);
+      await this.adminsMessaging.newMediaRequest(request);
     }
 
     AppService.logger.log(`Cancelling ${canceled.length} requests.`);

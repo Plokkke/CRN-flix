@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { ChannelType, EmbedBuilder, TextChannel, ThreadAutoArchiveDuration } from 'discord.js';
 
 import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
-import { MediaRequestEntity, RequestStatus } from '@/services/database/mediaRequests';
+import { MediaRequestEntity, MediaRequestRepository, RequestStatus } from '@/services/database/mediaRequests';
 import { UserEntity } from '@/services/database/users';
 import { DiscordService } from '@/services/discord';
 
@@ -52,7 +52,7 @@ function setEmbedField(embed: EmbedBuilder, request: MediaRequestEntity) {
   embed
     .setTitle(`${request.title} (${request.year})`)
     .setURL(`https://www.imdb.com/fr/title/${request.imdbId}/`)
-    .addFields({ name: 'Status', value: `${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}` });
+    .setFields({ name: 'Status', value: `${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}` });
 
   if (request.type === 'episode') {
     embed.addFields(
@@ -71,17 +71,24 @@ function setEmbedField(embed: EmbedBuilder, request: MediaRequestEntity) {
 export class DiscordAdminMessaging {
   static readonly logger = new Logger(DiscordAdminMessaging.name);
 
-  static async create(discordService: DiscordService, config: Config): Promise<DiscordAdminMessaging> {
+  static async create(
+    config: Config,
+    discordService: DiscordService,
+    mediaRequestRepository: MediaRequestRepository,
+  ): Promise<DiscordAdminMessaging> {
     const channel = await discordService.getChannel(config.channelId);
     if (channel.type !== ChannelType.GuildText) {
       throw new Error(`Channel with ID ${config.channelId} is not a text channel`);
     }
-    return new DiscordAdminMessaging(channel as TextChannel);
+    return new DiscordAdminMessaging(channel as TextChannel, mediaRequestRepository);
   }
 
-  private constructor(private readonly channel: TextChannel) {}
+  private constructor(
+    private readonly channel: TextChannel,
+    private readonly mediaRequestRepository: MediaRequestRepository,
+  ) {}
 
-  async newMediaRequest(request: MediaRequestEntity): Promise<{ threadId: string }> {
+  async newMediaRequest(request: MediaRequestEntity): Promise<MediaRequestEntity> {
     const embed = new EmbedBuilder().setColor('#3498db');
 
     const message = await this.channel.send({ embeds: [setEmbedField(embed, request)] });
@@ -92,14 +99,14 @@ export class DiscordAdminMessaging {
       autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
     });
 
-    return {
-      threadId: thread.id,
-    };
+    await this.mediaRequestRepository.attachThread(request, thread.id);
+
+    return request;
   }
 
   async updateMediaStatus(request: MediaRequestEntity): Promise<void> {
     if (!request.threadId) {
-      DiscordAdminMessaging.logger.warn(`Request ${request.id} has no thread ID`);
+      await this.newMediaRequest(request);
       return;
     }
 
@@ -116,7 +123,7 @@ export class DiscordAdminMessaging {
 
   async updateRequesters(request: MediaRequestEntity, users: UserEntity[]): Promise<void> {
     if (!request.threadId) {
-      DiscordAdminMessaging.logger.warn(`Request ${request.id} has no thread ID`);
+      await this.newMediaRequest(request);
       return;
     }
 
