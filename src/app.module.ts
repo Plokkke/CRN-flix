@@ -28,6 +28,7 @@ export const configSchema = z.object({
   discord: discordConfigSchema,
   administration: z.object({
     discordChannelId: z.string(),
+    adminIds: z.array(z.string().min(1)).min(1),
   }),
 });
 
@@ -46,6 +47,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
     jellyfin: env.jellyfin,
     discord: env.discord,
     administration: {
+      adminIds: env.server.adminIds,
       discordChannelId: env.discord.channelId,
     },
   });

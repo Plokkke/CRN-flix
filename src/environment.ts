@@ -14,10 +14,12 @@ export const environmentVariablesSchema = z
     JELLYFIN_PASSWORD: z.string().optional(),
     DISCORD_CHANNEL_ID: z.string(),
     DISCORD_BOT_TOKEN: z.string(),
+    DISCORD_ADMIN_IDS: z.string(),
   })
   .transform((env) => ({
     server: {
       port: env.PORT,
+      adminIds: env.DISCORD_ADMIN_IDS.split(','),
     },
     trakt: {
       host: env.TRAKT_HOST,

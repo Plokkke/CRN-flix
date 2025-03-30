@@ -1,9 +1,8 @@
-import { EventEmitter } from 'events';
-
 import { Logger, OnModuleInit } from '@nestjs/common';
 import { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 
+import { Emitter } from '@/helpers/events';
 import { listen, transaction } from '@/helpers/sql';
 import { JellyfinMedia } from '@/modules/jellyfin/jellyfin';
 
@@ -99,13 +98,17 @@ const mediaRequestStatusChangedSchema = z
 
 export type MediaRequestStatusChangedEvent = z.infer<typeof mediaRequestStatusChangedSchema>;
 
-export class MediaRequestsRepository implements OnModuleInit {
+export type MediaRequestEvents = {
+  statusChange: MediaRequestStatusChangedEvent;
+};
+
+export class MediaRequestsRepository extends Emitter<MediaRequestEvents> implements OnModuleInit {
   static readonly logger = new Logger(MediaRequestsRepository.name);
   private notificationClient?: PoolClient;
 
-  private readonly eventEmitter = new EventEmitter();
-
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool) {
+    super();
+  }
 
   async onModuleInit(): Promise<void> {
     this.notificationClient = await this.pool.connect();
@@ -115,14 +118,9 @@ export class MediaRequestsRepository implements OnModuleInit {
       'media_request_status_change',
       mediaRequestStatusChangedSchema,
       (event: MediaRequestStatusChangedEvent) => {
-        this.eventEmitter.emit('statusChange', event);
+        this.emit('statusChange', event);
       },
     );
-  }
-
-  onStatusChange(callback: (event: MediaRequestStatusChangedEvent) => void): () => void {
-    this.eventEmitter.on('statusChange', callback);
-    return () => this.eventEmitter.off('statusChange', callback);
   }
 
   async list(options?: { status?: RequestStatus }): Promise<MediaRequestEntity[]> {

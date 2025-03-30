@@ -2,6 +2,7 @@ import { Logger, OnModuleInit } from '@nestjs/common';
 import { ChannelType, EmbedBuilder, TextChannel, ThreadAutoArchiveDuration } from 'discord.js';
 import * as _ from 'lodash';
 
+import { Emitter } from '@/helpers/events';
 import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
 import { MediaRequestEntity, MediaRequestsRepository, RequestStatus } from '@/services/database/mediaRequests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
@@ -9,6 +10,7 @@ import { DiscordService } from '@/services/discord';
 
 export type Config = {
   channelId: string;
+  adminIds: string[];
 };
 
 export const EMOJI_BY_STATUS: Record<RequestStatus, string> = {
@@ -49,10 +51,27 @@ export type RequestContext = {
   users: JellyfinUser[];
 };
 
-const ADMIN_IDS = ['504641115073544193'];
-
 const ADMIN_MEDIA_REQUEST_REACTIONS = ['👀', '🫥', '⛔️'] as const;
 const ADMIN_USER_REQUEST_REACTIONS = ['✅', '❌'] as const;
+
+export type AdminMediaRequestStatusChangeEvent = {
+  request: MediaRequestEntity;
+  status: RequestStatus;
+};
+
+export type AdminUserRejectedEvent = {
+  user: UserEntity;
+};
+
+export type AdminUserAcceptedEvent = {
+  user: UserEntity;
+};
+
+export type AdminEvents = {
+  userAccepted: AdminUserAcceptedEvent;
+  userRejected: AdminUserRejectedEvent;
+  mediaRequestStatusChange: AdminMediaRequestStatusChangeEvent;
+};
 
 function setEmbedField(embed: EmbedBuilder, request: MediaRequestEntity): EmbedBuilder {
   embed
@@ -74,8 +93,8 @@ function setEmbedField(embed: EmbedBuilder, request: MediaRequestEntity): EmbedB
   return embed;
 }
 
-export class DiscordAdminMessaging implements OnModuleInit {
-  static readonly logger = new Logger(DiscordAdminMessaging.name);
+export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnModuleInit {
+  private static readonly logger = new Logger(DiscordAdminMessaging.name);
 
   static async create(
     config: Config,
@@ -87,32 +106,41 @@ export class DiscordAdminMessaging implements OnModuleInit {
     if (channel.type !== ChannelType.GuildText) {
       throw new Error(`Channel with ID ${config.channelId} is not a text channel`);
     }
-    return new DiscordAdminMessaging(discordService, channel as TextChannel, mediaRequestsRepository, usersRepository);
+    return new DiscordAdminMessaging(
+      config,
+      discordService,
+      channel as TextChannel,
+      mediaRequestsRepository,
+      usersRepository,
+    );
   }
 
   private constructor(
+    private readonly config: Config,
     private readonly discordService: DiscordService,
     private readonly channel: TextChannel,
     private readonly mediaRequestsRepository: MediaRequestsRepository,
     private readonly usersRepository: UsersRepository,
-  ) {}
+  ) {
+    super();
+  }
 
   async onModuleInit(): Promise<void> {
     this.discordService.onReaction(async (adminId, messageId, reaction) => {
-      if (!ADMIN_IDS.includes(adminId)) {
+      if (!this.config.adminIds.includes(adminId)) {
         DiscordAdminMessaging.logger.warn(`Unknown admin ID ${adminId}`);
         return;
       }
 
       const mediaRequest = await this.mediaRequestsRepository.findByThreadId(messageId);
       if (mediaRequest) {
-        await this.onMediaRequestReact(mediaRequest, reaction);
+        this.onMediaRequestReact(mediaRequest, reaction);
         return;
       }
 
       const user = await this.usersRepository.findByRegisterMessageId(messageId);
       if (user) {
-        await this.onUserRequestReact(user, reaction);
+        this.onUserRequestReact(user, reaction);
         return;
       }
     });
@@ -125,8 +153,7 @@ export class DiscordAdminMessaging implements OnModuleInit {
     }
 
     const status = Object.entries(EMOJI_BY_STATUS).find(([, emojiName]) => emojiName === reaction)![0] as RequestStatus;
-    DiscordAdminMessaging.logger.log(`Updating status of media request ${request.id} to ${status}`);
-    await this.mediaRequestsRepository.updateStatus(request.id, status);
+    this.emit('mediaRequestStatusChange', { request, status });
   }
 
   private async onUserRequestReact(user: UserEntity, reaction: string): Promise<void> {
@@ -137,10 +164,10 @@ export class DiscordAdminMessaging implements OnModuleInit {
 
     switch (reaction) {
       case 'white_check_mark':
-        DiscordAdminMessaging.logger.log(`Approving user ${user.id}`);
+        this.emit('userAccepted', { user });
         break;
       case 'x':
-        DiscordAdminMessaging.logger.log(`Rejecting user ${user.id}`);
+        this.emit('userRejected', { user });
         break;
     }
   }

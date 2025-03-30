@@ -1,12 +1,18 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AxiosError } from 'axios';
 
+import { Listener } from '@/helpers/events';
 import { JellyfinMediaService, JellyfinUser } from '@/modules/jellyfin/jellyfin';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/TraktApi';
 import { MediaRequestsRepository, MediaRequestStatusChangedEvent } from '@/services/database/mediaRequests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
-import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
+import {
+  AdminMediaRequestStatusChangeEvent,
+  AdminUserAcceptedEvent,
+  AdminUserRejectedEvent,
+  DiscordAdminMessaging,
+} from '@/services/messaging/admin/discord';
 import { AllUserMessaging, UserMessagingCtxt } from '@/services/messaging/user/all';
 import { SyncService } from '@/services/sync';
 
@@ -19,6 +25,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   private static readonly logger: Logger = new Logger(AppService.name);
 
   private processSyncInterval?: NodeJS.Timeout;
+
+  private listeners: Listener[] = [];
 
   constructor(
     private readonly sync: SyncService,
@@ -37,18 +45,40 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     this.messaging.onTraktLinkRequest(this.handleRequestTraktLink.bind(this));
     AppService.logger.log('Messaging listeners initialized');
 
-    this.mediaRequestsDB.onStatusChange(async (event: MediaRequestStatusChangedEvent) => {
-      const request = (await this.mediaRequestsDB.get(event.requestId))!;
+    this.listeners.push(
+      this.mediaRequestsDB.listen({
+        statusChange: async (event: MediaRequestStatusChangedEvent) => {
+          const request = (await this.mediaRequestsDB.get(event.requestId))!;
 
-      await this.adminsMessaging.updateMediaStatus(request);
-      for (const userId of request.userIds) {
-        const user = await this.usersDB.get(userId);
-        if (user) {
-          const userCtxt = { key: user.messagingKey, id: user.messagingId };
-          this.messaging.mediaRequestUpdated(userCtxt, request);
-        }
-      }
-    });
+          await this.adminsMessaging.updateMediaStatus(request);
+          for (const userId of request.userIds) {
+            const user = await this.usersDB.get(userId);
+            if (user) {
+              const userCtxt = { key: user.messagingKey, id: user.messagingId };
+              this.messaging.mediaRequestUpdated(userCtxt, request);
+            }
+          }
+        },
+      }),
+    );
+
+    this.listeners.push(
+      this.adminsMessaging.listen({
+        mediaRequestStatusChange: async ({ request, status }: AdminMediaRequestStatusChangeEvent) => {
+          AppService.logger.log(`Updating status of media request ${request.id} to ${status}`);
+          await this.mediaRequestsDB.updateStatus(request.id, status);
+        },
+        userAccepted: async ({ user }: AdminUserAcceptedEvent) => {
+          AppService.logger.log(`Approving user ${user.id}`);
+          await this.handleJoin({ key: user.messagingKey, id: user.messagingId });
+          await this.handleRequestRegister({ key: user.messagingKey, id: user.messagingId }, user.name);
+        },
+        userRejected: async ({ user }: AdminUserRejectedEvent) => {
+          AppService.logger.log(`Rejecting user ${user.id}`);
+          // await this.usersDB.updateStatus(user.id, 'rejected');
+        },
+      }),
+    );
 
     // await this.processSync();
     // this.processSyncInterval = setInterval(async () => await this.processSync(), 1000 * 60 * 60);
@@ -56,6 +86,9 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     clearInterval(this.processSyncInterval);
+    for (const listener of this.listeners) {
+      listener.cleanup();
+    }
   }
 
   private async processSync() {

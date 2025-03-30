@@ -17,7 +17,10 @@ export const adminMessagingProvider = {
   ): Promise<DiscordAdminMessaging> => {
     const adminConfig = configService.get<Config['administration']>('administration');
     return await DiscordAdminMessaging.create(
-      { channelId: adminConfig.discordChannelId },
+      {
+        channelId: adminConfig.discordChannelId,
+        adminIds: adminConfig.adminIds,
+      },
       discordService,
       mediaRequestRepository,
       usersRepository,
