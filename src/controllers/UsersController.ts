@@ -1,9 +1,12 @@
-import { Body, Controller, Get, Header, Post } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { z } from 'zod';
 
 import { MediaRequestsRepository } from '@/services/database/mediaRequests';
 import { UsersRepository } from '@/services/database/users';
 import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
+import { TraktApi } from '@/modules/trakt/TraktApi';
+import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 
 const registrationSchema = z.object({
   email: z.string().email('Email invalide'),
@@ -12,15 +15,17 @@ const registrationSchema = z.object({
 
 type RegistrationForm = z.infer<typeof registrationSchema>;
 
-@Controller('register-form')
-export class RegistrationController {
+@Controller('users')
+export class UsersController {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly discordAdminMessaging: DiscordAdminMessaging,
     private readonly mediaRequestRepository: MediaRequestsRepository,
+    private readonly trakt: TraktApi,
+    private readonly traktPlugin: TraktPlugin,
   ) {}
 
-  @Get()
+  @Get('form')
   @Header('content-type', 'text/html')
   getRegistrationForm(): string {
     return `
@@ -63,7 +68,7 @@ export class RegistrationController {
         </head>
         <body>
           <h1>Inscription</h1>
-          <form method="POST" action="/register-form">
+          <form method="POST" action="/users">
             <div class="form-group">
               <label for="email">Email:</label>
               <input type="email" id="email" name="email" required>
@@ -100,5 +105,28 @@ export class RegistrationController {
       }
       throw error;
     }
+  }
+
+  @Get(':id/trakt-link')
+  async getTraktLink(@Param('id') id: string, @Res() res: Response): Promise<void> {
+    const user = await this.usersRepository.get(id);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    if (!user.jellyfinId) {
+      throw new Error('User not registered to Jellyfin');
+    }
+
+
+    const url = await new Promise<string>(async (resolve) => {
+      const authCtxt = await this.trakt
+        .authorizeDevice(async (authDeviceCtxt) => resolve(`${authDeviceCtxt.verification_url}/${authDeviceCtxt.user_code}`))
+        .catch(() => null);
+      if (authCtxt) {
+        await this.traktPlugin.setConfig(user.jellyfinId!, authCtxt.accessToken);
+      }
+    });
+
+    res.redirect(url);
   }
 }

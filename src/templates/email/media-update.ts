@@ -14,11 +14,11 @@ const getStatusDescription = (status: RequestStatus): string => {
   return descriptions[status] || 'Status update received.';
 };
 
-export const mediaUpdateTemplate = (request: MediaRequestEntity): string => {
+export const mediaUpdateTemplate = (request: MediaRequestEntity): { html: string; text: string } => {
   const statusClass = `status-${request.status.toLowerCase().replace('_', '-')}`;
   const statusText = request.status.replace('_', ' ').toUpperCase();
 
-  return `
+  const html = `
     <!DOCTYPE html>
     <html>
       <head>
@@ -52,4 +52,18 @@ export const mediaUpdateTemplate = (request: MediaRequestEntity): string => {
       </body>
     </html>
   `;
+
+  const text = `
+📺 Media Update
+
+${request.title} (${request.year})
+Status: ${statusText}
+${request.type === 'episode' ? `Season: ${request.seasonNumber}\nEpisode: ${request.episodeNumber}\n` : ''}
+${getStatusDescription(request.status)}
+${request.status === 'fulfilled' ? 'Watch on CRN-Flix: https://jellyfin.crn-tech.fr' : ''}
+
+Thank you for using TraktSync!
+  `;
+
+  return { html, text };
 };

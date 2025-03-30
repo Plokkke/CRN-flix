@@ -15,12 +15,6 @@ export type Config = {
 
 export abstract class UserMessaging<ID> {
   abstract error(id: ID, message: string): Promise<void>;
-  abstract welcome(id: ID): Promise<void>;
   abstract registered(id: ID, user: JellyfinUser): Promise<void>;
-  abstract traktLinkRequest(id: ID, authCtxt: AuthDevicePublicCtxt): Promise<void>;
   abstract mediaRequestUpdated(id: ID, request: MediaRequestEntity): Promise<void>;
-
-  abstract onJoin(handler: (id: ID) => void): void;
-  abstract onRegisterRequest(handler: (id: ID, username: string) => void): void;
-  abstract onTraktLinkRequest(handler: (id: ID) => void): void;
 }

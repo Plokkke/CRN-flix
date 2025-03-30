@@ -40,11 +40,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.messaging.onJoin(this.handleJoin.bind(this));
-    this.messaging.onRegisterRequest(this.handleRequestRegister.bind(this));
-    this.messaging.onTraktLinkRequest(this.handleRequestTraktLink.bind(this));
-    AppService.logger.log('Messaging listeners initialized');
-
     this.listeners.push(
       this.mediaRequestsDB.listen({
         statusChange: async (event: MediaRequestStatusChangedEvent) => {
@@ -68,15 +63,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           AppService.logger.log(`Updating status of media request ${request.id} to ${status}`);
           await this.mediaRequestsDB.updateStatus(request.id, status);
         },
-        userAccepted: async ({ user }: AdminUserAcceptedEvent) => {
-          AppService.logger.log(`Approving user ${user.id}`);
-          await this.handleJoin({ key: user.messagingKey, id: user.messagingId });
-          await this.handleRequestRegister({ key: user.messagingKey, id: user.messagingId }, user.name);
-        },
-        userRejected: async ({ user }: AdminUserRejectedEvent) => {
-          AppService.logger.log(`Rejecting user ${user.id}`);
-          // await this.usersDB.updateStatus(user.id, 'rejected');
-        },
+        userAccepted: async ({ user }: AdminUserAcceptedEvent) => this.onUserAccepted(user),
+        userRejected: async ({ user }: AdminUserRejectedEvent) => this.onUserRejected(user),
       }),
     );
 
@@ -151,22 +139,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     AppService.logger.log(`Updating ${fulfilled.length} requests.`);
   }
 
-  private async handleJoin(ctxt: UserMessagingCtxt): Promise<UserEntity> {
-    const user =
-      (await this.usersDB.getByMessaging(ctxt)) ||
-      (await this.usersDB.upsert({
-        messagingKey: ctxt.key,
-        messagingId: ctxt.id,
-        jellyfinId: null,
-        name: '',
-      }));
-    this.messaging.welcome(ctxt);
-    return user;
-  }
-
-  private async handleRequestRegister(ctxt: UserMessagingCtxt, username: string): Promise<void> {
-    const user = (await this.usersDB.getByMessaging(ctxt)) || (await this.handleJoin(ctxt));
+  private async onUserAccepted(user: UserEntity): Promise<void> {
     const password = Math.random().toString(36).substring(2, 15);
+
+    const messagingContext = { key: user.messagingKey, id: user.messagingId };
 
     try {
       let jellyfinUser: JellyfinUser;
@@ -179,42 +155,28 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
         };
       } else {
         jellyfinUser = {
-          id: await this.jellyfin.registerUser(username, password),
-          name: username,
+          id: await this.jellyfin.registerUser(user.name, password),
+          name: user.name,
           password,
         };
         user.jellyfinId = jellyfinUser.id;
-        user.name = username;
+        await this.usersDB.upsert(user);
       }
-      await this.usersDB.upsert(user);
 
-      this.messaging.registered(ctxt, jellyfinUser);
+      this.messaging.registered(messagingContext, jellyfinUser);
     } catch (error) {
       if (error instanceof Error && error.message === 'User already exists') {
-        this.messaging.error(ctxt, "Ce nom d'utilisateur existe déjà merci d'en choisir un autre");
+        this.messaging.error(messagingContext, "Ce nom d'utilisateur existe déjà merci d'en choisir un autre");
       } else {
         const message = error instanceof AxiosError ? error.response?.data : error;
-        AppService.logger.error(`Error registering user ${username}: ${message}`);
-        this.messaging.error(ctxt, "Erreur lors de l'inscription");
+        AppService.logger.error(`Error registering user ${user.name}: ${message}`);
+        this.messaging.error(messagingContext, "Erreur lors de l'inscription");
       }
     }
   }
 
-  private async handleRequestTraktLink(ctxt: UserMessagingCtxt): Promise<void> {
-    const user = await this.usersDB.getByMessaging(ctxt);
-    if (!user) {
-      throw new Error('User not found');
-    }
-    if (!user.jellyfinId) {
-      throw new Error('User not registered to Jellyfin');
-    }
-
-    const authCtxt = await this.trakt
-      .authorizeDevice(async (authDeviceCtxt) => this.messaging.traktLinkRequest(ctxt, authDeviceCtxt))
-      .catch(() => null);
-
-    if (authCtxt) {
-      await this.traktPlugin.setConfig(user.jellyfinId, authCtxt.accessToken);
-    }
+  private async onUserRejected(user: UserEntity): Promise<void> {
+    const messagingContext = { key: user.messagingKey, id: user.messagingId };
+    this.messaging.error(messagingContext, "Votre inscription a été refusée");
   }
 }

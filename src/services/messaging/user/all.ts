@@ -1,5 +1,4 @@
 import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
-import { AuthDevicePublicCtxt } from '@/modules/trakt/types';
 import { MediaRequestEntity } from '@/services/database/mediaRequests';
 
 import { UserMessaging } from '.';
@@ -22,11 +21,6 @@ export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
     return messaging;
   }
 
-  async welcome(ctxt: UserMessagingCtxt): Promise<void> {
-    const messaging = this.getMessaging(ctxt.key);
-    await messaging.welcome(ctxt.id);
-  }
-
   async registered(ctxt: UserMessagingCtxt, user: JellyfinUser): Promise<void> {
     const messaging = this.getMessaging(ctxt.key);
     await messaging.registered(ctxt.id, user);
@@ -37,37 +31,8 @@ export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
     await messaging.error(ctxt.id, message);
   }
 
-  async traktLinkRequest(ctxt: UserMessagingCtxt, authCtxt: AuthDevicePublicCtxt): Promise<void> {
-    const messaging = this.getMessaging(ctxt.key);
-    await messaging.traktLinkRequest(ctxt.id, authCtxt);
-  }
-
   async mediaRequestUpdated(ctxt: UserMessagingCtxt, request: MediaRequestEntity): Promise<void> {
     const messaging = this.getMessaging(ctxt.key);
     await messaging.mediaRequestUpdated(ctxt.id, request);
-  }
-
-  onJoin(handler: (ctxt: UserMessagingCtxt) => void): void {
-    for (const [key, messaging] of Object.entries(this.messagingByKey)) {
-      messaging.onJoin((id: string) => {
-        handler({ key, id });
-      });
-    }
-  }
-
-  onRegisterRequest(handler: (ctxt: UserMessagingCtxt, username: string) => void): void {
-    for (const [key, messaging] of Object.entries(this.messagingByKey)) {
-      messaging.onRegisterRequest((id: string, username: string) => {
-        handler({ key, id }, username);
-      });
-    }
-  }
-
-  onTraktLinkRequest(handler: (ctxt: UserMessagingCtxt) => void): void {
-    for (const [key, messaging] of Object.entries(this.messagingByKey)) {
-      messaging.onTraktLinkRequest((id: string) => {
-        handler({ key, id });
-      });
-    }
   }
 }

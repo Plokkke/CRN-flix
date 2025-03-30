@@ -1,6 +1,7 @@
 import { COMMON_CSS } from './styles';
 
-export const traktLinkTemplate = (url: string): string => `
+export const traktLinkTemplate = (url: string): { html: string; text: string } => {
+  const html = `
   <!DOCTYPE html>
   <html>
     <head>
@@ -19,4 +20,16 @@ export const traktLinkTemplate = (url: string): string => `
       </div>
     </body>
   </html>
-`;
+  `;
+
+  const text = `
+🔗 Link Your Trakt Account
+
+To complete your setup, please link your Trakt account by visiting this link:
+${url}
+
+This link will expire in 10 minutes.
+  `;
+
+  return { html, text };
+};
