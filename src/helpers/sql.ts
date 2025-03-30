@@ -1,4 +1,6 @@
-import { PoolClient, Pool } from 'pg';
+import { Logger } from '@nestjs/common';
+import { PoolClient, Pool, Notification } from 'pg';
+import { ZodSchema, ZodTypeDef } from 'zod';
 
 export function upsertQuery(table: string, record: Record<string, unknown>): string;
 export function upsertQuery(table: string, record: Record<string, unknown>, primaryKeys: string[]): string;
@@ -54,4 +56,25 @@ export async function transaction(pool: Pool, runner: (client: PoolClient) => Pr
   } finally {
     client.release();
   }
+}
+
+export function listen<T>(
+  client: PoolClient,
+  channel: string,
+  schema: ZodSchema<T, ZodTypeDef, string>,
+  callback: (payload: T) => void,
+): void {
+  client.on('notification', (msg: Notification): void => {
+    if (msg.channel === channel) {
+      const parsing = schema.safeParse(msg.payload);
+      if (parsing.success === false) {
+        Logger.error(`Failed to parse payload ${msg.payload} for channel ${channel}`);
+        return;
+      }
+      callback(parsing.data);
+      return;
+    }
+  });
+
+  client.query(`LISTEN ${channel}`);
 }

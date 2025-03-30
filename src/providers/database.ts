@@ -2,10 +2,10 @@ import { Provider } from '@nestjs/common';
 import { Pool } from 'pg';
 
 import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
-import { MediaRequestRepository } from '@/services/database/mediaRequests';
+import { MediaRequestsRepository } from '@/services/database/mediaRequests';
 import { UsersRepository } from '@/services/database/users';
 
-const REPOSITORIES = [UsersRepository, MediaRequestRepository];
+const REPOSITORIES = [UsersRepository, MediaRequestsRepository];
 
 export const repositoryProviders: Provider[] = REPOSITORIES.map((Repository) => ({
   provide: Repository,

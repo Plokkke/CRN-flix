@@ -22,5 +22,5 @@ import { logger } from '@/services/logger';
     process.exit(0);
   });
 
-  await app.listen(7777);
+  await app.listen(env.server.port);
 })();

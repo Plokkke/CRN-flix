@@ -49,6 +49,18 @@ export class UsersRepository {
     return rows.map(fromRecord);
   }
 
+  async get(id: string): Promise<UserEntity | null> {
+    const query = `SELECT ${COLUMNS.join(',')} FROM users WHERE id = $1`;
+    const { rows } = await this.pool.query<UserRecord>(query, [id]);
+    return rows.length > 0 ? fromRecord(rows[0]) : null;
+  }
+
+  async findByRegisterMessageId(messageId: string): Promise<UserEntity | null> {
+    const query = `SELECT ${COLUMNS.join(',')} FROM users WHERE request_message_id = $1`;
+    const { rows } = await this.pool.query<UserRecord>(query, [messageId]);
+    return rows.length > 0 ? fromRecord(rows[0]) : null;
+  }
+
   async upsert(infos: UserCreateInfos): Promise<UserEntity> {
     const userRecord: Partial<Record<UserColumns, unknown>> = {
       messaging_key: infos.messagingKey,
@@ -75,5 +87,10 @@ export class UsersRepository {
       rows: [user],
     } = await this.pool.query<UserRecord>(query, [ctxt.key, ctxt.id]);
     return user ? fromRecord(user) : null;
+  }
+
+  async attachMessage(user: UserEntity, messageId: string): Promise<void> {
+    const query = `UPDATE users SET request_message_id = $2 WHERE id = $1`;
+    await this.pool.query(query, [user.id, messageId]);
   }
 }

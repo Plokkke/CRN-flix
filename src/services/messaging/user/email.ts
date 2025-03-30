@@ -2,6 +2,13 @@ import * as nodemailer from 'nodemailer';
 
 import { AuthDevicePublicCtxt } from '@/modules/trakt/types';
 import { MediaRequestEntity } from '@/services/database/mediaRequests';
+import {
+  errorTemplate,
+  welcomeTemplate,
+  registeredTemplate,
+  traktLinkTemplate,
+  mediaUpdateTemplate,
+} from '@/templates/email';
 
 import { UserMessaging } from '.';
 
@@ -25,9 +32,9 @@ export class EmailUserMessaging extends UserMessaging<string> {
   async error(email: string, message: string): Promise<void> {
     await this.transporter.sendMail({
       to: email,
-      subject: 'Error',
+      subject: 'Error - TraktSync',
       text: message,
-      html: `<h1>Error</h1><p>${message}</p>`,
+      html: errorTemplate(message),
     });
   }
 
@@ -36,16 +43,16 @@ export class EmailUserMessaging extends UserMessaging<string> {
       to: email,
       subject: 'Welcome to TraktSync',
       text: 'Welcome to TraktSync!',
-      html: '<h1>Welcome to TraktSync!</h1>',
+      html: welcomeTemplate(),
     });
   }
 
   async registered(email: string): Promise<void> {
     await this.transporter.sendMail({
       to: email,
-      subject: 'Registration Completed',
+      subject: 'Registration Completed - TraktSync',
       text: 'Registration completed successfully!',
-      html: '<h1>Registration completed successfully!</h1>',
+      html: registeredTemplate(),
     });
   }
 
@@ -53,18 +60,18 @@ export class EmailUserMessaging extends UserMessaging<string> {
     const url = `${authCtxt.verification_url}/${authCtxt.user_code}`;
     await this.transporter.sendMail({
       to: email,
-      subject: 'Link Your Trakt Account',
+      subject: 'Link Your Trakt Account - TraktSync',
       text: `Please link your Trakt account: ${url}`,
-      html: `<h1>Link Your Trakt Account</h1><p>Please visit the following link to link your Trakt account: <a href="${url}">${url}</a></p>`,
+      html: traktLinkTemplate(url),
     });
   }
 
   async mediaRequestUpdated(email: string, request: MediaRequestEntity): Promise<void> {
     await this.transporter.sendMail({
       to: email,
-      subject: `Media Update: ${request.title}`,
+      subject: `Media Update: ${request.title} - TraktSync`,
       text: `Media update: ${request.title} - Status: ${request.status}`,
-      html: `<h1>Media Update</h1><p>${request.title} - Status: ${request.status}</p>`,
+      html: mediaUpdateTemplate(request),
     });
   }
 

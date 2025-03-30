@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { z } from 'zod';
 
 import { AppService } from '@/app.service';
+import { RegistrationController } from '@/controllers/registration.controller';
 import { EnvironmentVariables } from '@/environment';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
 import { configSchema as traktConfigSchema } from '@/modules/trakt/TraktApi';
@@ -53,6 +54,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
 export function configureAppModule(env: EnvironmentVariables): new () => NestModule {
   @Module({
     imports: [ConfigModule.forRoot({ load: [() => loadConfig(env)] })],
+    controllers: [RegistrationController],
     providers: [
       AppService,
       traktProvider,

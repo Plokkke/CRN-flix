@@ -4,7 +4,7 @@ import { AxiosError } from 'axios';
 import { JellyfinMediaService, JellyfinUser } from '@/modules/jellyfin/jellyfin';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/TraktApi';
-import { MediaRequestRepository } from '@/services/database/mediaRequests';
+import { MediaRequestsRepository, MediaRequestStatusChangedEvent } from '@/services/database/mediaRequests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
 import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
 import { AllUserMessaging, UserMessagingCtxt } from '@/services/messaging/user/all';
@@ -24,7 +24,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly sync: SyncService,
     private readonly jellyfin: JellyfinMediaService,
     private readonly traktPlugin: TraktPlugin,
-    private readonly mediaRequestsDB: MediaRequestRepository,
+    private readonly mediaRequestsDB: MediaRequestsRepository,
     private readonly usersDB: UsersRepository,
     private readonly messaging: AllUserMessaging,
     private readonly adminsMessaging: DiscordAdminMessaging,
@@ -37,8 +37,21 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     this.messaging.onTraktLinkRequest(this.handleRequestTraktLink.bind(this));
     AppService.logger.log('Messaging listeners initialized');
 
-    await this.processSync();
-    this.processSyncInterval = setInterval(async () => await this.processSync(), 1000 * 60);
+    this.mediaRequestsDB.onStatusChange(async (event: MediaRequestStatusChangedEvent) => {
+      const request = (await this.mediaRequestsDB.get(event.requestId))!;
+
+      await this.adminsMessaging.updateMediaStatus(request);
+      for (const userId of request.userIds) {
+        const user = await this.usersDB.get(userId);
+        if (user) {
+          const userCtxt = { key: user.messagingKey, id: user.messagingId };
+          this.messaging.mediaRequestUpdated(userCtxt, request);
+        }
+      }
+    });
+
+    // await this.processSync();
+    // this.processSyncInterval = setInterval(async () => await this.processSync(), 1000 * 60 * 60);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -61,7 +74,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       .filter((user) => user.id);
 
     await this.importTargetedMedias(usersWithAuthContext);
-    await this.importCollectedMedias(usersWithAuthContext);
+    await this.importCollectedMedias();
 
     AppService.logger.log('Synchronization completed');
   }
@@ -74,17 +87,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     const targetMedias = await this.sync.listTargetMedias(users);
     AppService.logger.log(`Targeting ${targetMedias.length} medias.`);
 
-    const { inserted, canceled, joinByUser } = await this.mediaRequestsDB.syncTargeted(targetMedias);
+    const { inserted, joinByUser } = await this.mediaRequestsDB.syncTargeted(targetMedias);
 
     AppService.logger.log(`Inserting ${inserted.length} requests.`);
     for (const request of inserted) {
       request.users = request.userIds.map((id) => userById[id]);
       await this.adminsMessaging.newMediaRequest(request);
-    }
-
-    AppService.logger.log(`Cancelling ${canceled.length} requests.`);
-    for (const request of canceled) {
-      await this.adminsMessaging.updateMediaStatus(request);
     }
 
     // TODO notify admin of new join ?
@@ -102,25 +110,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async importCollectedMedias(users: UserWithAuthContext[]): Promise<void> {
+  private async importCollectedMedias(): Promise<void> {
     const collectedMedias = await this.jellyfin.listMedias();
     AppService.logger.log(`Collecting ${collectedMedias.length} medias.`);
 
     const { fulfilled } = await this.mediaRequestsDB.syncCollected(collectedMedias);
     AppService.logger.log(`Updating ${fulfilled.length} requests.`);
-    for (const request of fulfilled) {
-      this.adminsMessaging.updateMediaStatus(request);
-
-      for (const userId of request.userIds) {
-        const user = users.find((user) => user.id === userId);
-        if (!user) {
-          AppService.logger.warn(`User ${userId} not found`);
-          continue;
-        }
-        const userCtxt = { key: user.messagingKey, id: user.messagingId };
-        this.messaging.mediaRequestUpdated(userCtxt, request);
-      }
-    }
   }
 
   private async handleJoin(ctxt: UserMessagingCtxt): Promise<UserEntity> {

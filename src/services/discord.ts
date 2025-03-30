@@ -2,13 +2,18 @@ import { Logger, OnModuleDestroy } from '@nestjs/common';
 import {
   Channel,
   Client,
+  Events,
   GatewayIntentBits,
   GuildMember,
   Message,
+  MessageReaction,
   Partials,
   TextChannel,
   ThreadChannel,
   User,
+  ClientEvents,
+  PartialMessageReaction,
+  PartialUser,
 } from 'discord.js';
 import { z } from 'zod';
 
@@ -37,7 +42,11 @@ export const discordConfigSchema = z.object({
 
 export type DiscordConfig = z.infer<typeof discordConfigSchema>;
 
-function registerListener<T>(client: Client, event: string, listener: (...args: T[]) => void): () => void {
+function registerListener<Event extends keyof ClientEvents>(
+  client: Client,
+  event: Event,
+  listener: (...args: ClientEvents[Event]) => void,
+): () => void | Promise<void> {
   client.on(event, listener);
   return () => {
     client.off(event, listener);
@@ -127,7 +136,7 @@ export class DiscordService implements OnModuleDestroy {
   }
 
   onDirectMessage(callback: (message: Message) => Promise<void> | void): () => void {
-    return registerListener(this.client, 'messageCreate', (message: Message): void => {
+    return registerListener(this.client, Events.MessageCreate, (message: Message): void => {
       if (!message.guild && !message.author.bot) {
         callback(message);
         return;
@@ -136,11 +145,33 @@ export class DiscordService implements OnModuleDestroy {
   }
 
   onGuildMemberJoin(callback: (member: GuildMember) => Promise<void> | void): () => void {
-    return registerListener(this.client, 'guildMemberAdd', (member: GuildMember): void => {
+    return registerListener(this.client, Events.GuildMemberAdd, (member: GuildMember): void => {
       if (member.guild) {
         callback(member);
         return;
       }
     });
+  }
+
+  onReaction(callback: (userId: string, messageId: string, reaction: string) => Promise<void> | void): () => void {
+    return registerListener(
+      this.client,
+      Events.MessageReactionAdd,
+      async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser): Promise<void> => {
+        DiscordService.logger.debug(
+          `Reaction ${reaction.emoji.name} added by ${user.id} to message ${reaction.message.id}`,
+        );
+        if (user.bot) {
+          return;
+        }
+
+        const message = reaction.message;
+        if (!message.guild) {
+          return;
+        }
+
+        callback(user.id, message.id, reaction.emoji.name!);
+      },
+    );
   }
 }

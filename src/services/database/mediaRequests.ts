@@ -1,7 +1,10 @@
-import { Logger } from '@nestjs/common';
-import { Pool, PoolClient } from 'pg';
+import { EventEmitter } from 'events';
 
-import { transaction } from '@/helpers/sql';
+import { Logger, OnModuleInit } from '@nestjs/common';
+import { Pool, PoolClient } from 'pg';
+import { z } from 'zod';
+
+import { listen, transaction } from '@/helpers/sql';
 import { JellyfinMedia } from '@/modules/jellyfin/jellyfin';
 
 import { UserEntity } from './users';
@@ -83,10 +86,44 @@ function fromListRecord(record: MediaRequestListRecord): MediaRequestEntity {
   };
 }
 
-export class MediaRequestRepository {
-  static readonly logger = new Logger(MediaRequestRepository.name);
+const mediaRequestStatusChangedSchema = z
+  .string()
+  .transform((payload): unknown => JSON.parse(payload))
+  .pipe(
+    z.object({
+      requestId: z.string(),
+      oldStatus: z.string(),
+      newStatus: z.string(),
+    }),
+  );
+
+export type MediaRequestStatusChangedEvent = z.infer<typeof mediaRequestStatusChangedSchema>;
+
+export class MediaRequestsRepository implements OnModuleInit {
+  static readonly logger = new Logger(MediaRequestsRepository.name);
+  private notificationClient?: PoolClient;
+
+  private readonly eventEmitter = new EventEmitter();
 
   constructor(private readonly pool: Pool) {}
+
+  async onModuleInit(): Promise<void> {
+    this.notificationClient = await this.pool.connect();
+
+    listen(
+      this.notificationClient,
+      'media_request_status_change',
+      mediaRequestStatusChangedSchema,
+      (event: MediaRequestStatusChangedEvent) => {
+        this.eventEmitter.emit('statusChange', event);
+      },
+    );
+  }
+
+  onStatusChange(callback: (event: MediaRequestStatusChangedEvent) => void): () => void {
+    this.eventEmitter.on('statusChange', callback);
+    return () => this.eventEmitter.off('statusChange', callback);
+  }
 
   async list(options?: { status?: RequestStatus }): Promise<MediaRequestEntity[]> {
     const query = `
@@ -105,6 +142,47 @@ export class MediaRequestRepository {
     return rows.map(fromListRecord);
   }
 
+  async get(id: string): Promise<MediaRequestEntity | null> {
+    const query = `
+      SELECT 
+        ${COLUMNS.map((column) => `mr.${column}`).join(',')},
+        ARRAY_AGG(mru.user_id) FILTER (WHERE mru.user_id IS NOT NULL) AS user_ids
+      FROM
+        media_requests mr
+      LEFT JOIN
+        media_requests_users mru ON mr.id = mru.media_request_id
+      WHERE
+        mr.id = $1
+      GROUP BY
+        mr.id
+    `;
+    const { rows } = await this.pool.query<MediaRequestListRecord>(query, [id]);
+    return rows.length > 0 ? fromListRecord(rows[0]) : null;
+  }
+
+  async findByThreadId(threadId: string): Promise<MediaRequestEntity | null> {
+    const query = `
+      SELECT 
+        ${COLUMNS.map((column) => `mr.${column}`).join(',')},
+        ARRAY_AGG(mru.user_id) FILTER (WHERE mru.user_id IS NOT NULL) AS user_ids
+      FROM 
+        media_requests mr
+      LEFT JOIN 
+        media_requests_users mru ON mr.id = mru.media_request_id
+      WHERE 
+        mr.thread_id = $1
+      GROUP BY 
+        mr.id
+    `;
+    const { rows } = await this.pool.query<MediaRequestListRecord>(query, [threadId]);
+    return rows.length > 0 ? fromListRecord(rows[0]) : null;
+  }
+
+  async updateStatus(requestId: string, status: RequestStatus): Promise<void> {
+    const query = `UPDATE media_requests SET status = $2 WHERE id = $1`;
+    await this.pool.query(query, [requestId, status]);
+  }
+
   async attachThread(request: MediaRequestEntity, threadId: string): Promise<MediaRequestEntity> {
     const updateQuery = `UPDATE media_requests SET thread_id = $2 WHERE id = $1`;
     await this.pool.query(updateQuery, [request.id, threadId]);
@@ -114,23 +192,14 @@ export class MediaRequestRepository {
 
   async syncTargeted(infosList: MediaRequestInfos[]): Promise<{
     inserted: MediaRequestEntity[];
-    canceled: MediaRequestEntity[];
     joinByUser: Record<string, MediaRequestEntity[]>;
   }> {
     const { requestByToken, infosByToken } = await this.prepareTargetedSets(infosList);
     const { toInsert, toCancel, toLink, toUnlink, joinByUser } = this.analyzeChanges(infosByToken, requestByToken);
-    const { inserted, canceled } = await this.executeDbOperations(
-      toInsert,
-      toCancel,
-      toLink,
-      toUnlink,
-      infosByToken,
-      joinByUser,
-    );
+    const { inserted } = await this.executeDbOperations(toInsert, toCancel, toLink, toUnlink, infosByToken, joinByUser);
 
     return {
       inserted,
-      canceled,
       joinByUser,
     };
   }
@@ -256,7 +325,6 @@ export class MediaRequestRepository {
     joinByUser: Record<string, MediaRequestEntity[]>,
   ): Promise<{
     inserted: MediaRequestEntity[];
-    canceled: MediaRequestEntity[];
   }> {
     let inserted: MediaRequestEntity[] = [];
 
@@ -277,7 +345,6 @@ export class MediaRequestRepository {
 
     return {
       inserted,
-      canceled: toCancel.map((request) => ({ ...request, status: 'canceled' })),
     };
   }
 
