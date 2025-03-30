@@ -14,7 +14,8 @@ const getStatusDescription = (status: RequestStatus): string => {
   return descriptions[status] || 'Status update received.';
 };
 
-export const mediaUpdateTemplate = (request: MediaRequestEntity): { html: string; text: string } => {
+export const mediaUpdateTemplate = (request: MediaRequestEntity): { subject: string; html: string; text: string } => {
+  const subject = `📺 Mise à jour concernant ${request.title}`;
   const statusClass = `status-${request.status.toLowerCase().replace('_', '-')}`;
   const statusText = request.status.replace('_', ' ').toUpperCase();
 
@@ -26,13 +27,13 @@ export const mediaUpdateTemplate = (request: MediaRequestEntity): { html: string
       </head>
       <body>
         <div class="container">
-          <h1>📺 Media Update</h1>
+          <h1>📺 Mise à jour concernant ${request.title}</h1>
           <h2>${request.title} (${request.year})</h2>
           <div class="status ${statusClass}">${statusText}</div>
           ${
             request.type === 'episode'
               ? `
-            <p><strong>Season:</strong> ${request.seasonNumber}</p>
+            <p><strong>Saison:</strong> ${request.seasonNumber}</p>
             <p><strong>Episode:</strong> ${request.episodeNumber}</p>
           `
               : ''
@@ -41,29 +42,24 @@ export const mediaUpdateTemplate = (request: MediaRequestEntity): { html: string
           ${
             request.status === 'fulfilled'
               ? `
-            <a href="https://jellyfin.crn-tech.fr" class="button">Watch on CRN-Flix</a>
+            <a href="https://jellyfin.crn-tech.fr" class="button">Regarder sur CRN-Flix</a>
           `
               : ''
           }
-          <div class="footer">
-            <p>Thank you for using TraktSync!</p>
-          </div>
         </div>
       </body>
     </html>
   `;
 
   const text = `
-📺 Media Update
+📺 Mise à jour concernant ${request.title}
 
 ${request.title} (${request.year})
-Status: ${statusText}
-${request.type === 'episode' ? `Season: ${request.seasonNumber}\nEpisode: ${request.episodeNumber}\n` : ''}
+Statut: ${statusText}
+${request.type === 'episode' ? `Saison: ${request.seasonNumber}\nEpisode: ${request.episodeNumber}\n` : ''}
 ${getStatusDescription(request.status)}
-${request.status === 'fulfilled' ? 'Watch on CRN-Flix: https://jellyfin.crn-tech.fr' : ''}
-
-Thank you for using TraktSync!
+${request.status === 'fulfilled' ? 'Regarder sur CRN-Flix: https://jellyfin.crn-tech.fr' : ''}
   `;
 
-  return { html, text };
+  return { subject, html, text };
 };

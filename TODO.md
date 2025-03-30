@@ -11,14 +11,7 @@
   - [ ] Identifier les réactions courantes
   - [ ] Implémenter un système de suggestion contextuel
 
-## Nouveaux Bots à Implémenter
-- [ ] Bot Email
-  - [ ] Choisir une bibliothèque de gestion d'emails
-  - [ ] Implémenter les fonctionnalités de base
-  - [ ] Tests et déploiement 
-
-
-- [ ] Split Discord Admin between messages definition and applicative instructions
+- [ ] Prevent error to crash application
 - [ ] Cache user message and send in Bulk to avoid spaming
 - [ ] Filter out episode not aired
 

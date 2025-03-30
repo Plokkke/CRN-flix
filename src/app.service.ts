@@ -140,9 +140,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async onUserAccepted(user: UserEntity): Promise<void> {
-    const password = Math.random().toString(36).substring(2, 15);
-
     const messagingContext = { key: user.messagingKey, id: user.messagingId };
+    const password = Math.random().toString(36).substring(2, 15);
 
     try {
       let jellyfinUser: JellyfinUser;

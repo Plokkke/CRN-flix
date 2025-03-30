@@ -12,13 +12,14 @@ import { discordProvider } from '@/providers/discord';
 import { jellyfinProvider } from '@/providers/jellyfin';
 import { adminMessagingProvider } from '@/providers/messaging/admin';
 import { allUserMessagingProvider } from '@/providers/messaging/all';
-import { discordUserMessagingProvider } from '@/providers/messaging/user';
+import { userMessagingProviders } from '@/providers/messaging/user';
 import { syncProvider } from '@/providers/sync';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
 import { traktProvider } from '@/providers/trakt';
 import { traktPluginProvider } from '@/providers/traktPlugin';
 import { discordConfigSchema } from '@/services/discord';
 import { configSchema as syncConfigSchema } from '@/services/sync';
+import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
 
 export const configSchema = z.object({
   trakt: traktConfigSchema,
@@ -30,6 +31,7 @@ export const configSchema = z.object({
     discordChannelId: z.string(),
     adminIds: z.array(z.string().min(1)).min(1),
   }),
+  mailing: mailingConfigSchema,
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -50,6 +52,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
       adminIds: env.server.adminIds,
       discordChannelId: env.discord.channelId,
     },
+    mailing: env.mailing,
   });
 }
 
@@ -66,7 +69,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
-      discordUserMessagingProvider,
+      ...userMessagingProviders,
       allUserMessagingProvider,
       adminMessagingProvider,
     ],

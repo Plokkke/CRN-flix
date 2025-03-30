@@ -1,6 +1,6 @@
 import * as nodemailer from 'nodemailer';
 
-import { MediaRequestEntity } from '@/services/database/mediaRequests';
+import { MediaRequestEntity, RequestStatus } from '@/services/database/mediaRequests';
 import {
   errorTemplate,
   mediaUpdateTemplate,
@@ -9,45 +9,68 @@ import {
 
 import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
 import { UserMessaging } from '.';
+import { z } from 'zod';
+import { Logger } from '@nestjs/common';
+
+export const configSchema = z.object({
+  host: z.string(),
+  port: z.number(),
+  user: z.string(),
+  pass: z.string(),
+  from: z.string(),
+});
+
+export type Config = z.infer<typeof configSchema>;
+
+const ALLOWED_STATUS_UPDATE: RequestStatus[] = ['fulfilled', 'missing', 'rejected'];
 
 export class EmailUserMessaging extends UserMessaging<string> {
+  private static logger = new Logger(EmailUserMessaging.name);
   private transporter: nodemailer.Transporter;
 
-  constructor() {
+  constructor(private config: Config) {
     super();
 
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: true,
+      host: this.config.host,
+      port: this.config.port,
+      requireTLS: true,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: this.config.user,
+        pass: this.config.pass,
       },
+      from: this.config.from,
     });
   }
 
   async error(email: string, message: string): Promise<void> {
+    EmailUserMessaging.logger.debug(`Sending email to ${email} for error`);
     await this.transporter.sendMail({
+      from: this.config.from,
       to: email,
-      subject: 'Erreur - TraktSync',
-      text: message,
-      html: errorTemplate(message),
+      ...errorTemplate(message),
     });
   }
 
   async registered(email: string, jellyfinUser: JellyfinUser): Promise<void> {
+    EmailUserMessaging.logger.debug(`Sending email to ${email} for registered user`);
     await this.transporter.sendMail({
+      from: this.config.from,
       to: email,
-      subject: 'Inscription Complétée',
       ...registeredTemplate(jellyfinUser),
     });
   }
 
   async mediaRequestUpdated(email: string, request: MediaRequestEntity): Promise<void> {
+    if (!ALLOWED_STATUS_UPDATE.includes(request.status)) {
+      EmailUserMessaging.logger.debug(`Skipping email to ${email} for media request update`);
+      return;
+    }
+
+    EmailUserMessaging.logger.debug(`Sending email to ${email} for media request update`);
     await this.transporter.sendMail({
+      from: this.config.from,
       to: email,
-      subject: `Mise à jour de la demande: ${request.title} - TraktSync`,
       ...mediaUpdateTemplate(request),
     });
   }

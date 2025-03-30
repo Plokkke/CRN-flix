@@ -51,8 +51,16 @@ export type RequestContext = {
   users: JellyfinUser[];
 };
 
-const ADMIN_MEDIA_REQUEST_REACTIONS = ['👀', '🫥', '⛔️'] as const;
-const ADMIN_USER_REQUEST_REACTIONS = ['✅', '❌'] as const;
+const MEDIA_REQUEST_STATUS_BY_REACTION = {
+  '👀': 'in_progress',
+  '🫥': 'missing',
+  '⛔️': 'rejected',
+} as const;
+
+const USER_EVENT_BY_REACTION = {
+  '✅': 'userAccepted',
+  '❌': 'userRejected',
+} as const;
 
 export type AdminMediaRequestStatusChangeEvent = {
   request: MediaRequestEntity;
@@ -147,29 +155,23 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
   }
 
   private async onMediaRequestReact(request: MediaRequestEntity, reaction: string): Promise<void> {
-    if (!ADMIN_MEDIA_REQUEST_REACTIONS.includes(reaction as (typeof ADMIN_MEDIA_REQUEST_REACTIONS)[number])) {
+    const status = MEDIA_REQUEST_STATUS_BY_REACTION[reaction as keyof typeof MEDIA_REQUEST_STATUS_BY_REACTION];
+    if (!status) {
       DiscordAdminMessaging.logger.warn(`Unknown reaction ${reaction} for media request ${request.id}`);
       return;
     }
 
-    const status = Object.entries(EMOJI_BY_STATUS).find(([, emojiName]) => emojiName === reaction)![0] as RequestStatus;
     this.emit('mediaRequestStatusChange', { request, status });
   }
 
   private async onUserRequestReact(user: UserEntity, reaction: string): Promise<void> {
-    if (!ADMIN_USER_REQUEST_REACTIONS.includes(reaction as (typeof ADMIN_USER_REQUEST_REACTIONS)[number])) {
+    const event = USER_EVENT_BY_REACTION[reaction as keyof typeof USER_EVENT_BY_REACTION];
+    if (!event) {
       DiscordAdminMessaging.logger.warn(`Unknown reaction ${reaction} for user ${user.id}`);
       return;
     }
 
-    switch (reaction) {
-      case 'white_check_mark':
-        this.emit('userAccepted', { user });
-        break;
-      case 'x':
-        this.emit('userRejected', { user });
-        break;
-    }
+    this.emit(event, { user });
   }
 
   async newRegistrationRequest(user: UserEntity): Promise<void> {

@@ -2,7 +2,8 @@ import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
 
 import { COMMON_CSS } from './styles';
 
-export const registeredTemplate = (jellyfinUser: JellyfinUser): { html: string; text: string } => {
+export const registeredTemplate = (jellyfinUser: JellyfinUser): { subject: string; html: string; text: string } => {
+  const subject = 'Bienvenue sur CRN-Flix!';
   const html = `
   <!DOCTYPE html>
   <html>
@@ -11,7 +12,7 @@ export const registeredTemplate = (jellyfinUser: JellyfinUser): { html: string; 
     </head>
     <body>
       <div class="container">
-        <h1>✅ Inscription Complétée avec Succès!</h1>
+        <h1>✅ Votre inscription a été validée!</h1>
         <p>Votre compte a été créé et vous pouvez maintenant accéder à <a href="https://jellyfin.crn-tech.fr">CRN-Flix</a>.</p>
         <div class="credentials">
           <h2>Identifiants Jellyfin</h2>
@@ -27,7 +28,7 @@ export const registeredTemplate = (jellyfinUser: JellyfinUser): { html: string; 
   `;
 
   const text = `
-✅ Inscription Complétée avec Succès!
+✅ Votre inscription a été validée!
 
 Votre compte a été créé et vous pouvez maintenant accéder à CRN-Flix (https://jellyfin.crn-tech.fr).
 
@@ -38,5 +39,5 @@ Mot de passe: ${jellyfinUser.password}
 Merci de rejoindre notre communauté!
   `;
 
-  return { html, text };
+  return { subject, html, text };
 };

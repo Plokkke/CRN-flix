@@ -15,6 +15,11 @@ export const environmentVariablesSchema = z
     DISCORD_CHANNEL_ID: z.string(),
     DISCORD_BOT_TOKEN: z.string(),
     DISCORD_ADMIN_IDS: z.string(),
+    EMAIL_HOST: z.string(),
+    EMAIL_PORT: z.coerce.number(),
+    EMAIL_USER: z.string(),
+    EMAIL_PASSWORD: z.string(),
+    EMAIL_FROM: z.string(),
   })
   .transform((env) => ({
     server: {
@@ -37,6 +42,13 @@ export const environmentVariablesSchema = z
       bot: {
         token: env.DISCORD_BOT_TOKEN,
       },
+    },
+    mailing: {
+      host: env.EMAIL_HOST,
+      port: env.EMAIL_PORT,
+      user: env.EMAIL_USER,
+      pass: env.EMAIL_PASSWORD,
+      from: env.EMAIL_FROM,
     },
   }));
 
