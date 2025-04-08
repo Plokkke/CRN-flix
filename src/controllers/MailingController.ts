@@ -1,8 +1,9 @@
+import { Controller, Get, Header, Param } from '@nestjs/common';
+
 import { ContextService } from '@/services/context';
 import { MediaRequestEntity, REQUEST_STATUS, RequestStatus } from '@/services/database/mediaRequests';
 import { mediaUpdateTemplate } from '@/services/messaging/user/email/templates/media-update';
 import { registeredTemplate } from '@/services/messaging/user/email/templates/registered';
-import { Controller, Get, Header, Param } from '@nestjs/common';
 
 @Controller('mailing')
 export class MailingController {
@@ -12,8 +13,8 @@ export class MailingController {
   @Header('content-type', 'text/html')
   async previewRegistrationEmail(): Promise<string> {
     const { html } = registeredTemplate({
-        serviceName: this.contextService.name,
-        mediaServerUrl: this.contextService.mediaServerUrl,
+      serviceName: this.contextService.name,
+      mediaServerUrl: this.contextService.mediaServerUrl,
       userGuideUrl: this.contextService.userGuideUrl,
       traktLinkUrl: this.contextService.getTraktLinkUrl('user-id'),
       userName: 'UserName',
@@ -31,26 +32,29 @@ export class MailingController {
     const statusIdx = REQUEST_STATUS.indexOf(status);
     const nextStatus = REQUEST_STATUS[(statusIdx + 1) % REQUEST_STATUS.length];
 
-    const media = Math.random() > 0.5 ? {
-      imdbId: 'tt3566834',
-      type: 'movie',
-      title: 'Minecraft',
-      year: 2025,
-      seasonNumber: null,
-      episodeNumber: null,
-    } : {
-      imdbId: 'tt3566834',
-      type: 'episode',
-      title: 'Minecraft',
-      year: 2025,
-      seasonNumber: 1,
-      episodeNumber: 1,
-    }
+    const media =
+      Math.random() > 0.5
+        ? {
+            imdbId: 'tt3566834',
+            type: 'movie',
+            title: 'Minecraft',
+            year: 2025,
+            seasonNumber: null,
+            episodeNumber: null,
+          }
+        : {
+            imdbId: 'tt3566834',
+            type: 'episode',
+            title: 'Minecraft',
+            year: 2025,
+            seasonNumber: 1,
+            episodeNumber: 1,
+          };
 
     const { html: originalHtml } = mediaUpdateTemplate({
-        id: 'id-string',
-        status,
-        ...media,
+      id: 'id-string',
+      status,
+      ...media,
     } as unknown as MediaRequestEntity);
 
     // Add a button to navigate to the next status

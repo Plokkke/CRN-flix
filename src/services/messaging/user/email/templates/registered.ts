@@ -1,5 +1,3 @@
-import { UserEntity } from '@/services/database/users';
-
 export interface MediaItem {
   title: string;
   posterUrl: string;

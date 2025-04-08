@@ -8,7 +8,12 @@ import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { MediaRequestsRepository, MediaRequestStatusChangedEvent } from '@/services/database/mediaRequests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
-import { AdminMediaRequestStatusChangeEvent, AdminUserAcceptedEvent, AdminUserRejectedEvent, DiscordAdminMessaging } from '@/services/messaging/admin/discord';
+import {
+  AdminMediaRequestStatusChangeEvent,
+  AdminUserAcceptedEvent,
+  AdminUserRejectedEvent,
+  DiscordAdminMessaging,
+} from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { SyncService } from '@/services/sync';
 
@@ -64,8 +69,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       }),
     );
 
-    // await this.processSync();
-    // this.processSyncInterval = setInterval(async () => await this.processSync(), 1000 * 60 * 60);
+    await this.processSync();
+    this.processSyncInterval = setInterval(async () => await this.processSync(), 1000 * 60 * 60);
   }
 
   async onModuleDestroy(): Promise<void> {

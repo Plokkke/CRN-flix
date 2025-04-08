@@ -13,7 +13,7 @@
 
 - [ ] Prevent error to crash application
 - [ ] Cache user message and send in Bulk to avoid spaming
-- [ ] Filter out episode not aired
+- [x] Filter out episode not aired
 
 - [x] Mail de bienvenu avec user guid
       Bienvenu, Vous pouvez dés à présent profiter de la collection de x Films et x Séries dont nottament `5 random movies` `5 random show`

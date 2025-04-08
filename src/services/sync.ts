@@ -3,7 +3,7 @@ import * as _ from 'lodash';
 import { z } from 'zod';
 
 import { TraktApi } from '@/modules/trakt/api';
-import { Media, ProgressShow, ReleasedMedia, UserAuthCtxt, Show } from '@/modules/trakt/types';
+import { Episode, Media, ProgressShow, ReleasedMedia, Show, UserAuthCtxt } from '@/modules/trakt/types';
 import { MediaRequestInfos } from '@/services/database/mediaRequests';
 
 export const configSchema = z.object({
@@ -144,12 +144,8 @@ export class SyncService {
     return [...movies, ...episodes, ...(await Promise.all(expandedMedias)).flat()];
   }
 
-  private async expandShow(show: Show): Promise<MediaRequestInfos[]> {
-    const seasons = await this.traktClient.requestShowSeasonsDetails(show.ids.trakt);
-    const episodes = seasons.flatMap((season) => (season.number > 0 ? season.episodes : []));
-
-    // TODO Limit aired episodes
-    return episodes.map((episode) => ({
+  private mapEpisodeToRequest(episode: Episode, show: Show): MediaRequestInfos {
+    return {
       type: 'episode',
       title: show.title,
       year: show.year,
@@ -157,26 +153,42 @@ export class SyncService {
       seasonNumber: episode.season,
       episodeNumber: episode.number,
       userIds: [],
-    }));
+    };
+  }
+
+  private filterAiredEpisodes(episodes: Episode[], airedEpisodes: number | null, startIndex: number): Episode[] {
+    if (airedEpisodes === null) {
+      return [];
+    }
+    const availableEpisodes = Math.max(0, airedEpisodes - startIndex);
+    return episodes.slice(0, availableEpisodes);
+  }
+
+  private async expandShow(show: Show): Promise<MediaRequestInfos[]> {
+    const showDetails = await this.traktClient.requestShowDetails(show.ids.trakt);
+    const seasons = await this.traktClient.requestShowSeasonsDetails(show.ids.trakt);
+    const episodes = seasons.flatMap((season) => (season.number > 0 ? season.episodes : []));
+
+    return this.filterAiredEpisodes(episodes, showDetails.aired_episodes, 0).map((episode) =>
+      this.mapEpisodeToRequest(episode, show),
+    );
   }
 
   private async expandSeason(show: Show, seasonNumber: number): Promise<MediaRequestInfos[]> {
+    const showDetails = await this.traktClient.requestShowDetails(show.ids.trakt);
     const seasons = await this.traktClient.requestShowSeasonsDetails(show.ids.trakt);
     const season = seasons.find((s) => s.number === seasonNumber);
     if (!season) {
       return [];
     }
 
-    // TODO Limit aired episodes
-    return season.episodes.map((episode) => ({
-      type: 'episode',
-      title: show.title,
-      year: show.year,
-      imdbId: episode.ids.imdb ?? '',
-      seasonNumber: episode.season,
-      episodeNumber: episode.number,
-      userIds: [],
-    }));
+    const startIndex = seasons
+      .filter((s) => s.number > 0 && s.number < seasonNumber)
+      .reduce((acc, s) => acc + s.episodes.length, 0);
+
+    return this.filterAiredEpisodes(season.episodes, showDetails.aired_episodes, startIndex).map((episode) =>
+      this.mapEpisodeToRequest(episode, show),
+    );
   }
 
   private async bufferedExpansion(
@@ -188,20 +200,19 @@ export class SyncService {
     const seasons = await this.traktClient.requestShowSeasonsDetails(show.ids.trakt);
     const count = showDetails.runtime ? Math.ceil(this.config.bufferDuration / showDetails.runtime) : 3;
 
-    const episodes = seasons.flatMap((season) => (season.number > 0 ? season.episodes : []));
+    const episodes = seasons.flatMap((season) => {
+      if (season.number <= 0) {
+        return [];
+      }
+      return season.episodes;
+    });
+
     const episodeIndex = episodes.findIndex(
       (episode) => episode.season === startSeason && episode.number === startEpisode,
     );
 
-    // TODO Limit aired episodes
-    return episodes.slice(episodeIndex, episodeIndex + count).map((episode) => ({
-      type: 'episode',
-      title: show.title,
-      year: show.year,
-      imdbId: episode.ids.imdb ?? '',
-      seasonNumber: episode.season,
-      episodeNumber: episode.number,
-      userIds: [],
-    }));
+    return episodes
+      .slice(episodeIndex, Math.min(episodeIndex + count, showDetails.aired_episodes ?? Infinity))
+      .map((episode) => this.mapEpisodeToRequest(episode, show));
   }
 }

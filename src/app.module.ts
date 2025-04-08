@@ -4,10 +4,12 @@ import { HealthModule } from '@plokkke/nest-health-registry';
 import { z } from 'zod';
 
 import { AppService } from '@/app.service';
+import { MailingController } from '@/controllers/MailingController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
 import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
+import { contextProvider } from '@/providers/context';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
 import { jellyfinProvider } from '@/providers/jellyfin';
@@ -21,9 +23,6 @@ import { traktPluginProvider } from '@/providers/traktPlugin';
 import { discordConfigSchema } from '@/services/discord';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
 import { configSchema as syncConfigSchema } from '@/services/sync';
-
-import { contextProvider } from '@/providers/context';
-import { MailingController } from '@/controllers/MailingController';
 
 export const configSchema = z.object({
   name: z.string(),

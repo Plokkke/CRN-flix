@@ -7,7 +7,6 @@ import { TraktApi } from '@/modules/trakt/api';
 import { MediaRequestsRepository } from '@/services/database/mediaRequests';
 import { UsersRepository } from '@/services/database/users';
 import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
-import { ContextService } from '@/services/context';
 
 const registrationSchema = z.object({
   email: z.string().email('Email invalide'),
