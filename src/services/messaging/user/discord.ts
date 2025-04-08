@@ -1,8 +1,7 @@
 import { ColorResolvable, EmbedBuilder } from 'discord.js';
 
-import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
-import { AuthDevicePublicCtxt } from '@/modules/trakt/types';
 import { MediaRequestEntity, RequestStatus } from '@/services/database/mediaRequests';
+import { UserEntity } from '@/services/database/users';
 import { DiscordService } from '@/services/discord';
 
 import { UserMessaging } from '.';
@@ -51,8 +50,8 @@ export class DiscordUserMessaging extends UserMessaging<string> {
     await user.send(`Error: ${message}`);
   }
 
-  async registered(id: string, jellyfinUser: JellyfinUser): Promise<void> {
-    const user = await this.discordService.getUser(id);
+  async registered(id: string, user: UserEntity, password: string): Promise<void> {
+    const discordUser = await this.discordService.getUser(id);
 
     const embed = {
       color: 0x3498db,
@@ -61,13 +60,13 @@ export class DiscordUserMessaging extends UserMessaging<string> {
       fields: [
         {
           name: 'Jellyfin Credentials',
-          value: `**Username:** ${jellyfinUser.name}\n**Password:** ${jellyfinUser.password}`,
+          value: `**Username:** ${user.name}\n**Password:** ${password}`,
           inline: false,
         },
       ],
     };
 
-    await user.send({ embeds: [embed] });
+    await discordUser.send({ embeds: [embed] });
   }
 
   async mediaRequestUpdated(id: string, request: MediaRequestEntity): Promise<void> {

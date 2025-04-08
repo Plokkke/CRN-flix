@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 
 import { Config } from '@/app.module';
-import { TraktApi } from '@/modules/trakt/TraktApi';
+import { TraktApi } from '@/modules/trakt/api';
 import { SyncService } from '@/services/sync';
 
 export const syncProvider = {

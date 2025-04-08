@@ -1,16 +1,12 @@
-import * as nodemailer from 'nodemailer';
-
-import { MediaRequestEntity, RequestStatus } from '@/services/database/mediaRequests';
-import {
-  errorTemplate,
-  mediaUpdateTemplate,
-  registeredTemplate
-} from '@/templates/email';
-
-import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
-import { UserMessaging } from '.';
-import { z } from 'zod';
 import { Logger } from '@nestjs/common';
+import * as nodemailer from 'nodemailer';
+import { z } from 'zod';
+
+import { ContextService } from '@/services/context';
+import { MediaRequestEntity, RequestStatus } from '@/services/database/mediaRequests';
+import { UserEntity } from '@/services/database/users';
+import { UserMessaging } from '@/services/messaging/user';
+import { errorTemplate, mediaUpdateTemplate, registeredTemplate } from '@/services/messaging/user/email/templates';
 
 export const configSchema = z.object({
   host: z.string(),
@@ -28,7 +24,10 @@ export class EmailUserMessaging extends UserMessaging<string> {
   private static logger = new Logger(EmailUserMessaging.name);
   private transporter: nodemailer.Transporter;
 
-  constructor(private config: Config) {
+  constructor(
+    private readonly config: Config,
+    private readonly contextService: ContextService,
+  ) {
     super();
 
     this.transporter = nodemailer.createTransport({
@@ -52,12 +51,24 @@ export class EmailUserMessaging extends UserMessaging<string> {
     });
   }
 
-  async registered(email: string, jellyfinUser: JellyfinUser): Promise<void> {
+  async registered(email: string, user: UserEntity, password: string): Promise<void> {
     EmailUserMessaging.logger.debug(`Sending email to ${email} for registered user`);
+    const { subject, text, html } = await registeredTemplate({
+      serviceName: this.contextService.name,
+      mediaServerUrl: this.contextService.mediaServerUrl,
+      userGuideUrl: this.contextService.userGuideUrl,
+      traktLinkUrl: this.contextService.getTraktLinkUrl(user.id),
+      userName: user.name,
+      password,
+      movies: await this.contextService.getRandomMedias(5, 'movie'),
+      series: await this.contextService.getRandomMedias(5, 'show'),
+    });
     await this.transporter.sendMail({
       from: this.config.from,
       to: email,
-      ...registeredTemplate(jellyfinUser),
+      subject,
+      text,
+      html,
     });
   }
 

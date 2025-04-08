@@ -4,6 +4,7 @@ import { logger } from '@/services/logger';
 
 export const environmentVariablesSchema = z
   .object({
+    SERVER_URL: z.string(),
     PORT: z.coerce.number(),
     TRAKT_HOST: z.string(),
     TRAKT_CLIENT_ID: z.string(),
@@ -23,6 +24,7 @@ export const environmentVariablesSchema = z
   })
   .transform((env) => ({
     server: {
+      url: env.SERVER_URL,
       port: env.PORT,
       adminIds: env.DISCORD_ADMIN_IDS.split(','),
     },

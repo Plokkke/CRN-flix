@@ -1,19 +1,15 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 
+import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
-import { JellyfinMediaService, JellyfinUser } from '@/modules/jellyfin/jellyfin';
+import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
-import { TraktApi } from '@/modules/trakt/TraktApi';
 import { MediaRequestsRepository, MediaRequestStatusChangedEvent } from '@/services/database/mediaRequests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
-import {
-  AdminMediaRequestStatusChangeEvent,
-  AdminUserAcceptedEvent,
-  AdminUserRejectedEvent,
-  DiscordAdminMessaging,
-} from '@/services/messaging/admin/discord';
-import { AllUserMessaging, UserMessagingCtxt } from '@/services/messaging/user/all';
+import { AdminMediaRequestStatusChangeEvent, AdminUserAcceptedEvent, AdminUserRejectedEvent, DiscordAdminMessaging } from '@/services/messaging/admin/discord';
+import { AllUserMessaging } from '@/services/messaging/user/all';
 import { SyncService } from '@/services/sync';
 
 type UserWithAuthContext = UserEntity & {
@@ -29,6 +25,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   private listeners: Listener[] = [];
 
   constructor(
+    private readonly configService: ConfigService<Config, true>,
     private readonly sync: SyncService,
     private readonly jellyfin: JellyfinMediaService,
     private readonly traktPlugin: TraktPlugin,
@@ -36,7 +33,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly usersDB: UsersRepository,
     private readonly messaging: AllUserMessaging,
     private readonly adminsMessaging: DiscordAdminMessaging,
-    private readonly trakt: TraktApi,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -132,7 +128,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async importCollectedMedias(): Promise<void> {
-    const collectedMedias = await this.jellyfin.listMedias();
+    const collectedMedias = await this.jellyfin.listAssets();
     AppService.logger.log(`Collecting ${collectedMedias.length} medias.`);
 
     const { fulfilled } = await this.mediaRequestsDB.syncCollected(collectedMedias);
@@ -144,25 +140,14 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     const password = Math.random().toString(36).substring(2, 15);
 
     try {
-      let jellyfinUser: JellyfinUser;
       if (user.jellyfinId) {
         await this.jellyfin.resetUserPassword(user.jellyfinId, password);
-        jellyfinUser = {
-          id: user.jellyfinId,
-          name: user.name,
-          password,
-        };
       } else {
-        jellyfinUser = {
-          id: await this.jellyfin.registerUser(user.name, password),
-          name: user.name,
-          password,
-        };
-        user.jellyfinId = jellyfinUser.id;
+        user.jellyfinId = await this.jellyfin.registerUser(user.name, password);
         await this.usersDB.upsert(user);
       }
 
-      this.messaging.registered(messagingContext, jellyfinUser);
+      this.messaging.registered(messagingContext, user, password);
     } catch (error) {
       if (error instanceof Error && error.message === 'User already exists') {
         this.messaging.error(messagingContext, "Ce nom d'utilisateur existe déjà merci d'en choisir un autre");
@@ -176,6 +161,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   private async onUserRejected(user: UserEntity): Promise<void> {
     const messagingContext = { key: user.messagingKey, id: user.messagingId };
-    this.messaging.error(messagingContext, "Votre inscription a été refusée");
+    this.messaging.error(messagingContext, 'Votre inscription a été refusée');
   }
 }

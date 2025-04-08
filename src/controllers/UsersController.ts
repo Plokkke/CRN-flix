@@ -2,11 +2,12 @@ import { Body, Controller, Get, Header, Param, Post, Res } from '@nestjs/common'
 import { Response } from 'express';
 import { z } from 'zod';
 
+import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
+import { TraktApi } from '@/modules/trakt/api';
 import { MediaRequestsRepository } from '@/services/database/mediaRequests';
 import { UsersRepository } from '@/services/database/users';
 import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
-import { TraktApi } from '@/modules/trakt/TraktApi';
-import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
+import { ContextService } from '@/services/context';
 
 const registrationSchema = z.object({
   email: z.string().email('Email invalide'),
@@ -117,10 +118,11 @@ export class UsersController {
       throw new Error('User not registered to Jellyfin');
     }
 
-
     const url = await new Promise<string>(async (resolve) => {
       const authCtxt = await this.trakt
-        .authorizeDevice(async (authDeviceCtxt) => resolve(`${authDeviceCtxt.verification_url}/${authDeviceCtxt.user_code}`))
+        .authorizeDevice(async (authDeviceCtxt) =>
+          resolve(`${authDeviceCtxt.verification_url}/${authDeviceCtxt.user_code}`),
+        )
         .catch(() => null);
       if (authCtxt) {
         await this.traktPlugin.setConfig(user.jellyfinId!, authCtxt.accessToken);

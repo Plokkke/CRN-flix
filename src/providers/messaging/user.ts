@@ -1,8 +1,11 @@
+import { Provider } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
 import { Config } from '@/app.module';
+import { ContextService } from '@/services/context';
 import { DiscordService } from '@/services/discord';
 import { DiscordUserMessaging } from '@/services/messaging/user/discord';
 import { EmailUserMessaging } from '@/services/messaging/user/email';
-import { ConfigService } from '@nestjs/config';
 
 const discordUserMessagingProvider = {
   provide: DiscordUserMessaging,
@@ -12,12 +15,15 @@ const discordUserMessagingProvider = {
   },
 };
 
-const emailUserMessagingProvider = {
+const emailUserMessagingProvider: Provider = {
   provide: EmailUserMessaging,
-  inject: [ConfigService],
-  useFactory: async (configService: ConfigService<Config, true>): Promise<EmailUserMessaging> => {
+  inject: [ConfigService, ContextService],
+  useFactory: async (
+    configService: ConfigService<Config, true>,
+    contextService: ContextService,
+  ): Promise<EmailUserMessaging> => {
     const config = configService.get<Config['mailing']>('mailing');
-    return new EmailUserMessaging(config);
+    return new EmailUserMessaging(config, contextService);
   },
 };
 

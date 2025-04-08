@@ -1,7 +1,7 @@
 import { COMMON_CSS } from './styles';
 
 export const errorTemplate = (message: string): { subject: string; html: string; text: string } => {
-  const subject = '❌ Quelque chose s\'est mal passé!';
+  const subject = "❌ Quelque chose s'est mal passé!";
   const html = `
   <!DOCTYPE html>
   <html>

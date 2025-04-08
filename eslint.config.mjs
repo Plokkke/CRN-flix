@@ -34,7 +34,6 @@ export default [
           functions: 'always-multiline',
         },
       ],
-      'consistent-return': ['error', { treatUndefinedAsUnspecified: false }],
       curly: ['error', 'all'],
       eqeqeq: ['error', 'always'],
       'import/order': [

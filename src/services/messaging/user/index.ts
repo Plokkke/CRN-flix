@@ -1,6 +1,5 @@
-import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
-import { AuthDevicePublicCtxt } from '@/modules/trakt/types';
 import { MediaRequestEntity } from '@/services/database/mediaRequests';
+import { UserEntity } from '@/services/database/users';
 export const USER_MESSAGING_TYPES = ['discord', 'whatsapp', 'email'] as const;
 export type UserMessagingType = (typeof USER_MESSAGING_TYPES)[number];
 
@@ -15,6 +14,6 @@ export type Config = {
 
 export abstract class UserMessaging<ID> {
   abstract error(id: ID, message: string): Promise<void>;
-  abstract registered(id: ID, user: JellyfinUser): Promise<void>;
+  abstract registered(id: ID, user: UserEntity, password: string): Promise<void>;
   abstract mediaRequestUpdated(id: ID, request: MediaRequestEntity): Promise<void>;
 }

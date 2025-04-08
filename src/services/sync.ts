@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import * as _ from 'lodash';
 import { z } from 'zod';
 
-import { TraktApi } from '@/modules/trakt/TraktApi';
+import { TraktApi } from '@/modules/trakt/api';
 import { Media, ProgressShow, ReleasedMedia, UserAuthCtxt, Show } from '@/modules/trakt/types';
 import { MediaRequestInfos } from '@/services/database/mediaRequests';
 

@@ -1,5 +1,5 @@
-import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
 import { MediaRequestEntity } from '@/services/database/mediaRequests';
+import { UserEntity } from '@/services/database/users';
 
 import { UserMessaging } from '.';
 
@@ -21,9 +21,9 @@ export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
     return messaging;
   }
 
-  async registered(ctxt: UserMessagingCtxt, user: JellyfinUser): Promise<void> {
+  async registered(ctxt: UserMessagingCtxt, user: UserEntity, password: string): Promise<void> {
     const messaging = this.getMessaging(ctxt.key);
-    await messaging.registered(ctxt.id, user);
+    await messaging.registered(ctxt.id, user, password);
   }
 
   async error(ctxt: UserMessagingCtxt, message: string): Promise<void> {

@@ -38,11 +38,13 @@ export type JellyfinMedia = {
   Id: string;
   Name: string;
   ProductionYear: number;
-  Type: 'Movie' | 'Episode';
+  Type: 'Movie' | 'Series' | 'Episode';
   SeriesName?: string;
   ParentIndexNumber?: number;
   IndexNumber?: number;
   ProviderIds: ExternalIds;
+  SeriesPrimaryImage?: string;
+  ChannelImage?: string;
 };
 
 export type JellyfinPlugin = {
@@ -96,6 +98,10 @@ export class JellyfinMediaService {
     });
   }
 
+  get url(): string {
+    return this.config.url;
+  }
+
   async registerUser(userName: string, password: string): Promise<string> {
     const response = await this.api
       .post('/Users/New', { Name: userName, Password: password })
@@ -118,7 +124,7 @@ export class JellyfinMediaService {
     });
   }
 
-  async listMedias(): Promise<JellyfinMedia[]> {
+  async listAssets(): Promise<JellyfinMedia[]> {
     try {
       const itemsResponse = await this.api.get<{ Items: JellyfinMedia[] }>(`/Items`, {
         params: {
@@ -137,6 +143,16 @@ export class JellyfinMediaService {
         throw new Error(`Erreur inconnue lors de la récupération des médias: ${error}`);
       }
     }
+  }
+
+  async listEntries(): Promise<JellyfinMedia[]> {
+    const response = await this.api.get<{ Items: JellyfinMedia[] }>(`/Items`, {
+      params: {
+        Recursive: true,
+        includeItemTypes: 'Movie,Series',
+      },
+    });
+    return response.data.Items;
   }
 
   async listPlugins(): Promise<JellyfinPlugin[]> {
