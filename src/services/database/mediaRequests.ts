@@ -188,13 +188,23 @@ export class MediaRequestsRepository extends Emitter<MediaRequestEvents> impleme
     return request;
   }
 
-  async syncTargeted(infosList: MediaRequestInfos[]): Promise<{
+  async syncTargeted(targetList: MediaRequestInfos[]): Promise<{
     inserted: MediaRequestEntity[];
     joinByUser: Record<string, MediaRequestEntity[]>;
   }> {
-    const { requestByToken, infosByToken } = await this.prepareTargetedSets(infosList);
-    const { toInsert, toCancel, toLink, toUnlink, joinByUser } = this.analyzeChanges(infosByToken, requestByToken);
-    const { inserted } = await this.executeDbOperations(toInsert, toCancel, toLink, toUnlink, infosByToken, joinByUser);
+    const { requestByToken, targetByToken } = await this.prepareTargetedSets(targetList);
+    const { toInsert, statusChanges, toLink, toUnlink, joinByUser } = this.analyzeChanges(
+      targetByToken,
+      requestByToken,
+    );
+    const { inserted } = await this.executeDbOperations(
+      toInsert,
+      statusChanges,
+      toLink,
+      toUnlink,
+      targetByToken,
+      joinByUser,
+    );
 
     return {
       inserted,
@@ -214,13 +224,11 @@ export class MediaRequestsRepository extends Emitter<MediaRequestEvents> impleme
     return { fulfilled: fulfilled.map((request) => ({ ...request, status: 'fulfilled' })) };
   }
 
-  private async prepareTargetedSets(infosList: MediaRequestInfos[]): Promise<{
-    infosByToken: Record<string, MediaRequestInfos>;
+  private async prepareTargetedSets(targetList: MediaRequestInfos[]): Promise<{
+    targetByToken: Record<string, MediaRequestInfos>;
     requestByToken: Record<string, MediaRequestEntity>;
   }> {
-    const requests = await this.list();
-
-    const infosByToken = infosList.reduce(
+    const targetByToken = targetList.reduce(
       (acc, infos) => ({
         ...acc,
         [infos.imdbId]: infos,
@@ -228,6 +236,7 @@ export class MediaRequestsRepository extends Emitter<MediaRequestEvents> impleme
       {} as Record<string, MediaRequestInfos>,
     );
 
+    const requests = await this.list();
     const requestByToken = requests.reduce(
       (acc, request) => ({
         ...acc,
@@ -236,7 +245,7 @@ export class MediaRequestsRepository extends Emitter<MediaRequestEvents> impleme
       {} as Record<string, MediaRequestEntity>,
     );
 
-    return { infosByToken, requestByToken };
+    return { targetByToken, requestByToken };
   }
 
   private async prepareCollectedSets(infosList: JellyfinMedia[]): Promise<{
@@ -263,36 +272,41 @@ export class MediaRequestsRepository extends Emitter<MediaRequestEvents> impleme
     return { requestByToken, infosByToken };
   }
 
-  // TODO to uncancel
   private analyzeChanges(
-    infosByToken: Record<string, MediaRequestInfos>,
+    targetByToken: Record<string, MediaRequestInfos>,
     requestByToken: Record<string, MediaRequestEntity>,
   ) {
     const toInsert: MediaRequestInfos[] = [];
-    const toCancel: MediaRequestEntity[] = [];
+    const statusChanges: MediaRequestEntity[] = [];
     const toLink: [string, string][] = [];
     const toUnlink: [string, string][] = [];
     const joinByUser: Record<string, MediaRequestEntity[]> = {};
 
-    const tokens = new Set<string>([...Object.keys(infosByToken), ...Object.keys(requestByToken)]);
+    const tokens = new Set<string>([...Object.keys(targetByToken), ...Object.keys(requestByToken)]);
     for (const token of tokens) {
-      const infos = infosByToken[token];
+      const target = targetByToken[token];
       const request = requestByToken[token];
 
-      if (infos && request) {
+      if (target && request) {
         if (request.status !== 'rejected') {
-          this.attachRequester(infos, request, toLink, toUnlink, joinByUser);
+          this.attachRequester(target, request, toLink, toUnlink, joinByUser);
+          if (request.status === 'canceled') {
+            statusChanges.push({ ...request, status: 'pending' });
+          }
         }
       } else if (!request) {
-        toInsert.push(infos);
-      } else if (!infos) {
+        toInsert.push(target);
+      } else if (!target) {
         if (request.status === 'pending' || request.status === 'missing') {
-          toCancel.push(request);
+          statusChanges.push({ ...request, status: 'canceled' });
+          for (const userId of request.userIds) {
+            toUnlink.push([request.id, userId]);
+          }
         }
       }
     }
 
-    return { toInsert, toCancel, toLink, toUnlink, joinByUser };
+    return { toInsert, statusChanges, toLink, toUnlink, joinByUser };
   }
 
   private attachRequester(
@@ -316,7 +330,7 @@ export class MediaRequestsRepository extends Emitter<MediaRequestEvents> impleme
 
   private async executeDbOperations(
     toInsert: MediaRequestInfos[],
-    toCancel: MediaRequestEntity[],
+    statusChanges: MediaRequestEntity[],
     toLink: [string, string][],
     toUnlink: [string, string][],
     infosByToken: Record<string, MediaRequestInfos>,
@@ -330,8 +344,8 @@ export class MediaRequestsRepository extends Emitter<MediaRequestEvents> impleme
       if (toInsert.length > 0) {
         inserted = await this.insertNewRequests(client, toInsert, infosByToken, toLink, joinByUser);
       }
-      if (toCancel.length > 0) {
-        await this.cancelRequests(client, toCancel);
+      if (statusChanges.length > 0) {
+        await this.updateStatusBulk(client, statusChanges);
       }
       if (toLink.length > 0) {
         await this.linkUsers(client, toLink);
@@ -401,9 +415,15 @@ export class MediaRequestsRepository extends Emitter<MediaRequestEvents> impleme
     });
   }
 
-  private async cancelRequests(client: PoolClient, toCancel: MediaRequestEntity[]) {
-    const cancelQuery = `UPDATE media_requests SET status = 'canceled' WHERE id = ANY($1)`;
-    await client.query(cancelQuery, [toCancel.map((request) => request.id)]);
+  private async updateStatusBulk(client: PoolClient, statusChanges: MediaRequestEntity[]) {
+    const idsByStatus = statusChanges.reduce(
+      (acc, request) => ({ ...acc, [request.status]: [...(acc[request.status] || []), request.id] }),
+      {} as Record<RequestStatus, string[]>,
+    );
+    const updateQuery = `UPDATE media_requests SET status = $2 WHERE id = ANY($1)`;
+    for (const [status, ids] of Object.entries(idsByStatus)) {
+      await client.query(updateQuery, [ids, status]);
+    }
   }
 
   private async linkUsers(client: PoolClient, toLink: [string, string][]) {

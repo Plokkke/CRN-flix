@@ -20,6 +20,8 @@ import {
   userAuthContextSchema,
   userSettingsSchema,
   watchedShowSchema,
+  lastActivitiesSchema,
+  activityTypeSchema,
 } from './schemas';
 
 export type Movie = z.infer<typeof movieSchema>;
@@ -46,3 +48,5 @@ export type HiddenShow = z.infer<typeof hiddenShowSchema>;
 export type ProgressShowNoDetails = z.infer<typeof progressShowSchema>;
 export type ProgressShow = ProgressShowNoDetails & { show: Show };
 export type DeviceToken = z.infer<typeof deviceTokenSchema>;
+export type ActivityType = z.infer<typeof activityTypeSchema>;
+export type LastActivities = z.infer<typeof lastActivitiesSchema>;

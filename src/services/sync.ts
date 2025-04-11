@@ -62,8 +62,8 @@ export class SyncService {
     return [
       ...(await this.listProgressShows(user)),
       ...(await this.listWantedMedias(user)),
-      // ...(await this.listHighRatedMedias(user)),
-      // ...(await this.listListedMedias(user, 'Jellyfin')),
+      ...(await this.listHighRatedMedias(user)),
+      ...(await this.listListedMedias(user, 'Jellyfin')),
     ];
   }
 

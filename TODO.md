@@ -19,3 +19,15 @@
       Bienvenu, Vous pouvez dés à présent profiter de la collection de x Films et x Séries dont nottament `5 random movies` `5 random show`
       Voici votre pseudo et password et url d'access
       Il manque un contenu que vous voudriez voir ? pour en faire la demande il faut vous créer un compte sur la platfrome Trakt et cliquer sur ce lien `crn-flix trakt register link with autoredirect to trakt activation with code`. Follow with instruction to add in watchlist. Vous serez prévenu par emil de l'avancement de vos requets
+
+## Optimisation Synchronisation Media Requests
+- [ ] **Mise en Cache Trakt:**
+  - [x] Implémenter un cache (en mémoire ou Redis) pour les réponses des appels `TraktApi.requestShowDetails` et `TraktApi.requestShowSeasonsDetails`.
+  - [x] Définir un TTL (ex: 24h) pour invalider le cache et rafraîchir les informations sur les épisodes diffusés (`aired_episodes`).
+- [x] **Synchronisation Basée sur l'Activité Trakt:**
+  - [x] Ajouter une méthode à `TraktApi` pour appeler l'endpoint `/sync/last_activities`.
+- [ ] **Optimisation Requêtes Base de Données:**
+  - [ ] Modifier `MediaRequestsRepository.prepareTargetedSets` pour utiliser `WHERE mr.imdb_id = ANY($1::text[])`.
+  - [ ] Modifier `MediaRequestsRepository.prepareCollectedSets` pour utiliser `WHERE mr.status = 'pending' AND mr.imdb_id = ANY($1::text[])`.
+- [x] **Augmentation Fréquence Synchronisation:**
+  - [x] Après implémentation des optimisations, réduire l'intervalle du `processSyncInterval` dans `AppService`.

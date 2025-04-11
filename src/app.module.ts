@@ -20,6 +20,7 @@ import { syncProvider } from '@/providers/sync';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
 import { traktProvider } from '@/providers/trakt';
 import { traktPluginProvider } from '@/providers/traktPlugin';
+import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { discordConfigSchema } from '@/services/discord';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
 import { configSchema as syncConfigSchema } from '@/services/sync';
@@ -72,6 +73,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
     imports: [ConfigModule.forRoot({ load: [() => loadConfig(env)] }), HealthModule],
     controllers: [UsersController, MailingController],
     providers: [
+      MemoryCacheService,
       AppService,
       contextProvider,
       traktProvider,

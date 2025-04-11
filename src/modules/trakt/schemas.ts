@@ -218,3 +218,47 @@ export const deviceTokenSchema = z.object({
   access_token: z.string(),
   refresh_token: z.string(),
 });
+
+export const ACTIVITY_TYPES = [
+  'ALL',
+  'WATCHED',
+  'RATED',
+  'HIDDEN',
+  'DROPPED',
+  'LISTED',
+  'WATCHLISTED',
+  'FAVORITED',
+] as const;
+
+export const activityTypeSchema = z.enum(ACTIVITY_TYPES);
+
+export const lastActivitiesSchema = z.object({
+  all: isoDateSchema,
+  movies: z.object({
+    watched_at: isoDateSchema.nullable(),
+    rated_at: isoDateSchema.nullable(),
+    hidden_at: isoDateSchema.nullable(),
+  }),
+  episodes: z.object({
+    watched_at: isoDateSchema.nullable(),
+    rated_at: isoDateSchema.nullable(),
+  }),
+  shows: z.object({
+    rated_at: isoDateSchema.nullable(),
+    hidden_at: isoDateSchema.nullable(),
+    dropped_at: isoDateSchema.nullable(),
+  }),
+  seasons: z.object({
+    rated_at: isoDateSchema.nullable(),
+    hidden_at: isoDateSchema.nullable(),
+  }),
+  lists: z.object({
+    liked_at: isoDateSchema.nullable(),
+  }),
+  watchlist: z.object({
+    updated_at: isoDateSchema.nullable(),
+  }),
+  favorites: z.object({
+    updated_at: isoDateSchema.nullable(),
+  }),
+});

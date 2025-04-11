@@ -21,11 +21,13 @@ type UserWithAuthContext = UserEntity & {
   accessToken: string;
 };
 
+const SYNC_INTERVAL = 1000 * 60;
+
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
   private static readonly logger: Logger = new Logger(AppService.name);
 
-  private processSyncInterval?: NodeJS.Timeout;
+  private nextSyncTimeout?: NodeJS.Timeout;
 
   private listeners: Listener[] = [];
 
@@ -69,15 +71,27 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       }),
     );
 
-    await this.processSync();
-    this.processSyncInterval = setInterval(async () => await this.processSync(), 1000 * 60 * 60);
+    this.processSync().then(() => this.scheduleNextSync());
   }
 
   async onModuleDestroy(): Promise<void> {
-    clearInterval(this.processSyncInterval);
+    clearTimeout(this.nextSyncTimeout);
     for (const listener of this.listeners) {
       listener.cleanup();
     }
+  }
+
+  private scheduleNextSync(): void {
+    if (this.nextSyncTimeout) {
+      clearTimeout(this.nextSyncTimeout);
+    }
+    this.nextSyncTimeout = setTimeout(
+      async () => {
+        await this.processSync();
+        this.scheduleNextSync();
+      },
+      SYNC_INTERVAL,
+    );
   }
 
   private async processSync() {
