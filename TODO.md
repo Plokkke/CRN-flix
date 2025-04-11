@@ -21,7 +21,7 @@
       Il manque un contenu que vous voudriez voir ? pour en faire la demande il faut vous créer un compte sur la platfrome Trakt et cliquer sur ce lien `crn-flix trakt register link with autoredirect to trakt activation with code`. Follow with instruction to add in watchlist. Vous serez prévenu par emil de l'avancement de vos requets
 
 ## Optimisation Synchronisation Media Requests
-- [ ] **Mise en Cache Trakt:**
+- [x] **Mise en Cache Trakt:**
   - [x] Implémenter un cache (en mémoire ou Redis) pour les réponses des appels `TraktApi.requestShowDetails` et `TraktApi.requestShowSeasonsDetails`.
   - [x] Définir un TTL (ex: 24h) pour invalider le cache et rafraîchir les informations sur les épisodes diffusés (`aired_episodes`).
 - [x] **Synchronisation Basée sur l'Activité Trakt:**

@@ -112,11 +112,6 @@ export class TraktApi {
       },
     });
 
-    this.api.interceptors.request.use((config) => {
-      TraktApi.logger.debug(`Requesting ${config.method} ${config.url}`);
-      return config;
-    });
-
     this.api.interceptors.response.use(
       (r) => r,
       async (error: AxiosError): Promise<unknown> => {

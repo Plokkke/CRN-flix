@@ -58,10 +58,27 @@ const getFooterSection = () => `
     </div>
 `;
 
-export const mediaUpdateTemplate = (request: MediaRequestEntity): { subject: string; html: string; text: string } => {
-  const subject = `📺 Mise à jour concernant ${request.title}`;
-  const statusClass = `status-${request.status.toLowerCase().replace('_', '-')}`;
-  const statusText = request.status.replace('_', ' ').toUpperCase();
+export const mediaUpdateTemplate = (
+  requests: MediaRequestEntity[],
+): { subject: string; html: string; text: string } => {
+  const subject = `📺 Mise à jour de vos demandes (${requests.length})`;
+
+  const mediaCards = requests
+    .sort((a, b) => {
+      if (a.type === 'episode' && b.type === 'episode') {
+        return (a.seasonNumber || 0) - (b.seasonNumber || 0) || (a.episodeNumber || 0) - (b.episodeNumber || 0);
+      }
+      return a.title.localeCompare(b.title);
+    })
+    .map((request) => {
+      const statusClass = `status-${request.status.toLowerCase().replace('_', '-')}`;
+      const statusText = request.status.replace('_', ' ').toUpperCase();
+      return `
+      ${getMediaCard(request)}
+      ${getStatusSection(request, statusClass, statusText)}
+    `;
+    })
+    .join('');
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -266,9 +283,8 @@ export const mediaUpdateTemplate = (request: MediaRequestEntity): { subject: str
         ${getHeaderSection('CRN-Flix')}
         
         <div class="content">
-            <h1>Mise à jour de votre demande</h1>
-            ${getMediaCard(request)}
-            ${getStatusSection(request, statusClass, statusText)}
+            <h1>Mise à jour de vos demandes</h1>
+            ${mediaCards}
         </div>
         
         ${getFooterSection()}
@@ -277,13 +293,19 @@ export const mediaUpdateTemplate = (request: MediaRequestEntity): { subject: str
 </html>`;
 
   const text = `
-📺 Mise à jour concernant ${request.title}
+📺 Mise à jour de vos demandes (${requests.length})
 
+${requests
+  .map(
+    (request) => `
 ${request.title} (${request.year})
 ${request.type === 'episode' ? `Saison ${request.seasonNumber} - Episode ${request.episodeNumber}\n` : ''}
-Statut: ${statusText}
+Statut: ${request.status.replace('_', ' ').toUpperCase()}
 ${getStatusDescription(request.status)}
 ${request.status === 'fulfilled' ? 'Regarder sur CRN-Flix: https://jellyfin.crn-tech.fr' : ''}
+---`,
+  )
+  .join('\n')}
 
 --
 L'équipe CRN-Flix`;

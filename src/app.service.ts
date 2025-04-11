@@ -85,13 +85,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     if (this.nextSyncTimeout) {
       clearTimeout(this.nextSyncTimeout);
     }
-    this.nextSyncTimeout = setTimeout(
-      async () => {
-        await this.processSync();
-        this.scheduleNextSync();
-      },
-      SYNC_INTERVAL,
-    );
+    this.nextSyncTimeout = setTimeout(async () => {
+      await this.processSync();
+      this.scheduleNextSync();
+    }, SYNC_INTERVAL);
   }
 
   private async processSync() {

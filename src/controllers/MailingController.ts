@@ -51,11 +51,11 @@ export class MailingController {
             episodeNumber: 1,
           };
 
-    const { html: originalHtml } = mediaUpdateTemplate({
+    const { html: originalHtml } = mediaUpdateTemplate([{
       id: 'id-string',
       status,
       ...media,
-    } as unknown as MediaRequestEntity);
+    } as unknown as MediaRequestEntity]);
 
     // Add a button to navigate to the next status
     const nextStatusButton = `

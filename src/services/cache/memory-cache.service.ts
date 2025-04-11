@@ -8,19 +8,20 @@ interface CacheEntry<T> {
 @Injectable()
 export class MemoryCacheService {
   private static readonly logger = new Logger(MemoryCacheService.name);
-  private cache: Map<string, CacheEntry<any>> = new Map();
+  private cache: Map<string, CacheEntry<unknown>> = new Map();
 
-  private getEntry(key: string): CacheEntry<any> | null {
+  private getEntry<T = unknown>(key: string): CacheEntry<T> | null {
     const entry = this.cache.get(key);
     if (!entry || (entry.expiresAt !== null && entry.expiresAt < Date.now())) {
       this.cache.delete(key);
       return null;
     }
-    return entry;
+    return entry as CacheEntry<T>;
   }
 
   async get<T>(key: string): Promise<T | null> {
-    return this.getEntry(key)?.value as T;
+    const entry = this.getEntry<T>(key);
+    return entry && entry.value;
   }
 
   async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {

@@ -8,6 +8,8 @@ import { UserEntity } from '@/services/database/users';
 import { UserMessaging } from '@/services/messaging/user';
 import { errorTemplate, mediaUpdateTemplate, registeredTemplate } from '@/services/messaging/user/email/templates';
 
+import { EmailQueue } from './queue';
+
 export const configSchema = z.object({
   host: z.string(),
   port: z.number(),
@@ -18,11 +20,12 @@ export const configSchema = z.object({
 
 export type Config = z.infer<typeof configSchema>;
 
-const ALLOWED_STATUS_UPDATE: RequestStatus[] = ['fulfilled', 'missing', 'rejected'];
+const ALLOWED_STATUS_UPDATE: RequestStatus[] = ['pending', 'in_progress', 'fulfilled', 'missing', 'rejected'];
 
 export class EmailUserMessaging extends UserMessaging<string> {
   private static logger = new Logger(EmailUserMessaging.name);
   private transporter: nodemailer.Transporter;
+  private emailQueue: EmailQueue;
 
   constructor(
     private readonly config: Config,
@@ -40,6 +43,8 @@ export class EmailUserMessaging extends UserMessaging<string> {
       },
       from: this.config.from,
     });
+
+    this.emailQueue = new EmailQueue(this.sendMediaUpdateEmail.bind(this));
   }
 
   async error(email: string, message: string): Promise<void> {
@@ -78,11 +83,16 @@ export class EmailUserMessaging extends UserMessaging<string> {
       return;
     }
 
+    EmailUserMessaging.logger.debug(`Queueing email to ${email} for media request update`);
+    await this.emailQueue.addToQueue(email, request);
+  }
+
+  private async sendMediaUpdateEmail(email: string, requests: MediaRequestEntity[]): Promise<void> {
     EmailUserMessaging.logger.debug(`Sending email to ${email} for media request update`);
     await this.transporter.sendMail({
       from: this.config.from,
       to: email,
-      ...mediaUpdateTemplate(request),
+      ...mediaUpdateTemplate(requests),
     });
   }
 }
