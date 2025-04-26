@@ -21,8 +21,8 @@ import {
 } from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { SyncService } from '@/services/sync';
-
-const SYNC_INTERVAL = 1000 * 60 * 3;
+import { ConfigService } from '@nestjs/config';
+import { Config } from '@/app.module';
 
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
@@ -32,14 +32,19 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   private listeners: Listener[] = [];
 
+  private syncInterval: number;
+
   constructor(
+    readonly config: ConfigService<Config, true>,
     private readonly sync: SyncService,
     private readonly jellyfin: JellyfinMediaService,
     private readonly messaging: AllUserMessaging,
     private readonly adminsMessaging: DiscordAdminMessaging,
     private readonly usersRepository: UsersRepository, // TODO get user in event instead of fetching from db
     private readonly requestsRepository: RequestsRepository,
-  ) {}
+  ) {
+    this.syncInterval = this.config.get<number>('syncInterval_ms');
+  }
 
   onModuleInit(): void {
     this.listeners.push(this.listenDatabaseEvents(), this.listenAdminMessages());
@@ -58,7 +63,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     clearTimeout(this.nextSyncTimeout);
     this.nextSyncTimeout = setTimeout(() => {
       this.sync.start().then(() => this.scheduleNextSync());
-    }, SYNC_INTERVAL);
+    }, this.syncInterval);
   }
 
   private listenDatabaseEvents(): Listener<RequestEvents> {

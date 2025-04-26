@@ -34,7 +34,7 @@ export const configSchema = z.object({
   }),
   trakt: traktConfigSchema,
   sync: syncConfigSchema,
-  'sync-datasource': syncDataSourceConfigSchema,
+  datasource: syncDataSourceConfigSchema,
   jellyfin: jellyfinConfigSchema,
   mailing: mailingConfigSchema,
   discord: discordConfigSchema,
@@ -42,22 +42,26 @@ export const configSchema = z.object({
     discordChannelId: z.string(),
     adminIds: z.array(z.string().min(1)).min(1),
   }),
+  syncInterval_ms: z.number().int().positive().min(1),
 });
 
 export type Config = z.infer<typeof configSchema>;
 
 export function loadConfig(env: EnvironmentVariables): Config {
   return configSchema.parse({
-    name: 'CRN-Flix',
+    name: env.name,
+    syncInterval_ms: env.syncInterval_ms,
     server: {
       url: env.server.url,
     },
     trakt: env.trakt,
     sync: {},
-    'sync-datasource': {
-      database: 'trakt-sync',
-      username: 'root',
-      password: 'password',
+    datasource: {
+      host: env.database.host,
+      port: env.database.port,
+      database: env.database.name,
+      username: env.database.username,
+      password: env.database.password,
       ssl: false,
     },
     jellyfin: env.jellyfin,

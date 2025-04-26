@@ -6,6 +6,7 @@ export const environmentVariablesSchema = z
   .object({
     SERVER_URL: z.string(),
     PORT: z.coerce.number(),
+    SERVICE_NAME: z.string(),
     TRAKT_HOST: z.string(),
     TRAKT_CLIENT_ID: z.string(),
     TRAKT_CLIENT_SECRET: z.string(),
@@ -21,8 +22,16 @@ export const environmentVariablesSchema = z
     EMAIL_USER: z.string(),
     EMAIL_PASSWORD: z.string(),
     EMAIL_FROM: z.string(),
+    DATABASE_HOST: z.string(),
+    DATABASE_PORT: z.coerce.number(),
+    DATABASE_NAME: z.string(),
+    DATABASE_USERNAME: z.string(),
+    DATABASE_PASSWORD: z.string(),
+    SYNC_INTERVAL_MS: z.coerce.number(),
   })
   .transform((env) => ({
+    name: env.SERVICE_NAME,
+    syncInterval_ms: env.SYNC_INTERVAL_MS,
     server: {
       url: env.SERVER_URL,
       port: env.PORT,
@@ -51,6 +60,13 @@ export const environmentVariablesSchema = z
       user: env.EMAIL_USER,
       pass: env.EMAIL_PASSWORD,
       from: env.EMAIL_FROM,
+    },
+    database: {
+      host: env.DATABASE_HOST,
+      port: env.DATABASE_PORT,
+      name: env.DATABASE_NAME,
+      username: env.DATABASE_USERNAME,
+      password: env.DATABASE_PASSWORD,
     },
   }));
 
