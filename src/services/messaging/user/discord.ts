@@ -5,7 +5,7 @@ import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
 import { DiscordService } from '@/services/discord';
 
-import { UserMessaging } from '.';
+import { UserMessaging } from '@/services/messaging/user';
 
 const COLOR_BY_STATUS: Record<RequestStatus, ColorResolvable> = {
   pending: '#3498db',

@@ -12,7 +12,7 @@
   - [ ] Implémenter un système de suggestion contextuel
 
 - [ ] Prevent error to crash application
-- [ ] Cache user message and send in Bulk to avoid spaming
+- [x] Cache user message and send in Bulk to avoid spaming
 - [x] Filter out episode not aired
 
 - [x] Mail de bienvenu avec user guid
@@ -26,8 +26,8 @@
   - [x] Définir un TTL (ex: 24h) pour invalider le cache et rafraîchir les informations sur les épisodes diffusés (`aired_episodes`).
 - [x] **Synchronisation Basée sur l'Activité Trakt:**
   - [x] Ajouter une méthode à `TraktApi` pour appeler l'endpoint `/sync/last_activities`.
-- [ ] **Optimisation Requêtes Base de Données:**
-  - [ ] Modifier `MediaRequestsRepository.prepareTargetedSets` pour utiliser `WHERE mr.imdb_id = ANY($1::text[])`.
-  - [ ] Modifier `MediaRequestsRepository.prepareCollectedSets` pour utiliser `WHERE mr.status = 'pending' AND mr.imdb_id = ANY($1::text[])`.
+- [x] **Optimisation Requêtes Base de Données:**
+  - [x] Modifier `MediaRequestsRepository.prepareTargetedSets` pour utiliser `WHERE mr.imdb_id = ANY($1::text[])`.
+  - [x] Modifier `MediaRequestsRepository.prepareCollectedSets` pour utiliser `WHERE mr.status = 'pending' AND mr.imdb_id = ANY($1::text[])`.
 - [x] **Augmentation Fréquence Synchronisation:**
   - [x] Après implémentation des optimisations, réduire l'intervalle du `processSyncInterval` dans `AppService`.

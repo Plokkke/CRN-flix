@@ -24,6 +24,8 @@ import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { discordConfigSchema } from '@/services/discord';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
 import { syncConfigSchema } from '@/services/sync';
+import { UserGuideController } from '@/controllers/UserGuideController';
+import { AssetsController } from '@/controllers/AssetsController';
 
 export const configSchema = z.object({
   name: z.string(),
@@ -71,7 +73,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
 export function configureAppModule(env: EnvironmentVariables): new () => NestModule {
   @Module({
     imports: [ConfigModule.forRoot({ load: [() => loadConfig(env)] }), HealthModule],
-    controllers: [UsersController, MailingController],
+    controllers: [UsersController, MailingController, UserGuideController, AssetsController],
     providers: [
       MemoryCacheService,
       AppService,

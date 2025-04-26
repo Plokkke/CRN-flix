@@ -95,7 +95,11 @@ export class EmailUserMessaging extends UserMessaging<string> {
     await this.transporter.sendMail({
       from: this.config.from,
       to: email,
-      ...requestUpdateTemplate(requests),
+      ...requestUpdateTemplate({
+        serviceName: this.contextService.name,
+        mediaServerUrl: this.contextService.mediaServerUrl,
+        requests,
+      }),
     });
   }
 }

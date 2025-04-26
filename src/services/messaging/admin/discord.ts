@@ -179,46 +179,32 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
   }
 
   async newMediaRequest(request: RequestEntity): Promise<RequestEntity> {
-    const media = request.media!;
-    const embed = new EmbedBuilder().setColor('#3498db');
+    // const media = request.media!;
+    // const embed = new EmbedBuilder().setColor('#3498db');
 
-    const message = await this.channel.send({ embeds: [setEmbedField(embed, request)] });
+    // const message = await this.channel.send({ embeds: [setEmbedField(embed, request)] });
 
-    const thread = await message.startThread({
-      name: `Suivi: ${media.title} (${media.year})`,
-      autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
-    });
+    // const thread = await message.startThread({
+    //   name: `Suivi: ${media.title} (${media.year})`,
+    //   autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
+    // });
 
-    await this.requestsRepository.attachThread(media.id, thread.id);
+    // await this.requestsRepository.attachThread(media.id, thread.id);
 
     return request;
   }
 
   async updateMediaStatus(request: RequestEntity): Promise<void> {
-    if (!request.threadId) {
-      await this.newMediaRequest(request);
-      return;
-    }
+    // if (!request.threadId) {
+    //   await this.newMediaRequest(request);
+    //   return;
+    // }
 
-    const thread = await DiscordService.getThread(this.channel, request.threadId);
-    await thread.send(`Statut mis à jour: ${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}`);
+    // const thread = await DiscordService.getThread(this.channel, request.threadId);
+    // await thread.send(`Statut mis à jour: ${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}`);
 
-    const head = await DiscordService.getHeadOfThread(this.channel, request.threadId);
+    // const head = await DiscordService.getHeadOfThread(this.channel, request.threadId);
 
-    await head.edit({ embeds: [setEmbedField(EmbedBuilder.from(head.embeds[0]), request)] });
-  }
-
-  async updateRequesters(request: RequestEntity, users: UserEntity[]): Promise<void> {
-    if (!request.threadId) {
-      await this.newMediaRequest(request);
-      return;
-    }
-
-    const thread = await DiscordService.getThread(this.channel, request.threadId);
-    await thread.send(`Changement de demandeurs: ${users.map((user) => user.name).join(', ')}`);
-
-    const head = await DiscordService.getHeadOfThread(this.channel, request.threadId);
-
-    await head.edit({ embeds: [setEmbedField(EmbedBuilder.from(head.embeds[0]), request)] });
+    // await head.edit({ embeds: [setEmbedField(EmbedBuilder.from(head.embeds[0]), request)] });
   }
 }

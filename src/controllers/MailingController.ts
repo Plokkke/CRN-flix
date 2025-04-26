@@ -16,7 +16,7 @@ export class MailingController {
       serviceName: this.contextService.name,
       mediaServerUrl: this.contextService.mediaServerUrl,
       userGuideUrl: this.contextService.userGuideUrl,
-      traktLinkUrl: this.contextService.getTraktLinkUrl('user-id'),
+      traktLinkUrl: this.contextService.getTraktLinkUrl('978ab97f-817d-4e9a-86b4-637b12dfc34c'),
       userName: 'UserName',
       password: 'Str0ngP4ssW0rd!',
       movies: await this.contextService.getRandomMedias(5, 'movie'),
@@ -51,13 +51,17 @@ export class MailingController {
             episodeNumber: 1,
           };
 
-    const { html: originalHtml } = requestUpdateTemplate([
-      {
-        mediaId: 'media.id',
-        status,
-        media,
-      } as unknown as RequestEntity,
-    ]);
+    const { html: originalHtml } = requestUpdateTemplate({
+      serviceName: this.contextService.name,
+      mediaServerUrl: this.contextService.mediaServerUrl,
+      requests: [
+        {
+          mediaId: 'media.id',
+          status,
+          media,
+        } as unknown as RequestEntity,
+      ],
+    });
 
     // Add a button to navigate to the next status
     const nextStatusButton = `

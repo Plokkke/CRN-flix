@@ -4,7 +4,7 @@ import { RequestEntity, RequestStatus } from '@/services/database/requests';
 const getStatusDescription = (status: RequestStatus): string => {
   const descriptions: Record<RequestStatus, string> = {
     pending: 'Nous avons bien reçu votre demande. Vous serez notifié lorsque elle sera terminée.',
-    fulfilled: 'Votre demande est disponible sur CRN-Flix.',
+    fulfilled: 'Votre demande est disponible.',
     rejected: 'Le contenu demandé ne respecte pas les règles du serveur. Veuillez réessayer avec un contenu approprié.',
     canceled: 'Vous avez annulé votre demande.',
     missing: 'Le contenu demandé est introuvable. Nous sommes navrés de ne pas pouvoir vous satisfaire.',
@@ -38,14 +38,14 @@ const getMediaCard = (media: MediaEntity) => `
     </div>
 `;
 
-const getStatusSection = (request: RequestEntity, statusClass: string, statusText: string) => `
+const getStatusSection = (serviceName: string, mediaServerUrl: string, request: RequestEntity, statusClass: string, statusText: string) => `
     <div class="status-section">
         <div class="status ${statusClass}">${statusText}</div>
         <p class="status-description">${getStatusDescription(request.status)}</p>
         ${
           request.status === 'fulfilled'
             ? `
-            <a href="https://jellyfin.crn-tech.fr" class="btn" target="_blank" rel="noopener noreferrer">Regarder sur CRN-Flix</a>
+            <a href="${mediaServerUrl}" class="btn" target="_blank" rel="noopener noreferrer">Regarder sur ${serviceName}</a>
           `
             : ''
         }
@@ -58,7 +58,14 @@ const getFooterSection = () => `
     </div>
 `;
 
-export const requestUpdateTemplate = (requests: RequestEntity[]): { subject: string; html: string; text: string } => {
+export type RequestUpdateTemplateParams = {
+  serviceName: string;
+  mediaServerUrl: string;
+  requests: RequestEntity[];
+};
+
+export const requestUpdateTemplate = (params: RequestUpdateTemplateParams): { subject: string; html: string; text: string } => {
+  const { serviceName, mediaServerUrl, requests } = params;
   const subject = `📺 Mise à jour de vos demandes (${requests.length})`;
 
   const mediaCards = requests
@@ -78,7 +85,7 @@ export const requestUpdateTemplate = (requests: RequestEntity[]): { subject: str
       const statusText = request.status.replace('_', ' ').toUpperCase();
       return `
       ${getMediaCard(request.media!)}
-      ${getStatusSection(request, statusClass, statusText)}
+      ${getStatusSection(serviceName, mediaServerUrl, request, statusClass, statusText)}
     `;
     })
     .join('');
@@ -283,7 +290,7 @@ export const requestUpdateTemplate = (requests: RequestEntity[]): { subject: str
 </head>
 <body>
     <div class="container">
-        ${getHeaderSection('CRN-Flix')}
+        ${getHeaderSection(serviceName)}
         
         <div class="content">
             <h1>Mise à jour de vos demandes</h1>
@@ -305,13 +312,13 @@ ${request.media!.title} (${request.media!.year})
 ${request.media!.type === 'episode' ? `Saison ${request.media!.seasonNumber} - Episode ${request.media!.episodeNumber}\n` : ''}
 Statut: ${request.status.replace('_', ' ').toUpperCase()}
 ${getStatusDescription(request.status)}
-${request.status === 'fulfilled' ? 'Regarder sur CRN-Flix: https://jellyfin.crn-tech.fr' : ''}
+${request.status === 'fulfilled' ? `Regarder sur ${serviceName}: ${mediaServerUrl}` : ''}
 ---`,
   )
   .join('\n')}
 
 --
-L'équipe CRN-Flix`;
+L'équipe ${serviceName}`;
 
   return { subject, html, text };
 };

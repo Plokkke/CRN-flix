@@ -6,6 +6,8 @@ import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
 import { UsersRepository } from '@/services/database/users';
 import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
+import { registrationFormTemplate } from '@/services/messaging/user/email/templates';
+import { ContextService } from '@/services/context';
 
 const registrationSchema = z.object({
   email: z.string().email('Email invalide'),
@@ -17,6 +19,7 @@ type RegistrationForm = z.infer<typeof registrationSchema>;
 @Controller('users')
 export class UsersController {
   constructor(
+    private readonly contextService: ContextService,
     private readonly usersRepository: UsersRepository,
     private readonly discordAdminMessaging: DiscordAdminMessaging,
     private readonly trakt: TraktApi,
@@ -26,60 +29,10 @@ export class UsersController {
   @Get('form')
   @Header('content-type', 'text/html')
   getRegistrationForm(): string {
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Inscription</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              max-width: 600px;
-              margin: 0 auto;
-              padding: 20px;
-            }
-            .form-group {
-              margin-bottom: 15px;
-            }
-            label {
-              display: block;
-              margin-bottom: 5px;
-            }
-            input {
-              width: 100%;
-              padding: 8px;
-              border: 1px solid #ddd;
-              border-radius: 4px;
-            }
-            button {
-              background-color: #4CAF50;
-              color: white;
-              padding: 10px 15px;
-              border: none;
-              border-radius: 4px;
-              cursor: pointer;
-            }
-            button:hover {
-              background-color: #45a049;
-            }
-          </style>
-        </head>
-        <body>
-          <h1>Inscription</h1>
-          <form method="POST" action="/users">
-            <div class="form-group">
-              <label for="email">Email:</label>
-              <input type="email" id="email" name="email" required>
-            </div>
-            <div class="form-group">
-              <label for="username">Pseudo:</label>
-              <input type="text" id="username" name="username" required>
-            </div>
-            <button type="submit">S'inscrire</button>
-          </form>
-        </body>
-      </html>
-    `;
+    return registrationFormTemplate({
+      serviceName: this.contextService.name,
+      formAction: '/users',
+    });
   }
 
   @Post()
