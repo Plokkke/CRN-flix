@@ -28,9 +28,10 @@ export class ContextService {
     return `${serverConfig.url}/users/${userId}/trakt-link`;
   }
 
-  async getRandomMedias(count: number, type: 'movie' | 'show'): Promise<MediaItem[]> {
-    const entries = await this.jellyfin.listEntries();
-    const medias = entries.filter((entry) => (type === 'movie' ? entry.Type === 'Movie' : entry.Type === 'Series'));
+  async getRandomMedias(count: number, type: 'movie' | 'show' | 'episode'): Promise<MediaItem[]> {
+    const medias = await this.jellyfin.listEntries(
+      (type === 'movie') ? ['Movie'] : (type === 'show') ? ['Series'] : ['Episode']
+    );
 
     // Shuffle the array using Fisher-Yates algorithm
     const shuffled = [...medias];
@@ -39,9 +40,17 @@ export class ContextService {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
-    return shuffled.slice(0, count).map((media) => ({
-      title: media.Name,
-      posterUrl: `https://jellyfin.crn-tech.fr/Items/${media.Id}/Images/Primary?fillWidth=100`,
-    }));
+    return shuffled.slice(0, count).map((media) => {
+      const itemId = media.Type === 'Episode' ? media.SeriesId! : media.Id;
+      if (media.Type === 'Episode') {
+        console.log(media);
+      }
+      return ({
+        title: media.Type === 'Episode' ? media.SeriesName! : media.Name,
+        imdbId: media.ProviderIds.Imdb!,
+        type: media.Type === 'Movie' ? 'movie' : media.Type === 'Series' ? 'show' : 'episode',
+        posterUrl: `https://jellyfin.crn-tech.fr/Items/${itemId}/Images/Primary?fillWidth=100`,
+      });
+    });
   }
 }

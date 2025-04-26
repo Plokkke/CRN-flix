@@ -45,6 +45,7 @@ export type JellyfinMedia = {
   ProviderIds: ExternalIds;
   SeriesPrimaryImage?: string;
   ChannelImage?: string;
+  SeriesId?: string;
 };
 
 export type JellyfinPlugin = {
@@ -129,7 +130,7 @@ export class JellyfinMediaService {
       const itemsResponse = await this.api.get<{ Items: JellyfinMedia[] }>(`/Items`, {
         params: {
           Recursive: true,
-          Fields: 'Id,Name,Type,OriginalTitle,ExternalSeriesId,ProviderIds,ExtraIds',
+          Fields: 'Id,Name,Type,OriginalTitle,ExternalSeriesId,ProviderIds,ExtraIds,ParentId',
           hasImdbId: true,
           includeItemTypes: 'Movie,Episode',
         },
@@ -145,11 +146,13 @@ export class JellyfinMediaService {
     }
   }
 
-  async listEntries(): Promise<JellyfinMedia[]> {
+  async listEntries(includeItemTypes: string[] = ['Movie', 'Series', 'Episode']): Promise<JellyfinMedia[]> {
     const response = await this.api.get<{ Items: JellyfinMedia[] }>(`/Items`, {
       params: {
+        Fields: 'Id,Name,Type,OriginalTitle,ExternalSeriesId,ProviderIds,ExtraIds,ParentId',
         Recursive: true,
-        includeItemTypes: 'Movie,Series',
+        hasImdbId: true,
+        includeItemTypes: includeItemTypes.join(','),
       },
     });
     return response.data.Items;

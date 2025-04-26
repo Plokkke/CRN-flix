@@ -32,33 +32,53 @@ export class MailingController {
     const statusIdx = REQUEST_STATUS.indexOf(status);
     const nextStatus = REQUEST_STATUS[(statusIdx + 1) % REQUEST_STATUS.length];
 
-    const media =
-      Math.random() > 0.5
-        ? {
-            imdbId: 'tt3566834',
-            type: 'movie',
-            title: 'Minecraft',
-            year: 2025,
-            seasonNumber: null,
-            episodeNumber: null,
-          }
-        : {
-            imdbId: 'tt3566834',
-            type: 'episode',
-            title: 'Minecraft',
-            year: 2025,
-            seasonNumber: 1,
-            episodeNumber: 1,
-          };
+    const [movie] = await this.contextService.getRandomMedias(1, 'movie');
+    const [show] = await this.contextService.getRandomMedias(1, 'show');
+    const [episode] = await this.contextService.getRandomMedias(1, 'episode');
 
     const { html: originalHtml } = requestUpdateTemplate({
       serviceName: this.contextService.name,
       mediaServerUrl: this.contextService.mediaServerUrl,
+      posterUrlByImdbId: {
+        [movie.imdbId!]: movie.posterUrl,
+        [episode.imdbId!]: episode.posterUrl,
+      },
       requests: [
         {
           mediaId: 'media.id',
           status,
-          media,
+          media: {
+            imdbId: show.imdbId!,
+            type: show.type,
+            title: show.title,
+            year: 2025,
+            seasonNumber: null,
+            episodeNumber: null,
+          },
+        } as unknown as RequestEntity,
+        {
+          mediaId: 'media.id',
+          status,
+          media: {
+            imdbId: movie.imdbId!,
+            type: movie.type,
+            title: movie.title,
+            year: 2025,
+            seasonNumber: null,
+            episodeNumber: null,
+          },
+        } as unknown as RequestEntity,
+        {
+          mediaId: 'media.id',
+          status,
+          media: {
+            imdbId: episode.imdbId!,
+            type: episode.type,
+            title: episode.title,
+            year: 2025,
+            seasonNumber: 2,
+            episodeNumber: 4,
+          },
         } as unknown as RequestEntity,
       ],
     });

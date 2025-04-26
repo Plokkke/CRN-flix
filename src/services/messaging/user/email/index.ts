@@ -99,6 +99,7 @@ export class EmailUserMessaging extends UserMessaging<string> {
         serviceName: this.contextService.name,
         mediaServerUrl: this.contextService.mediaServerUrl,
         requests,
+        posterUrlByImdbId: {}, // TODO get jellyfin item
       }),
     });
   }

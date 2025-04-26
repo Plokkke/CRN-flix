@@ -10,10 +10,14 @@ export const errorTemplate = (message: string): { subject: string; html: string;
     </head>
     <body>
       <div class="container">
-        <h1>❌ Quelque chose s'est mal passé!</h1>
-        <p>${message}</p>
-        <div class="footer">
-          <p>Si vous avez besoin d'assistance, veuillez contacter le support.</p>
+        <div class="content">
+          <h1>❌ Quelque chose s'est mal passé!</h1>
+          <div class="section-info">
+            <p>${message}</p>
+          </div>
+          <div class="footer">
+            <p>Si vous avez besoin d'assistance, veuillez contacter le support.</p>
+          </div>
         </div>
       </div>
     </body>

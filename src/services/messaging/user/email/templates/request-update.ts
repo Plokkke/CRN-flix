@@ -1,5 +1,6 @@
 import { MediaEntity } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
+import { COMMON_CSS, getHeaderSection, getFooterSection } from './styles';
 
 const getStatusDescription = (status: RequestStatus): string => {
   const descriptions: Record<RequestStatus, string> = {
@@ -12,60 +13,59 @@ const getStatusDescription = (status: RequestStatus): string => {
   return descriptions[status] || 'Status update received.';
 };
 
-const getHeaderSection = (serviceName: string) => `
-    <div class="header">
-        <div class="logo">${serviceName}</div>
-        <div class="tagline">Votre collection privée de films et séries</div>
-    </div>
-`;
-
-const getMediaCard = (media: MediaEntity) => `
-    <div class="media-card">
-        <div class="media-details">
-            <h2 class="media-title">${media.title}<span class="media-year">${media.year}</span></h2>
-            
-            ${
-              media.type === 'episode'
-                ? `
-                <div class="episode-info">
-                    <span class="episode-label">Saison ${media.seasonNumber}</span>
-                    <span class="episode-number">Episode ${media.episodeNumber}</span>
-                </div>
-              `
-                : ''
-            }
+const getMediaCard = (
+  media: MediaEntity,
+  request: RequestEntity,
+  serviceName: string,
+  mediaServerUrl: string,
+  posterUrlByImdbId: Record<string, string>
+) => {
+  const posterUrl = media.imdbId ? posterUrlByImdbId[media.imdbId] : undefined;
+  return `
+    <div class="media-card" style="display: flex; gap: 24px; align-items: stretch;">
+      ${
+        posterUrl
+          ? `<div style="flex: 0 0 110px; display: flex; align-items: center;"><img src="${posterUrl}" alt="Poster" style="width: 110px; height: 100%; object-fit: cover; border-radius: 8px 0 0 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);" /></div>`
+          : ''
+      }
+      <div class="media-details" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span class="media-title" style="font-size: 20px; font-weight: 600; color: #1e1e2a;">${media.title}</span>
+          <span class="media-year" style="font-size: 16px; color: #888; font-weight: 400;">${media.year}</span>
         </div>
-    </div>
-`;
-
-const getStatusSection = (serviceName: string, mediaServerUrl: string, request: RequestEntity, statusClass: string, statusText: string) => `
-    <div class="status-section">
-        <div class="status ${statusClass}">${statusText}</div>
-        <p class="status-description">${getStatusDescription(request.status)}</p>
         ${
-          request.status === 'fulfilled'
-            ? `
-            <a href="${mediaServerUrl}" class="btn" target="_blank" rel="noopener noreferrer">Regarder sur ${serviceName}</a>
-          `
+          media.type === 'episode'
+            ? `<div class="episode-info" style="margin-top: 8px;">
+                  <span class="episode-label">Saison ${media.seasonNumber}</span>
+                  <span class="episode-number">Episode ${media.episodeNumber}</span>
+                </div>`
             : ''
         }
+        <div style="margin-top: 16px;">
+          <span class="status status-${request.status.toLowerCase().replace('_', '-')}">
+            ${request.status.replace('_', ' ').toUpperCase()}
+          </span>
+        </div>
+        <p class="status-description" style="margin: 12px 0 0 0;">${getStatusDescription(request.status)}</p>
+        ${
+          request.status === 'fulfilled'
+            ? `<a href="${mediaServerUrl}" class="btn" target="_blank" rel="noopener noreferrer" style="margin-top: 18px;">Regarder sur ${serviceName}</a>`
+            : ''
+        }
+      </div>
     </div>
-`;
-
-const getFooterSection = () => `
-    <div class="footer">
-        <p>Ceci est un service privé. Merci de ne pas partager vos identifiants.</p>
-    </div>
-`;
+  `;
+};
 
 export type RequestUpdateTemplateParams = {
   serviceName: string;
   mediaServerUrl: string;
   requests: RequestEntity[];
+  posterUrlByImdbId: Record<string, string>;
 };
 
 export const requestUpdateTemplate = (params: RequestUpdateTemplateParams): { subject: string; html: string; text: string } => {
-  const { serviceName, mediaServerUrl, requests } = params;
+  const { serviceName, mediaServerUrl, requests, posterUrlByImdbId } = params;
   const subject = `📺 Mise à jour de vos demandes (${requests.length})`;
 
   const mediaCards = requests
@@ -80,14 +80,9 @@ export const requestUpdateTemplate = (params: RequestUpdateTemplateParams): { su
       }
       return mediaA.title.localeCompare(mediaB.title);
     })
-    .map((request) => {
-      const statusClass = `status-${request.status.toLowerCase().replace('_', '-')}`;
-      const statusText = request.status.replace('_', ' ').toUpperCase();
-      return `
-      ${getMediaCard(request.media!)}
-      ${getStatusSection(serviceName, mediaServerUrl, request, statusClass, statusText)}
-    `;
-    })
+    .map((request) =>
+      getMediaCard(request.media!, request, serviceName, mediaServerUrl, posterUrlByImdbId)
+    )
     .join('');
 
   const html = `<!DOCTYPE html>
@@ -97,195 +92,7 @@ export const requestUpdateTemplate = (params: RequestUpdateTemplateParams): { su
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${subject}</title>
     <style>
-        /* Styles généraux */
-        body {
-            font-family: 'Arial', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            margin: 0;
-            padding: 0;
-            background-color: #f7f7f7;
-        }
-        
-        .container {
-            max-width: 600px;
-            width: 600px;
-            min-width: 600px;
-            margin: 0 auto;
-            background-color: #ffffff;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        
-        /* En-tête */
-        .header {
-            background-color: #1e1e2a;
-            color: white;
-            padding: 30px 20px;
-            text-align: center;
-        }
-        
-        .logo {
-            font-size: 32px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        
-        .tagline {
-            font-size: 16px;
-            opacity: 0.9;
-        }
-        
-        /* Contenu principal */
-        .content {
-            padding: 30px 20px;
-        }
-        
-        h1 {
-            color: #1e1e2a;
-            margin-top: 0;
-        }
-        
-        h2 {
-            color: #1e1e2a;
-            margin-top: 25px;
-            font-size: 20px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-        }
-
-        h3 {
-            color: #1e1e2a;
-            margin-top: 20px;
-            font-size: 18px;
-        }
-        
-        /* Media Card */
-        .media-card {
-            display: flex;
-            gap: 20px;
-            background-color: #ffffff;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .media-details {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        
-        .media-title {
-            font-size: 24px;
-            font-weight: bold;
-            color: #1e1e2a;
-            margin: 0 0 8px 0;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        
-        .media-year {
-            font-size: 16px;
-            color: #666;
-            font-weight: normal;
-        }
-        
-        .episode-info {
-            display: flex;
-            gap: 12px;
-            margin-top: 8px;
-        }
-        
-        .episode-label, .episode-number {
-            background-color: #f0f0f0;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 14px;
-            color: #666;
-        }
-        
-        .status-section {
-            background-color: #f5f5f5;
-            border-left: 4px solid #1e1e2a;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-        }
-        
-        .status {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 3px;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        
-        .status-pending { background-color: #ffd700; color: #000; }
-        .status-in-progress { background-color: #1e90ff; color: #fff; }
-        .status-fulfilled { background-color: #32cd32; color: #fff; }
-        .status-rejected { background-color: #ff4444; color: #fff; }
-        .status-canceled { background-color: #808080; color: #fff; }
-        .status-missing { background-color: #ff8c00; color: #fff; }
-        
-        .status-description {
-            margin: 15px 0;
-            font-size: 16px;
-        }
-        
-        /* Boutons */
-        .btn {
-            display: inline-block;
-            padding: 12px 25px;
-            background-color: #e50914;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            margin-top: 15px;
-        }
-        
-        /* Pied de page */
-        .footer {
-            background-color: #f5f5f5;
-            padding: 20px;
-            text-align: center;
-            color: #777;
-            font-size: 14px;
-        }
-        
-        /* Responsive */
-        @media only screen and (max-width: 480px) {
-            .container {
-                width: 100%;
-            }
-            
-            .header {
-                padding: 20px 15px;
-            }
-            
-            .content {
-                padding: 20px 15px;
-            }
-            
-            .media-card {
-                flex-direction: column;
-                align-items: center;
-                text-align: center;
-            }
-            
-            .media-title {
-                flex-direction: column;
-                align-items: center;
-                gap: 4px;
-            }
-            
-            .episode-info {
-                justify-content: center;
-            }
-        }
+        ${COMMON_CSS}
     </style>
 </head>
 <body>
