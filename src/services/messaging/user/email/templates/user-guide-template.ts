@@ -11,16 +11,10 @@ const getSection = (title: string, content: string) => `
   </div>
 `;
 
-const getScreenshotPlaceholder = (alt: string) => `
-  <div class="screenshot-placeholder">
-    <span>Screenshot: ${alt}</span>
-  </div>
-`;
-
 export function userGuideTemplate(params: UserGuideTemplateParams): string {
-    const { serviceName } = params;
+  const { serviceName } = params;
 
-    return `
+  return `
 <!DOCTYPE html>
 <html>
   <head>
@@ -111,7 +105,7 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
           <div class="preview-gallery">
             <img src="/assets/jellyfin-server-page.jpg" alt="Page serveur Jellyfin" class="preview-thumb" onclick="showPreview('/assets/jellyfin-server-page.jpg')">
             <img src="/assets/jellyfin-login-page.png" alt="Page login Jellyfin" class="preview-thumb" onclick="showPreview('/assets/jellyfin-login-page.png')">
-          </div>`
+          </div>`,
         )}
         ${getSection(
           'Demander un nouveau contenu',
@@ -122,7 +116,7 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
               <li>Ajoutez simplement les films ou séries souhaités à votre liste "Watchlist" sur Trakt</li>
           </ol>
           <p>Vous serez notifié par email lorsque vos contenus demandés seront disponibles sur la plateforme !</p>
-        `
+        `,
         )}
         ${getSection(
           'Ajouter un film à ma liste de souhaits',
@@ -134,23 +128,23 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
           <div class="preview-gallery">
             <img src="/assets/trakt-anticipated-page.png" alt="Page anticipated Trakt" class="preview-thumb" onclick="showPreview('/assets/trakt-anticipated-page.png')">
             <img src="/assets/trakt-movie-detail-page.png" alt="Page détail film Trakt" class="preview-thumb" onclick="showPreview('/assets/trakt-movie-detail-page.png')">
-          </div>`
+          </div>`,
         )}
         ${getSection(
-              'Quand mes demandes seront-elles disponibles ?',
-              `<ul>
+          'Quand mes demandes seront-elles disponibles ?',
+          `<ul>
             <li>La synchronisation des requêtes a lieu toutes les 10 minutes.</li>
             <li>Les mise à disposition de contenu sont effectuées manuellement. Les administrateurs font le nécessaire pour vous satisfaire dans les plus brefs délais.</li>
             <li>Une fois disponible, vous recevrez immédiatement un email d'information.</li>
-          </ul>`
-          )}
+          </ul>`,
+        )}
         ${getSection(
-              'Quels contenus sont synchronisés ?',
-              `<ul>
+          'Quels contenus sont synchronisés ?',
+          `<ul>
             <li><b>${serviceName}</b> prend en compte tous les éléments de votre <b>watchlist</b>, les <b>séries en cours</b> de visionnage, et les contenus <b>notés 10</b>/10.</li>
             <li>Si une nouvelle saison est disponible pour une série déjà regardée, elle sera automatiquement ajoutée à vos requêtes. Pas besoin de l'ajouter à votre watchlist.</li>
-          </ul>`
-          )}
+          </ul>`,
+        )}
       </div>
     </div>
     <div id="modalPreview" class="modal-preview" onclick="hidePreview()">

@@ -1,5 +1,6 @@
 import { MediaEntity } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
+
 import { COMMON_CSS, getHeaderSection, getFooterSection } from './styles';
 
 const getStatusDescription = (status: RequestStatus): string => {
@@ -18,7 +19,7 @@ const getMediaCard = (
   request: RequestEntity,
   serviceName: string,
   mediaServerUrl: string,
-  posterUrlByImdbId: Record<string, string>
+  posterUrlByImdbId: Record<string, string>,
 ) => {
   const posterUrl = media.imdbId ? posterUrlByImdbId[media.imdbId] : undefined;
   return `
@@ -64,7 +65,9 @@ export type RequestUpdateTemplateParams = {
   posterUrlByImdbId: Record<string, string>;
 };
 
-export const requestUpdateTemplate = (params: RequestUpdateTemplateParams): { subject: string; html: string; text: string } => {
+export const requestUpdateTemplate = (
+  params: RequestUpdateTemplateParams,
+): { subject: string; html: string; text: string } => {
   const { serviceName, mediaServerUrl, requests, posterUrlByImdbId } = params;
   const subject = `📺 Mise à jour de vos demandes (${requests.length})`;
 
@@ -80,9 +83,7 @@ export const requestUpdateTemplate = (params: RequestUpdateTemplateParams): { su
       }
       return mediaA.title.localeCompare(mediaB.title);
     })
-    .map((request) =>
-      getMediaCard(request.media!, request, serviceName, mediaServerUrl, posterUrlByImdbId)
-    )
+    .map((request) => getMediaCard(request.media!, request, serviceName, mediaServerUrl, posterUrlByImdbId))
     .join('');
 
   const html = `<!DOCTYPE html>

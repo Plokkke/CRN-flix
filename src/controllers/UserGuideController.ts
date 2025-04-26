@@ -5,9 +5,7 @@ import { userGuideTemplate } from '@/services/messaging/user/email/templates/use
 
 @Controller('user-guide')
 export class UserGuideController {
-  constructor(
-    private readonly contextService: ContextService,
-  ) {}
+  constructor(private readonly contextService: ContextService) {}
 
   @Get()
   @Header('content-type', 'text/html')

@@ -4,10 +4,10 @@ import { z } from 'zod';
 
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
+import { ContextService } from '@/services/context';
 import { UsersRepository } from '@/services/database/users';
 import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
 import { registrationFormTemplate } from '@/services/messaging/user/email/templates';
-import { ContextService } from '@/services/context';
 
 const registrationSchema = z.object({
   email: z.string().email('Email invalide'),

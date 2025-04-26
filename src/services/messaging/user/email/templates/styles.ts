@@ -300,7 +300,7 @@ export const COMMON_CSS = `
 `;
 
 // Common header component
-export const getHeaderSection = (serviceName: string) => `
+export const getHeaderSection = (serviceName: string): string => `
   <div class="header">
     <div class="logo">${serviceName}</div>
     <div class="tagline">Votre collection privée de films et séries</div>
@@ -308,7 +308,7 @@ export const getHeaderSection = (serviceName: string) => `
 `;
 
 // Common footer component
-export const getFooterSection = () => `
+export const getFooterSection = (): string => `
   <div class="footer">
     <p>Ceci est un service privé. Merci de ne pas partager vos identifiants.</p>
   </div>

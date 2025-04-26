@@ -1,5 +1,5 @@
 import { Logger, OnModuleInit } from '@nestjs/common';
-import { ChannelType, EmbedBuilder, TextChannel, ThreadAutoArchiveDuration } from 'discord.js';
+import { ChannelType, EmbedBuilder, TextChannel } from 'discord.js';
 import * as _ from 'lodash';
 
 import { Emitter } from '@/helpers/events';
@@ -70,27 +70,27 @@ export type AdminEvents = {
   mediaRequestStatusChange: AdminMediaRequestStatusChangeEvent;
 };
 
-function setEmbedField(embed: EmbedBuilder, request: RequestEntity): EmbedBuilder {
-  const media = request.media!;
-  embed
-    .setTitle(`${media.title} (${media.year})`)
-    .setURL(`https://www.imdb.com/fr/title/${media.imdbId}/`)
-    .setFields({ name: 'Status', value: `${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}` });
+// function setEmbedField(embed: EmbedBuilder, request: RequestEntity): EmbedBuilder {
+//   const media = request.media!;
+//   embed
+//     .setTitle(`${media.title} (${media.year})`)
+//     .setURL(`https://www.imdb.com/fr/title/${media.imdbId}/`)
+//     .setFields({ name: 'Status', value: `${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}` });
 
-  if (media.type === 'episode') {
-    embed.addFields(
-      { name: 'Saisons', value: `${media.seasonNumber}`, inline: true },
-      { name: 'Episode', value: `${media.episodeNumber}`, inline: true },
-    );
-  }
+//   if (media.type === 'episode') {
+//     embed.addFields(
+//       { name: 'Saisons', value: `${media.seasonNumber}`, inline: true },
+//       { name: 'Episode', value: `${media.episodeNumber}`, inline: true },
+//     );
+//   }
 
-  if (request.status === 'pending') {
-    const users = request.userRequests?.map((user) => user.user!);
-    embed.addFields({ name: 'Utilisateurs', value: users?.map((user) => user.name).join(', ') ?? 'N/A' });
-  }
+//   if (request.status === 'pending') {
+//     const users = request.userRequests?.map((user) => user.user!);
+//     embed.addFields({ name: 'Utilisateurs', value: users?.map((user) => user.name).join(', ') ?? 'N/A' });
+//   }
 
-  return embed;
-}
+//   return embed;
+// }
 
 export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnModuleInit {
   private static readonly logger = new Logger(DiscordAdminMessaging.name);
@@ -194,17 +194,14 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
     return request;
   }
 
-  async updateMediaStatus(request: RequestEntity): Promise<void> {
+  async updateMediaStatus(_request: RequestEntity): Promise<void> {
     // if (!request.threadId) {
     //   await this.newMediaRequest(request);
     //   return;
     // }
-
     // const thread = await DiscordService.getThread(this.channel, request.threadId);
     // await thread.send(`Statut mis à jour: ${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}`);
-
     // const head = await DiscordService.getHeadOfThread(this.channel, request.threadId);
-
     // await head.edit({ embeds: [setEmbedField(EmbedBuilder.from(head.embeds[0]), request)] });
   }
 }

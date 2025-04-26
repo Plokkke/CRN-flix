@@ -4,7 +4,9 @@ import { HealthModule } from '@plokkke/nest-health-registry';
 import { z } from 'zod';
 
 import { AppService } from '@/app.service';
+import { AssetsController } from '@/controllers/AssetsController';
 import { MailingController } from '@/controllers/MailingController';
+import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
@@ -24,8 +26,6 @@ import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { discordConfigSchema } from '@/services/discord';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
 import { syncConfigSchema } from '@/services/sync';
-import { UserGuideController } from '@/controllers/UserGuideController';
-import { AssetsController } from '@/controllers/AssetsController';
 
 export const configSchema = z.object({
   name: z.string(),

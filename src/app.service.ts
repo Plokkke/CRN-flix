@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 
+import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
 import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import {
@@ -21,8 +23,6 @@ import {
 } from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { SyncService } from '@/services/sync';
-import { ConfigService } from '@nestjs/config';
-import { Config } from '@/app.module';
 
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {

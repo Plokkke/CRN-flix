@@ -29,7 +29,7 @@ const getFormSection = (formAction: string) => `
 
 export const registrationFormTemplate = (params: RegistrationFormParams): string => {
   const { serviceName, formAction } = params;
-  
+
   return `
 <!DOCTYPE html>
 <html>
@@ -86,4 +86,4 @@ export const registrationFormTemplate = (params: RegistrationFormParams): string
   </body>
 </html>
 `;
-}; 
+};

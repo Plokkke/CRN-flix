@@ -30,7 +30,7 @@ export class ContextService {
 
   async getRandomMedias(count: number, type: 'movie' | 'show' | 'episode'): Promise<MediaItem[]> {
     const medias = await this.jellyfin.listEntries(
-      (type === 'movie') ? ['Movie'] : (type === 'show') ? ['Series'] : ['Episode']
+      type === 'movie' ? ['Movie'] : type === 'show' ? ['Series'] : ['Episode'],
     );
 
     // Shuffle the array using Fisher-Yates algorithm
@@ -45,12 +45,12 @@ export class ContextService {
       if (media.Type === 'Episode') {
         console.log(media);
       }
-      return ({
+      return {
         title: media.Type === 'Episode' ? media.SeriesName! : media.Name,
         imdbId: media.ProviderIds.Imdb!,
         type: media.Type === 'Movie' ? 'movie' : media.Type === 'Series' ? 'show' : 'episode',
         posterUrl: `https://jellyfin.crn-tech.fr/Items/${itemId}/Images/Primary?fillWidth=100`,
-      });
+      };
     });
   }
 }
