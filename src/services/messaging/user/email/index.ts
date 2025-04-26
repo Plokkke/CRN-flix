@@ -1,12 +1,12 @@
-import { Logger } from '@nestjs/common';
+import { InternalServerErrorException, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { z } from 'zod';
 
 import { ContextService } from '@/services/context';
-import { MediaRequestEntity, RequestStatus } from '@/services/database/mediaRequests';
+import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
 import { UserMessaging } from '@/services/messaging/user';
-import { errorTemplate, mediaUpdateTemplate, registeredTemplate } from '@/services/messaging/user/email/templates';
+import { errorTemplate, registeredTemplate, requestUpdateTemplate } from '@/services/messaging/user/email/templates';
 
 import { EmailQueue } from './queue';
 
@@ -20,7 +20,7 @@ export const configSchema = z.object({
 
 export type Config = z.infer<typeof configSchema>;
 
-const ALLOWED_STATUS_UPDATE: RequestStatus[] = ['pending', 'in_progress', 'fulfilled', 'missing', 'rejected'];
+const ALLOWED_STATUS_UPDATE: RequestStatus[] = ['pending', 'fulfilled', 'missing', 'rejected'];
 
 export class EmailUserMessaging extends UserMessaging<string> {
   private static logger = new Logger(EmailUserMessaging.name);
@@ -44,7 +44,7 @@ export class EmailUserMessaging extends UserMessaging<string> {
       from: this.config.from,
     });
 
-    this.emailQueue = new EmailQueue(this.sendMediaUpdateEmail.bind(this));
+    this.emailQueue = new EmailQueue(this.sendRequestUpdateEmail.bind(this));
   }
 
   async error(email: string, message: string): Promise<void> {
@@ -77,7 +77,10 @@ export class EmailUserMessaging extends UserMessaging<string> {
     });
   }
 
-  async mediaRequestUpdated(email: string, request: MediaRequestEntity): Promise<void> {
+  async requestUpdated(email: string, request: RequestEntity): Promise<void> {
+    if (!request.media) {
+      throw new InternalServerErrorException('Request media not loaded');
+    }
     if (!ALLOWED_STATUS_UPDATE.includes(request.status)) {
       EmailUserMessaging.logger.debug(`Skipping email to ${email} for media request update`);
       return;
@@ -87,12 +90,12 @@ export class EmailUserMessaging extends UserMessaging<string> {
     await this.emailQueue.addToQueue(email, request);
   }
 
-  private async sendMediaUpdateEmail(email: string, requests: MediaRequestEntity[]): Promise<void> {
+  private async sendRequestUpdateEmail(email: string, requests: RequestEntity[]): Promise<void> {
     EmailUserMessaging.logger.debug(`Sending email to ${email} for media request update`);
     await this.transporter.sendMail({
       from: this.config.from,
       to: email,
-      ...mediaUpdateTemplate(requests),
+      ...requestUpdateTemplate(requests),
     });
   }
 }

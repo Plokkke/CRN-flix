@@ -1,9 +1,9 @@
 import { Controller, Get, Header, Param } from '@nestjs/common';
 
 import { ContextService } from '@/services/context';
-import { MediaRequestEntity, REQUEST_STATUS, RequestStatus } from '@/services/database/mediaRequests';
-import { mediaUpdateTemplate } from '@/services/messaging/user/email/templates/media-update';
+import { REQUEST_STATUS, RequestEntity, RequestStatus } from '@/services/database/requests';
 import { registeredTemplate } from '@/services/messaging/user/email/templates/registered';
+import { requestUpdateTemplate } from '@/services/messaging/user/email/templates/request-update';
 
 @Controller('mailing')
 export class MailingController {
@@ -51,11 +51,13 @@ export class MailingController {
             episodeNumber: 1,
           };
 
-    const { html: originalHtml } = mediaUpdateTemplate([{
-      id: 'id-string',
-      status,
-      ...media,
-    } as unknown as MediaRequestEntity]);
+    const { html: originalHtml } = requestUpdateTemplate([
+      {
+        mediaId: 'media.id',
+        status,
+        media,
+      } as unknown as RequestEntity,
+    ]);
 
     // Add a button to navigate to the next status
     const nextStatusButton = `

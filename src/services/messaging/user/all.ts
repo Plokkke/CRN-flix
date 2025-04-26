@@ -1,7 +1,6 @@
-import { MediaRequestEntity } from '@/services/database/mediaRequests';
+import { RequestEntity } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
-
-import { UserMessaging } from '.';
+import { UserMessaging } from '@/services/messaging/user';
 
 export type UserMessagingCtxt = {
   key: string;
@@ -31,8 +30,8 @@ export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
     await messaging.error(ctxt.id, message);
   }
 
-  async mediaRequestUpdated(ctxt: UserMessagingCtxt, request: MediaRequestEntity): Promise<void> {
+  async requestUpdated(ctxt: UserMessagingCtxt, request: RequestEntity): Promise<void> {
     const messaging = this.getMessaging(ctxt.key);
-    await messaging.mediaRequestUpdated(ctxt.id, request);
+    await messaging.requestUpdated(ctxt.id, request);
   }
 }

@@ -1,9 +1,9 @@
-import { MediaRequestEntity, RequestStatus } from '@/services/database/mediaRequests';
+import { MediaEntity } from '@/services/database/medias';
+import { RequestEntity, RequestStatus } from '@/services/database/requests';
 
 const getStatusDescription = (status: RequestStatus): string => {
   const descriptions: Record<RequestStatus, string> = {
     pending: 'Nous avons bien reçu votre demande. Vous serez notifié lorsque elle sera terminée.',
-    in_progress: 'Un administrateur a pris en charge votre demande. Elle sera disponible dans quelques minutes.',
     fulfilled: 'Votre demande est disponible sur CRN-Flix.',
     rejected: 'Le contenu demandé ne respecte pas les règles du serveur. Veuillez réessayer avec un contenu approprié.',
     canceled: 'Vous avez annulé votre demande.',
@@ -19,17 +19,17 @@ const getHeaderSection = (serviceName: string) => `
     </div>
 `;
 
-const getMediaCard = (request: MediaRequestEntity) => `
+const getMediaCard = (media: MediaEntity) => `
     <div class="media-card">
         <div class="media-details">
-            <h2 class="media-title">${request.title}<span class="media-year">${request.year}</span></h2>
+            <h2 class="media-title">${media.title}<span class="media-year">${media.year}</span></h2>
             
             ${
-              request.type === 'episode'
+              media.type === 'episode'
                 ? `
                 <div class="episode-info">
-                    <span class="episode-label">Saison ${request.seasonNumber}</span>
-                    <span class="episode-number">Episode ${request.episodeNumber}</span>
+                    <span class="episode-label">Saison ${media.seasonNumber}</span>
+                    <span class="episode-number">Episode ${media.episodeNumber}</span>
                 </div>
               `
                 : ''
@@ -38,7 +38,7 @@ const getMediaCard = (request: MediaRequestEntity) => `
     </div>
 `;
 
-const getStatusSection = (request: MediaRequestEntity, statusClass: string, statusText: string) => `
+const getStatusSection = (request: RequestEntity, statusClass: string, statusText: string) => `
     <div class="status-section">
         <div class="status ${statusClass}">${statusText}</div>
         <p class="status-description">${getStatusDescription(request.status)}</p>
@@ -58,23 +58,26 @@ const getFooterSection = () => `
     </div>
 `;
 
-export const mediaUpdateTemplate = (
-  requests: MediaRequestEntity[],
-): { subject: string; html: string; text: string } => {
+export const requestUpdateTemplate = (requests: RequestEntity[]): { subject: string; html: string; text: string } => {
   const subject = `📺 Mise à jour de vos demandes (${requests.length})`;
 
   const mediaCards = requests
     .sort((a, b) => {
-      if (a.type === 'episode' && b.type === 'episode') {
-        return (a.seasonNumber || 0) - (b.seasonNumber || 0) || (a.episodeNumber || 0) - (b.episodeNumber || 0);
+      const mediaA = a.media!;
+      const mediaB = b.media!;
+      if (mediaA.type === 'episode' && mediaB.type === 'episode') {
+        return (
+          (mediaA.seasonNumber || 0) - (mediaB.seasonNumber || 0) ||
+          (mediaA.episodeNumber || 0) - (mediaB.episodeNumber || 0)
+        );
       }
-      return a.title.localeCompare(b.title);
+      return mediaA.title.localeCompare(mediaB.title);
     })
     .map((request) => {
       const statusClass = `status-${request.status.toLowerCase().replace('_', '-')}`;
       const statusText = request.status.replace('_', ' ').toUpperCase();
       return `
-      ${getMediaCard(request)}
+      ${getMediaCard(request.media!)}
       ${getStatusSection(request, statusClass, statusText)}
     `;
     })
@@ -298,8 +301,8 @@ export const mediaUpdateTemplate = (
 ${requests
   .map(
     (request) => `
-${request.title} (${request.year})
-${request.type === 'episode' ? `Saison ${request.seasonNumber} - Episode ${request.episodeNumber}\n` : ''}
+${request.media!.title} (${request.media!.year})
+${request.media!.type === 'episode' ? `Saison ${request.media!.seasonNumber} - Episode ${request.media!.episodeNumber}\n` : ''}
 Statut: ${request.status.replace('_', ' ').toUpperCase()}
 ${getStatusDescription(request.status)}
 ${request.status === 'fulfilled' ? 'Regarder sur CRN-Flix: https://jellyfin.crn-tech.fr' : ''}

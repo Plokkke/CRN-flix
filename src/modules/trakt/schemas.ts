@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { isoDateSchema } from '@/schemas';
 
-import { MEDIA_TYPES } from './constants';
+import { ACTIVITY_TYPES, MEDIA_TYPES } from './constants';
 
 export const mediaTypeSchema = z.enum(MEDIA_TYPES);
 
@@ -218,17 +218,6 @@ export const deviceTokenSchema = z.object({
   access_token: z.string(),
   refresh_token: z.string(),
 });
-
-export const ACTIVITY_TYPES = [
-  'ALL',
-  'WATCHED',
-  'RATED',
-  'HIDDEN',
-  'DROPPED',
-  'LISTED',
-  'WATCHLISTED',
-  'FAVORITED',
-] as const;
 
 export const activityTypeSchema = z.enum(ACTIVITY_TYPES);
 

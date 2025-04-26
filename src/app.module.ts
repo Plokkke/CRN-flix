@@ -23,7 +23,7 @@ import { traktPluginProvider } from '@/providers/traktPlugin';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { discordConfigSchema } from '@/services/discord';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
-import { configSchema as syncConfigSchema } from '@/services/sync';
+import { syncConfigSchema } from '@/services/sync';
 
 export const configSchema = z.object({
   name: z.string(),

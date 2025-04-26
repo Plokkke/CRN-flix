@@ -2,8 +2,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { Config } from '@/app.module';
 import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
-
-import { MediaItem } from './messaging/user/email/templates/registered';
+import { MediaItem } from '@/services/messaging/user/email/templates/registered';
 
 export class ContextService {
   constructor(

@@ -4,7 +4,8 @@ import * as _ from 'lodash';
 
 import { Emitter } from '@/helpers/events';
 import { JellyfinUser } from '@/modules/jellyfin/jellyfin';
-import { MediaRequestEntity, MediaRequestsRepository, RequestStatus } from '@/services/database/mediaRequests';
+import { MediaEntity, MediasRepository } from '@/services/database/medias';
+import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
 import { DiscordService } from '@/services/discord';
 
@@ -15,7 +16,6 @@ export type Config = {
 
 export const EMOJI_BY_STATUS: Record<RequestStatus, string> = {
   pending: '⏳',
-  in_progress: '👀',
   fulfilled: '✅',
   missing: '🫥',
   rejected: '⛔️',
@@ -23,7 +23,6 @@ export const EMOJI_BY_STATUS: Record<RequestStatus, string> = {
 } as const;
 export const EMOJI_NAME_BY_STATUS: Record<RequestStatus, string> = {
   pending: 'sandglass',
-  in_progress: 'eyes',
   fulfilled: 'white_check_mark',
   missing: 'dotted_line_face',
   rejected: 'no_entry',
@@ -31,7 +30,6 @@ export const EMOJI_NAME_BY_STATUS: Record<RequestStatus, string> = {
 } as const;
 export const LABEL_BY_STATUS: Record<RequestStatus, string> = {
   pending: 'Enregistrée',
-  in_progress: 'En cours',
   fulfilled: 'Disponible',
   missing: 'Introuvable',
   rejected: 'Rejetée',
@@ -39,20 +37,11 @@ export const LABEL_BY_STATUS: Record<RequestStatus, string> = {
 } as const;
 
 export type NewRequestContext = {
-  media: MediaRequestEntity;
-  users: JellyfinUser[];
-};
-
-export type RequestContext = {
-  threadId: string;
-  messageId: string;
-  media: MediaRequestEntity;
-  status: RequestStatus;
+  media: MediaEntity;
   users: JellyfinUser[];
 };
 
 const MEDIA_REQUEST_STATUS_BY_REACTION = {
-  '👀': 'in_progress',
   '🫥': 'missing',
   '⛔️': 'rejected',
 } as const;
@@ -63,7 +52,7 @@ const USER_EVENT_BY_REACTION = {
 } as const;
 
 export type AdminMediaRequestStatusChangeEvent = {
-  request: MediaRequestEntity;
+  request: RequestEntity;
   status: RequestStatus;
 };
 
@@ -81,21 +70,23 @@ export type AdminEvents = {
   mediaRequestStatusChange: AdminMediaRequestStatusChangeEvent;
 };
 
-function setEmbedField(embed: EmbedBuilder, request: MediaRequestEntity): EmbedBuilder {
+function setEmbedField(embed: EmbedBuilder, request: RequestEntity): EmbedBuilder {
+  const media = request.media!;
   embed
-    .setTitle(`${request.title} (${request.year})`)
-    .setURL(`https://www.imdb.com/fr/title/${request.imdbId}/`)
+    .setTitle(`${media.title} (${media.year})`)
+    .setURL(`https://www.imdb.com/fr/title/${media.imdbId}/`)
     .setFields({ name: 'Status', value: `${EMOJI_BY_STATUS[request.status]} ${LABEL_BY_STATUS[request.status]}` });
 
-  if (request.type === 'episode') {
+  if (media.type === 'episode') {
     embed.addFields(
-      { name: 'Saisons', value: `${request.seasonNumber}`, inline: true },
-      { name: 'Episode', value: `${request.episodeNumber}`, inline: true },
+      { name: 'Saisons', value: `${media.seasonNumber}`, inline: true },
+      { name: 'Episode', value: `${media.episodeNumber}`, inline: true },
     );
   }
 
   if (request.status === 'pending') {
-    embed.addFields({ name: 'Utilisateurs', value: request.users?.map((user) => user.name).join(', ') ?? 'N/A' });
+    const users = request.userRequests?.map((user) => user.user!);
+    embed.addFields({ name: 'Utilisateurs', value: users?.map((user) => user.name).join(', ') ?? 'N/A' });
   }
 
   return embed;
@@ -107,7 +98,8 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
   static async create(
     config: Config,
     discordService: DiscordService,
-    mediaRequestsRepository: MediaRequestsRepository,
+    mediasRepository: MediasRepository,
+    requestsRepository: RequestsRepository,
     usersRepository: UsersRepository,
   ): Promise<DiscordAdminMessaging> {
     const channel = await discordService.getChannel(config.channelId);
@@ -118,7 +110,8 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
       config,
       discordService,
       channel as TextChannel,
-      mediaRequestsRepository,
+      mediasRepository,
+      requestsRepository,
       usersRepository,
     );
   }
@@ -127,7 +120,8 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
     private readonly config: Config,
     private readonly discordService: DiscordService,
     private readonly channel: TextChannel,
-    private readonly mediaRequestsRepository: MediaRequestsRepository,
+    private readonly mediasRepository: MediasRepository,
+    private readonly requestsRepository: RequestsRepository,
     private readonly usersRepository: UsersRepository,
   ) {
     super();
@@ -140,13 +134,13 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
         return;
       }
 
-      const mediaRequest = await this.mediaRequestsRepository.findByThreadId(messageId);
+      const mediaRequest = await this.requestsRepository.getByThreadId(messageId);
       if (mediaRequest) {
         this.onMediaRequestReact(mediaRequest, reaction);
         return;
       }
 
-      const user = await this.usersRepository.findByRegisterMessageId(messageId);
+      const user = await this.usersRepository.getByApprovalMessageId(messageId);
       if (user) {
         this.onUserRequestReact(user, reaction);
         return;
@@ -154,10 +148,10 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
     });
   }
 
-  private async onMediaRequestReact(request: MediaRequestEntity, reaction: string): Promise<void> {
+  private async onMediaRequestReact(request: RequestEntity, reaction: string): Promise<void> {
     const status = MEDIA_REQUEST_STATUS_BY_REACTION[reaction as keyof typeof MEDIA_REQUEST_STATUS_BY_REACTION];
     if (!status) {
-      DiscordAdminMessaging.logger.warn(`Unknown reaction ${reaction} for media request ${request.id}`);
+      DiscordAdminMessaging.logger.warn(`Unknown reaction ${reaction} for media request ${request.threadId}`);
       return;
     }
 
@@ -181,26 +175,26 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
     embed.addFields({ name: _.capitalize(user.messagingKey), value: user.messagingId });
 
     const message = await this.channel.send({ embeds: [embed] });
-    await this.usersRepository.attachMessage(user, message.id);
+    await this.usersRepository.linkApprovalMessageId(user.id, message.id);
   }
 
-  async newMediaRequest(request: MediaRequestEntity): Promise<MediaRequestEntity> {
+  async newMediaRequest(request: RequestEntity): Promise<RequestEntity> {
+    const media = request.media!;
     const embed = new EmbedBuilder().setColor('#3498db');
 
     const message = await this.channel.send({ embeds: [setEmbedField(embed, request)] });
-    await message.react(EMOJI_BY_STATUS[request.status]);
 
     const thread = await message.startThread({
-      name: `Suivi: ${request.title} (${request.year})`,
+      name: `Suivi: ${media.title} (${media.year})`,
       autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
     });
 
-    await this.mediaRequestsRepository.attachThread(request, thread.id);
+    await this.requestsRepository.attachThread(media.id, thread.id);
 
     return request;
   }
 
-  async updateMediaStatus(request: MediaRequestEntity): Promise<void> {
+  async updateMediaStatus(request: RequestEntity): Promise<void> {
     if (!request.threadId) {
       await this.newMediaRequest(request);
       return;
@@ -212,12 +206,9 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
     const head = await DiscordService.getHeadOfThread(this.channel, request.threadId);
 
     await head.edit({ embeds: [setEmbedField(EmbedBuilder.from(head.embeds[0]), request)] });
-
-    await head.reactions.removeAll();
-    await head.react(EMOJI_BY_STATUS[request.status]);
   }
 
-  async updateRequesters(request: MediaRequestEntity, users: UserEntity[]): Promise<void> {
+  async updateRequesters(request: RequestEntity, users: UserEntity[]): Promise<void> {
     if (!request.threadId) {
       await this.newMediaRequest(request);
       return;

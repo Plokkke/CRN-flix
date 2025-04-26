@@ -1,96 +1,110 @@
+import { Logger } from '@nestjs/common';
 import { Pool } from 'pg';
-
-import { upsertQuery } from '@/helpers/sql';
-import { UserMessagingCtxt } from '@/services/messaging/user/all';
-
-export type UserCreateInfos = {
-  messagingKey: string;
-  messagingId: string;
-  jellyfinId: string | null;
-  name: string;
-};
 
 export type UserEntity = {
   id: string;
+  name: string;
   jellyfinId: string | null;
   messagingKey: string;
   messagingId: string;
-  name: string;
+  approvalMessageId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 type UserRecord = {
   id: string;
+  name: string;
   jellyfin_id: string | null;
   messaging_key: string;
   messaging_id: string;
-  name: string;
+  approval_message_id: string | null;
+  created_at: Date;
+  updated_at: Date;
 };
 
-type UserColumns = keyof UserRecord;
-const COLUMNS = ['id', 'jellyfin_id', 'messaging_key', 'messaging_id', 'name'] as const satisfies UserColumns[];
-
-function fromRecord(record: UserRecord): UserEntity {
+function fromUserRecord(record: UserRecord): UserEntity {
   return {
     id: record.id,
+    name: record.name,
     jellyfinId: record.jellyfin_id,
     messagingKey: record.messaging_key,
     messagingId: record.messaging_id,
-    name: record.name,
+    approvalMessageId: record.approval_message_id,
+    createdAt: record.created_at,
+    updatedAt: record.updated_at,
   };
 }
 
 export class UsersRepository {
+  static readonly logger = new Logger(UsersRepository.name);
+
   constructor(private readonly pool: Pool) {}
 
   async list(): Promise<UserEntity[]> {
-    const query = `SELECT ${COLUMNS.join(',')} FROM users`;
+    const query = `
+      SELECT *
+      FROM users
+    `;
     const { rows } = await this.pool.query<UserRecord>(query);
-
-    return rows.map(fromRecord);
+    return rows.map(fromUserRecord);
   }
 
   async get(id: string): Promise<UserEntity | null> {
-    const query = `SELECT ${COLUMNS.join(',')} FROM users WHERE id = $1`;
-    const { rows } = await this.pool.query<UserRecord>(query, [id]);
-    return rows.length > 0 ? fromRecord(rows[0]) : null;
-  }
-
-  async findByRegisterMessageId(messageId: string): Promise<UserEntity | null> {
-    const query = `SELECT ${COLUMNS.join(',')} FROM users WHERE request_message_id = $1`;
-    const { rows } = await this.pool.query<UserRecord>(query, [messageId]);
-    return rows.length > 0 ? fromRecord(rows[0]) : null;
-  }
-
-  async upsert(infos: UserCreateInfos): Promise<UserEntity> {
-    const userRecord: Partial<Record<UserColumns, unknown>> = {
-      messaging_key: infos.messagingKey,
-      messaging_id: infos.messagingId,
-      jellyfin_id: infos.jellyfinId,
-      name: infos.name,
-    };
-    const query = upsertQuery('users', userRecord, ['messaging_key', 'messaging_id']);
-    const {
-      rows: [user],
-    } = await this.pool.query<UserRecord>(query, Object.values(userRecord));
-
-    return fromRecord(user);
-  }
-
-  async getByMessaging(ctxt: UserMessagingCtxt): Promise<UserEntity | null> {
     const query = `
-        SELECT ${COLUMNS.join(',')}
-        FROM users
-        WHERE messaging_key = $1 AND messaging_id = $2;
-      `;
-
-    const {
-      rows: [user],
-    } = await this.pool.query<UserRecord>(query, [ctxt.key, ctxt.id]);
-    return user ? fromRecord(user) : null;
+      SELECT *
+      FROM users
+      WHERE id = $1
+    `;
+    const { rows } = await this.pool.query<UserRecord>(query, [id]);
+    return rows.length ? fromUserRecord(rows[0]) : null;
   }
 
-  async attachMessage(user: UserEntity, messageId: string): Promise<void> {
-    const query = `UPDATE users SET request_message_id = $2 WHERE id = $1`;
-    await this.pool.query(query, [user.id, messageId]);
+  async getByApprovalMessageId(approvalMessageId: string): Promise<UserEntity | null> {
+    const query = `
+      SELECT *
+      FROM users
+      WHERE approval_message_id = $1
+    `;
+    const { rows } = await this.pool.query<UserRecord>(query, [approvalMessageId]);
+    return rows.length ? fromUserRecord(rows[0]) : null;
+  }
+
+  async getByMessagingInfos(messagingKey: string, messagingId: string): Promise<UserEntity | null> {
+    const query = `
+      SELECT *
+      FROM users
+      WHERE messaging_key = $1 AND messaging_id = $2
+    `;
+    const { rows } = await this.pool.query<UserRecord>(query, [messagingKey, messagingId]);
+    return rows.length ? fromUserRecord(rows[0]) : null;
+  }
+
+  async createFromMessagingInfos(messagingKey: string, messagingId: string, name: string): Promise<UserEntity> {
+    const query = `
+      INSERT INTO users (messaging_key, messaging_id, name)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `;
+    const { rows } = await this.pool.query<UserRecord>(query, [messagingKey, messagingId, name]);
+    return fromUserRecord(rows[0]);
+  }
+
+  async linkApprovalMessageId(userId: string, approvalMessageId: string): Promise<void> {
+    const query = `
+      UPDATE users
+      SET approval_message_id = $2
+      WHERE id = $1
+    `;
+    await this.pool.query(query, [userId, approvalMessageId]);
+  }
+
+  async setJellyfinId(userId: string, jellyfinId: string): Promise<void> {
+    const query = `
+      UPDATE users
+      SET jellyfin_id = $2
+      WHERE id = $1
+    `;
+    await this.pool.query(query, [userId, jellyfinId]);
   }
 }

@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
-import { MediaRequestsRepository } from '@/services/database/mediaRequests';
 import { UsersRepository } from '@/services/database/users';
 import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
 
@@ -20,7 +19,6 @@ export class UsersController {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly discordAdminMessaging: DiscordAdminMessaging,
-    private readonly mediaRequestRepository: MediaRequestsRepository,
     private readonly trakt: TraktApi,
     private readonly traktPlugin: TraktPlugin,
   ) {}
@@ -89,12 +87,11 @@ export class UsersController {
     try {
       const validatedData = registrationSchema.parse(body);
 
-      const user = await this.usersRepository.upsert({
-        name: validatedData.username,
-        messagingKey: 'email',
-        messagingId: validatedData.email,
-        jellyfinId: null,
-      });
+      const user = await this.usersRepository.createFromMessagingInfos(
+        'email',
+        validatedData.email,
+        validatedData.username,
+      );
 
       await this.discordAdminMessaging.newRegistrationRequest(user);
 

@@ -1,6 +1,7 @@
+import { InternalServerErrorException } from '@nestjs/common';
 import { ColorResolvable, EmbedBuilder } from 'discord.js';
 
-import { MediaRequestEntity, RequestStatus } from '@/services/database/mediaRequests';
+import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
 import { DiscordService } from '@/services/discord';
 
@@ -8,7 +9,6 @@ import { UserMessaging } from '.';
 
 const COLOR_BY_STATUS: Record<RequestStatus, ColorResolvable> = {
   pending: '#3498db',
-  in_progress: '#3498db',
   fulfilled: '#2ecc71',
   rejected: '#e74c3c',
   canceled: '#94312d',
@@ -17,23 +17,23 @@ const COLOR_BY_STATUS: Record<RequestStatus, ColorResolvable> = {
 
 const DESCRIPTION_BY_STATUS: Record<RequestStatus, string> = {
   pending: 'Nous avons bien reçu votre demande. Vous serez notifié lorsque elle sera terminée.',
-  in_progress: 'Un administrateur a pris en charge votre demande. Elle sera disponible dans quelques minutes.',
   fulfilled: 'Votre demande est disponible sur [CRN-Flix](https://jellyfin.crn-tech.fr).',
   rejected: 'Le contenu demandé ne respecte pas les règles du serveur. Veuillez réessayer avec un contenu approprié.',
   canceled: 'Vous avez annulé votre demande.',
   missing: 'Le contenu demandé est introuvable. Nous sommes navrés de ne pas pouvoir vous satisfaire.',
 };
 
-function embedBuilder(request: MediaRequestEntity): EmbedBuilder {
+function embedBuilder(request: RequestEntity): EmbedBuilder {
+  const media = request.media!;
   const embed = new EmbedBuilder()
     .setColor(COLOR_BY_STATUS[request.status])
-    .setTitle(`${request.title} (${request.year})`)
+    .setTitle(`${media.title} (${media.year})`)
     .setDescription(DESCRIPTION_BY_STATUS[request.status]);
 
-  if (request.type === 'episode') {
+  if (media.type === 'episode') {
     embed.addFields(
-      { name: 'Saisons', value: `${request.seasonNumber}`, inline: true },
-      { name: 'Episode', value: `${request.episodeNumber}`, inline: true },
+      { name: 'Saisons', value: `${media.seasonNumber}`, inline: true },
+      { name: 'Episode', value: `${media.episodeNumber}`, inline: true },
     );
   }
 
@@ -69,8 +69,11 @@ export class DiscordUserMessaging extends UserMessaging<string> {
     await discordUser.send({ embeds: [embed] });
   }
 
-  async mediaRequestUpdated(id: string, request: MediaRequestEntity): Promise<void> {
+  async requestUpdated(id: string, request: RequestEntity): Promise<void> {
     const user = await this.discordService.getUser(id);
+    if (!request.media) {
+      throw new InternalServerErrorException('Request media not loaded');
+    }
     await user.send({ embeds: [embedBuilder(request)] });
   }
 }

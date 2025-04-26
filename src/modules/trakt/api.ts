@@ -349,4 +349,8 @@ export class TraktApi {
       await Promise.all(MEDIA_TYPES.map((type): Promise<Media[]> => this.requestUserRated(user, type, rates)))
     ).flat();
   }
+
+  async getLastActivities(user: UserAuthCtxt): Promise<LastActivities> {
+    return this.requestLastActivities(user);
+  }
 }
