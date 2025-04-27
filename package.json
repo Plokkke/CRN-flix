@@ -1,7 +1,15 @@
 {
-  "name": "traktsync",
-  "version": "1.0.0",
-  "main": "index.js",
+  "private": true,
+  "name": "crn-flix",
+  "version": "1.0.0-draft.0",
+  "author": "Antoine Caron <antoine@crn-tech.fr>",
+  "license": "ISC",
+  "description": "CRN-Flix is an application server managing a user list for Jellyfin media server and centralizing media requests from Trakt.",
+  "main": "dist/main.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Plokkke/CRN-flix.git"
+  },
   "scripts": {
     "build": "tsc",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
@@ -11,16 +19,13 @@
     "start:dev": "npm run start -- --watch",
     "start:debug": "npm run start:dev -- --debug",
     "start:prod": "node dist/main",
-    "validate": "npm run lint && npm run build && npm run test",
-    "test": "npm run test:unit && npm run test:mutation",
-    "test:cov": "npm run test:unit:cov",
-    "test:unit": "jest --config ./test/jest-unit.js",
+    "test": "npm run test:unit",
+    "test:cov": "npm run test:unit:cov && npm run test:mut",
+    "test:unit": "jest --passWithNoTests --config ./test/jest-unit.js",
     "test:unit:cov": "npm run test:unit -- --coverage",
-    "test:mutation": "stryker run"
+    "test:mut": "stryker run",
+    "validate": "npm run lint && npm run build && npm run test"
   },
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "@nestjs/common": "^11.0.12",
     "@nestjs/config": "^4.0.2",
@@ -65,6 +70,7 @@
     "eslint-plugin-prettier": "^5.2.5",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
+    "semantic-release": "^24.2.3",
     "supertest": "^7.1.0",
     "ts-jest": "^29.3.0",
     "ts-loader": "^9.5.2",
