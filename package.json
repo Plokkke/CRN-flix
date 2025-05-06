@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "crn-flix",
-  "version": "1.0.2",
+  "version": "1.0.3-draft.0",
   "author": "Antoine Caron <antoine@crn-tech.fr>",
   "license": "ISC",
   "description": "CRN-Flix is an application server managing a user list for Jellyfin media server and centralizing media requests from Trakt.",
