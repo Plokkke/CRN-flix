@@ -3,6 +3,13 @@ variable "docker_host" {
   type        = string
 }
 
+variable "docker_ssh_key" {
+  description = "SSH private key for Docker host connection (optional for local)"
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
 variable "slug" {
   description = "Application qualifier to use as prefix"
   type        = string
@@ -23,6 +30,18 @@ variable "api_version" {
   description = "API version"
   type        = string
   default     = "latest"
+}
+
+variable "api_port" {
+  description = "External port for API (optional, will be randomly generated if not provided)"
+  type        = number
+  default     = null
+}
+
+variable "image_registry" {
+  description = "Docker image registry URL (e.g., europe-west1-docker.pkg.dev/project-id/repository). If empty, images will be built locally."
+  type        = string
+  default     = ""
 }
 
 variable "server_url" {

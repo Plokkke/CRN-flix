@@ -128,4 +128,16 @@ variable "clickup_list_id" {
   description = "ClickUp list ID"
   type        = string
   sensitive   = true
+}
+
+variable "api_port" {
+  description = "External port for API (optional, will be randomly generated if not provided)"
+  type        = number
+  default     = null
+}
+
+variable "image_registry" {
+  description = "Docker image registry URL (e.g., europe-west1-docker.pkg.dev/project-id/repository). If empty, images will be built locally."
+  type        = string
+  default     = ""
 } 

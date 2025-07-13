@@ -1,12 +1,19 @@
+locals {
+  build_locally = var.image_registry == "" || var.image_registry == null
+}
+
 resource "docker_image" "migration" {
-  name = "${var.slug}-migration:${var.app_version}"
-  
-  build {
-    context = "${path.cwd}/../components/database"
-    dockerfile = "Dockerfile"
-  }
-  
+  name = local.build_locally ? "${var.slug}-migration:${var.app_version}" : "${var.image_registry}/${var.slug}/migration:${var.app_version}"
   keep_locally = true
+
+  # Build locally if no registry provided
+  dynamic "build" {
+    for_each = local.build_locally ? [1] : []
+    content {
+      context = "${path.cwd}/../components/database"
+      dockerfile = "Dockerfile"
+    }
+  }
 }
 
 resource "docker_container" "migration" {

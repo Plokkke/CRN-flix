@@ -14,5 +14,6 @@ terraform {
 }
 
 provider "docker" {
-  host = var.docker_host
+  host     = var.docker_host
+  ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
 }

@@ -30,3 +30,9 @@ variable "database_container_id" {
   description = "Database container ID for dependency"
   type        = string
 }
+
+variable "image_registry" {
+  description = "Docker image registry URL (e.g., europe-west1-docker.pkg.dev/project-id/repository). If empty, images will be built locally."
+  type        = string
+  default     = ""
+}

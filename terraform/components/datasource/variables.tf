@@ -19,4 +19,10 @@ variable "database_password" {
   type        = string
   default     = null
   sensitive   = true
+}
+
+variable "image_registry" {
+  description = "Docker image registry URL (e.g., europe-west1-docker.pkg.dev/project-id/repository). If empty, images will be built locally."
+  type        = string
+  default     = ""
 } 

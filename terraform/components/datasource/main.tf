@@ -8,6 +8,12 @@ resource "random_password" "database_password" {
   special = true
 }
 
+# Random port for PostgreSQL to avoid conflicts
+resource "random_integer" "postgres_port" {
+  min = 10000
+  max = 65535
+}
+
 locals {
   database_password = var.database_password != null ? var.database_password : random_password.database_password[0].result
 }
@@ -30,7 +36,7 @@ resource "docker_container" "postgres" {
   
   ports {
     internal = 5432
-    external = 5432
+    external = random_integer.postgres_port.result
   }
   
   env = [
@@ -77,6 +83,7 @@ module "migration" {
   slug                  = var.slug
   network_name          = var.network_name
   database_container_id = docker_container.postgres.id
+  image_registry        = var.image_registry
   database_config       = {
     host     = docker_container.postgres.name
     port     = "5432"

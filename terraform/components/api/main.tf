@@ -1,12 +1,30 @@
+# Random port for API if not provided
+resource "random_integer" "api_port" {
+  count = var.api_port == null ? 1 : 0
+  min = 10000
+  max = 65535
+}
+
+locals {
+  api_external_port = var.api_port != null ? var.api_port : random_integer.api_port[0].result
+}
+
+locals {
+  build_locally = var.image_registry == "" || var.image_registry == null
+}
+
 resource "docker_image" "docker_image_api" {
-  name = "${var.slug}:${var.app_version}"
-  
-  build {
-    context = "${path.cwd}/../components/api"
-    dockerfile = "Dockerfile"
-  }
-  
+  name = local.build_locally ? "${var.slug}-api:${var.app_version}" : "${var.image_registry}/${var.slug}/api:${var.app_version}"
   keep_locally = true
+
+  # Build locally if no registry provided
+  dynamic "build" {
+    for_each = local.build_locally ? [1] : []
+    content {
+      context = "${path.cwd}/../components/api"
+      dockerfile = "Dockerfile"
+    }
+  }
 }
 
 resource "docker_container" "docker_container_api" {
@@ -21,7 +39,7 @@ resource "docker_container" "docker_container_api" {
   
   ports {
     internal = 3000
-    external = 3000
+    external = local.api_external_port
   }
   
   # Environment variables

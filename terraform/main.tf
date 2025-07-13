@@ -11,6 +11,7 @@ module "datasource" {
   network_name      = docker_network.network.name
   sql_scripts_path  = "${path.cwd}/../components/database/schema"
   database_password = var.database_password
+  image_registry    = var.image_registry
 }
 
 # API module
@@ -19,6 +20,8 @@ module "api" {
   
   slug                  = var.slug
   app_version           = var.api_version
+  api_port              = var.api_port
+  image_registry        = var.image_registry
   network_name          = docker_network.network.name
   database_container_id = module.datasource.container_id
   
