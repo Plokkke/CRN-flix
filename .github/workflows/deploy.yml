@@ -1,0 +1,191 @@
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  TF_VERSION: '1.7.0'
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  deploy:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+        
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Configure Docker Context for Remote
+      run: |
+        # Create SSH key file
+        echo "${{ secrets.RASPBERRY_PI_SSH_KEY }}" > ~/.ssh_key
+        chmod 600 ~/.ssh_key
+        
+        # Add Raspberry Pi to known hosts
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.RASPBERRY_PI_HOST }} >> ~/.ssh/known_hosts
+        
+        # Create Docker context for remote host
+        docker context create raspberry-pi \
+          --docker "host=ssh://${{ secrets.RASPBERRY_PI_USER }}@${{ secrets.RASPBERRY_PI_HOST }}" \
+          --description "Raspberry Pi Docker daemon"
+        
+        # Use the remote context
+        docker context use raspberry-pi
+        
+    - name: Test Docker Connection
+      run: |
+        docker info
+        docker version
+        
+    - name: Build and Push Docker Image
+      run: |
+        # Build for ARM64 architecture (Raspberry Pi)
+        docker buildx build \
+          --platform linux/arm64 \
+          --tag traktsync:${{ github.sha }} \
+          --tag traktsync:latest \
+          --load \
+          .
+          
+    - name: Create Environment File
+      run: |
+        cat > .env << EOF
+        # Database Configuration
+        DATABASE_HOST=traktsync-postgres
+        DATABASE_PORT=5432
+        DATABASE_NAME=traktsync
+        DATABASE_USER=traktsync
+        DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}
+        
+        # Trakt API Configuration
+        TRAKT_CLIENT_ID=${{ secrets.TRAKT_CLIENT_ID }}
+        TRAKT_CLIENT_SECRET=${{ secrets.TRAKT_CLIENT_SECRET }}
+        
+        # Jellyfin Configuration
+        JELLYFIN_URL=${{ secrets.JELLYFIN_URL }}
+        JELLYFIN_API_KEY=${{ secrets.JELLYFIN_API_KEY }}
+        
+        # ClickUp Configuration
+        CLICKUP_API_KEY=${{ secrets.CLICKUP_API_KEY }}
+        CLICKUP_WORKSPACE_ID=${{ secrets.CLICKUP_WORKSPACE_ID }}
+        CLICKUP_FOLDER_ID=${{ secrets.CLICKUP_FOLDER_ID }}
+        
+        # Discord Configuration (optional)
+        DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+        DISCORD_CHANNEL_ID=${{ secrets.DISCORD_CHANNEL_ID }}
+        
+        # Application Configuration
+        SERVICE_NAME=${{ secrets.SERVICE_NAME }}
+        PUBLIC_URL=${{ secrets.PUBLIC_URL }}
+        NODE_ENV=production
+        PORT=3000
+        EOF
+        
+    - name: Create Terraform Variables
+      run: |
+        cat > terraform/terraform.tfvars << EOF
+        app_name = "traktsync"
+        app_version = "${{ github.sha }}"
+        database_password = "${{ secrets.DATABASE_PASSWORD }}"
+        docker_host = "ssh://${{ secrets.RASPBERRY_PI_USER }}@${{ secrets.RASPBERRY_PI_HOST }}"
+        
+        environment_variables = {
+          DATABASE_HOST = "traktsync-postgres"
+          DATABASE_PORT = "5432"
+          DATABASE_NAME = "traktsync"
+          DATABASE_USER = "traktsync"
+          DATABASE_PASSWORD = "${{ secrets.DATABASE_PASSWORD }}"
+          TRAKT_CLIENT_ID = "${{ secrets.TRAKT_CLIENT_ID }}"
+          TRAKT_CLIENT_SECRET = "${{ secrets.TRAKT_CLIENT_SECRET }}"
+          JELLYFIN_URL = "${{ secrets.JELLYFIN_URL }}"
+          JELLYFIN_API_KEY = "${{ secrets.JELLYFIN_API_KEY }}"
+          CLICKUP_API_KEY = "${{ secrets.CLICKUP_API_KEY }}"
+          CLICKUP_WORKSPACE_ID = "${{ secrets.CLICKUP_WORKSPACE_ID }}"
+          CLICKUP_FOLDER_ID = "${{ secrets.CLICKUP_FOLDER_ID }}"
+          EMAIL_HOST = "${{ secrets.EMAIL_HOST }}"
+          EMAIL_PORT = "${{ secrets.EMAIL_PORT }}"
+          EMAIL_USER = "${{ secrets.EMAIL_USER }}"
+          EMAIL_PASSWORD = "${{ secrets.EMAIL_PASSWORD }}"
+          EMAIL_FROM = "${{ secrets.EMAIL_FROM }}"
+          DISCORD_TOKEN = "${{ secrets.DISCORD_TOKEN }}"
+          DISCORD_CHANNEL_ID = "${{ secrets.DISCORD_CHANNEL_ID }}"
+          SERVICE_NAME = "${{ secrets.SERVICE_NAME }}"
+          PUBLIC_URL = "${{ secrets.PUBLIC_URL }}"
+        }
+        EOF
+        
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+        
+    - name: Terraform Validate
+      run: |
+        cd terraform
+        terraform validate
+        
+    - name: Terraform Plan
+      run: |
+        cd terraform
+        terraform plan -detailed-exitcode
+        
+    - name: Terraform Apply
+      run: |
+        cd terraform
+        terraform apply -auto-approve
+        
+    - name: Health Check
+      run: |
+        # Wait for application to start
+        sleep 30
+        
+        # Check if application is responding
+        max_attempts=10
+        attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+          if curl -f http://${{ secrets.RASPBERRY_PI_HOST }}:3000/health; then
+            echo "Application is healthy!"
+            break
+          fi
+          
+          if [ $attempt -eq $max_attempts ]; then
+            echo "Application health check failed after $max_attempts attempts"
+            exit 1
+          fi
+          
+          echo "Attempt $attempt/$max_attempts failed, retrying in 10 seconds..."
+          sleep 10
+          ((attempt++))
+        done
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        # Clean up SSH key
+        rm -f ~/.ssh_key
+        
+        # Reset Docker context
+        docker context use default || true

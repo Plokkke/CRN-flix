@@ -1,0 +1,22 @@
+{
+  "name": "@traktsync/database",
+  "version": "1.0.0",
+  "description": "Database schema and migration scripts for TraktSync",
+  "scripts": {
+    "migrate": "node src/migrate.js",
+    "generate": "prisma generate --schema=src/schema.prisma",
+    "introspect": "prisma db pull --schema=src/schema.prisma",
+    "studio": "prisma studio --schema=src/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.0.0",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.10.9",
+    "prisma": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

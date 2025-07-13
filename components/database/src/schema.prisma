@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String   @db.VarChar(255)
+  jellyfinId          String?  @unique @map("jellyfin_id") @db.VarChar(255)
+  messagingKey        String   @map("messaging_key") @db.VarChar(255)
+  messagingId         String   @map("messaging_id") @db.VarChar(255)
+  approvalMessageId   String?  @unique @map("approval_message_id") @db.VarChar(255)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  userActivities      UserActivity[]
+  requestUsers        RequestUser[]
+
+  @@unique([messagingKey, messagingId])
+  @@map("users")
+}
+
+model UserActivity {
+  userId    String                 @map("user_id") @db.Uuid
+  type      UserActivityType
+  updatedAt DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, type])
+  @@map("user_activities")
+}
+
+model Media {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  imdbId        String   @map("imdb_id") @db.VarChar(32)
+  type          MediaType
+  title         String   @db.VarChar(255)
+  year          Int?
+  seasonNumber  Int?     @map("season_number")
+  episodeNumber Int?     @map("episode_number")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  mediaRequest  MediaRequest?
+
+  @@unique([imdbId, seasonNumber, episodeNumber], name: "medias_unique_idx")
+  @@map("medias")
+}
+
+model MediaRequest {
+  mediaId   String              @id @map("media_id") @db.Uuid
+  status    MediaRequestStatus  @default(pending)
+  threadId  String?             @map("thread_id") @db.VarChar(50)
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  media         Media           @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  requestUsers  RequestUser[]
+
+  @@map("media_requests")
+}
+
+model RequestUser {
+  requestMediaId String             @map("request_media_id") @db.Uuid
+  userId         String             @map("user_id") @db.Uuid
+  reasons        RequestReason[]
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  mediaRequest   MediaRequest       @relation(fields: [requestMediaId], references: [mediaId], onDelete: Cascade)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([requestMediaId, userId])
+  @@map("request_users")
+}
+
+enum UserActivityType {
+  WATCHLISTED
+  LISTED
+  HIGH_RATED
+  PROGRESS
+}
+
+enum MediaType {
+  movie
+  episode
+}
+
+enum MediaRequestStatus {
+  pending
+  fulfilled
+  missing
+  rejected
+  canceled
+}
+
+enum RequestReason {
+  WATCHLISTED
+  LISTED
+  HIGH_RATED
+  PROGRESS
+}
