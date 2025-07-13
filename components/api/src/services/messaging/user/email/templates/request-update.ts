@@ -1,5 +1,5 @@
-import { MediaEntity } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
+
 import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from './email-styles';
 
 const getStatusDescription = (status: RequestStatus): string => {
@@ -41,21 +41,25 @@ export const requestUpdateTemplate = (
     .map((request) => {
       const media = request.media!;
       const posterUrl = media.imdbId ? posterUrlByImdbId[media.imdbId] : undefined;
-      
+
       return getMediaCard(
         media.title,
         media.year?.toString() || '',
         posterUrl,
         request.status,
         getStatusDescription(request.status),
-        request.status === 'fulfilled' ? {
-          text: `Regarder sur ${serviceName}`,
-          url: mediaServerUrl
-        } : undefined,
-        media.type === 'episode' ? {
-          season: media.seasonNumber || 0,
-          episode: media.episodeNumber || 0
-        } : undefined
+        request.status === 'fulfilled'
+          ? {
+              text: `Regarder sur ${serviceName}`,
+              url: mediaServerUrl,
+            }
+          : undefined,
+        media.type === 'episode'
+          ? {
+              season: media.seasonNumber || 0,
+              episode: media.episodeNumber || 0,
+            }
+          : undefined,
       );
     })
     .join('');

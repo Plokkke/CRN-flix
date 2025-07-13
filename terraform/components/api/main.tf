@@ -1,8 +1,8 @@
 # Random port for API if not provided
 resource "random_integer" "api_port" {
   count = var.api_port == null ? 1 : 0
-  min = 10000
-  max = 65535
+  min   = 10000
+  max   = 65535
 }
 
 locals {
@@ -14,14 +14,14 @@ locals {
 }
 
 resource "docker_image" "docker_image_api" {
-  name = local.build_locally ? "${var.slug}-api:${var.app_version}" : "${var.image_registry}/${var.slug}/api:${var.app_version}"
+  name         = local.build_locally ? "${var.slug}-api:${var.app_version}" : "${var.image_registry}/${var.slug}/api:${var.app_version}"
   keep_locally = true
 
   # Build locally if no registry provided
   dynamic "build" {
     for_each = local.build_locally ? [1] : []
     content {
-      context = "${path.cwd}/../components/api"
+      context    = "${path.cwd}/../components/api"
       dockerfile = "Dockerfile"
     }
   }
@@ -30,18 +30,18 @@ resource "docker_image" "docker_image_api" {
 resource "docker_container" "docker_container_api" {
   image = docker_image.docker_image_api.image_id
   name  = "${var.slug}-api"
-  
+
   restart = "unless-stopped"
-  
+
   networks_advanced {
     name = var.network_name
   }
-  
+
   ports {
     internal = 3000
     external = local.api_external_port
   }
-  
+
   # Environment variables
   env = [
     "NODE_ENV=production",
@@ -77,7 +77,7 @@ resource "docker_container" "docker_container_api" {
     label = "com.docker.compose.project"
     value = var.slug
   }
-  
+
   labels {
     label = "com.docker.compose.service"
     value = "api"

@@ -7,8 +7,9 @@ export interface MediaItem {
   type: 'movie' | 'show' | 'episode';
 }
 
-const getCredentialsSection = (userName: string, password: string, mediaServerUrl: string) => 
-  getInfoBox(`
+const getCredentialsSection = (userName: string, password: string, mediaServerUrl: string) =>
+  getInfoBox(
+    `
     <h2 style="${TYPOGRAPHY.h2}">Vos identifiants de connexion</h2>
     <p style="${TYPOGRAPHY.body}"><strong>URL du serveur:</strong> <a href="${mediaServerUrl}" target="_blank" rel="noopener noreferrer" style="color: ${COLORS.secondary};">${mediaServerUrl}</a></p>
     <p style="${TYPOGRAPHY.body}"><strong>Nom d'utilisateur:</strong> ${userName}</p>
@@ -16,7 +17,9 @@ const getCredentialsSection = (userName: string, password: string, mediaServerUr
     <div style="margin-top: 20px;">
       <a href="${mediaServerUrl}" style="${BUTTONS.primary}" target="_blank" rel="noopener noreferrer">ACCÉDER MAINTENANT</a>
     </div>
-  `, 'info');
+  `,
+    'info',
+  );
 
 const getSuggestionsSection = (movies?: MediaItem[], series?: MediaItem[]) => {
   if (!movies?.length && !series?.length) {
@@ -45,8 +48,9 @@ const getSuggestionsSection = (movies?: MediaItem[], series?: MediaItem[]) => {
   return content;
 };
 
-const getRequestSection = (serviceName: string, traktLinkUrl: string, userGuideUrl: string) => 
-  getInfoBox(`
+const getRequestSection = (serviceName: string, traktLinkUrl: string, userGuideUrl: string) =>
+  getInfoBox(
+    `
     <h2 style="${TYPOGRAPHY.h2}">Demander un nouveau contenu</h2>
     <p style="${TYPOGRAPHY.body}">Il manque un film ou une série que vous aimeriez regarder ? Faites-en la demande facilement :</p>
     <ol style="${TYPOGRAPHY.body}">
@@ -58,7 +62,9 @@ const getRequestSection = (serviceName: string, traktLinkUrl: string, userGuideU
     <div style="margin-top: 20px;">
       <a href="${userGuideUrl}" style="${BUTTONS.secondary}" target="_blank" rel="noopener noreferrer">CONSULTER LE GUIDE COMPLET</a>
     </div>
-  `, 'success');
+  `,
+    'success',
+  );
 
 export type RegisteredTemplateParams = {
   serviceName: string;
@@ -77,7 +83,7 @@ export const registeredTemplate = (
   const { serviceName, mediaServerUrl, userGuideUrl, traktLinkUrl, userName, password, movies, series } = params;
   const showSuggestions = (movies?.length ?? 0) > 0 || (series?.length ?? 0) > 0;
   const subject = `Bienvenue sur ${serviceName}!`;
-  
+
   const content = `
     <h1 style="${TYPOGRAPHY.h1}">Bienvenue sur ${serviceName} !</h1>
     

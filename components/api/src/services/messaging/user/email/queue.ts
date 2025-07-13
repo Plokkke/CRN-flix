@@ -15,7 +15,7 @@ export class EmailQueue {
   private onEmptyPromise: Promise<void> | null = null;
   private onEmptyResolve: (() => void) | null = null;
 
-  constructor(private readonly sendEmail: (email: string, requests: RequestEntity[]) => Promise<void>) { }
+  constructor(private readonly sendEmail: (email: string, requests: RequestEntity[]) => Promise<void>) {}
 
   async addToQueue(email: string, request: RequestEntity): Promise<void> {
     const queuedItem = this.getOrCreateQueuedItem(email);
@@ -25,7 +25,7 @@ export class EmailQueue {
 
   async onEmpty(): Promise<void> {
     if (this.queue.size) {
-      await (this.onEmptyPromise || (this.onEmptyPromise = new Promise((resolve) => this.onEmptyResolve = resolve)));
+      await (this.onEmptyPromise || (this.onEmptyPromise = new Promise((resolve) => (this.onEmptyResolve = resolve))));
     }
   }
 

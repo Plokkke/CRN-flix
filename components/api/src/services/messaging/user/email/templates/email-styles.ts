@@ -6,7 +6,7 @@ export const COLORS = {
   // Brand colors
   primary: '#1e1e2a',
   secondary: '#e50914',
-  
+
   // Status colors
   success: '#32cd32',
   warning: '#ffd700',
@@ -14,7 +14,7 @@ export const COLORS = {
   info: '#1e90ff',
   gray: '#808080',
   orange: '#ff8c00',
-  
+
   // UI colors
   background: '#f7f7f7',
   white: '#ffffff',
@@ -52,7 +52,7 @@ export const getStatusStyle = (status: string): string => {
     canceled: { bg: COLORS.gray, text: '#ffffff' },
     missing: { bg: COLORS.orange, text: '#ffffff' },
   };
-  
+
   const colors = statusColors[status] || { bg: COLORS.gray, text: '#ffffff' };
   return `display: inline-block; padding: 6px 12px; border-radius: 4px; font-weight: bold; background-color: ${colors.bg}; color: ${colors.text}; font-size: 14px;`;
 };
@@ -105,7 +105,7 @@ export const getInfoBox = (content: string, type: 'info' | 'warning' | 'success'
     warning: { bg: '#fff8f0', border: COLORS.warning },
     success: { bg: '#f0fff0', border: COLORS.success },
   };
-  
+
   const { bg, border } = colors[type];
   return `
 <table cellpadding="0" cellspacing="0" style="width: 100%; margin: 20px 0;">
@@ -126,9 +126,10 @@ export const getMediaCard = (
   status?: string,
   description?: string,
   actionButton?: { text: string; url: string },
-  episodeInfo?: { season: number; episode: number }
+  episodeInfo?: { season: number; episode: number },
 ): string => {
-  const statusBadge = status ? `
+  const statusBadge = status
+    ? `
     <tr>
       <td style="padding-top: 16px;">
         <span style="${getStatusStyle(status)}">
@@ -136,41 +137,52 @@ export const getMediaCard = (
         </span>
       </td>
     </tr>
-  ` : '';
+  `
+    : '';
 
-  const episodeBadges = episodeInfo ? `
+  const episodeBadges = episodeInfo
+    ? `
     <tr>
       <td style="padding-top: 8px;">
         <span style="background-color: #f0f0f0; padding: 4px 8px; border-radius: 4px; font-size: 14px; color: #666666; margin-right: 8px;">Saison ${episodeInfo.season}</span>
         <span style="background-color: #f0f0f0; padding: 4px 8px; border-radius: 4px; font-size: 14px; color: #666666;">Episode ${episodeInfo.episode}</span>
       </td>
     </tr>
-  ` : '';
+  `
+    : '';
 
-  const descriptionRow = description ? `
+  const descriptionRow = description
+    ? `
     <tr>
       <td style="padding-top: 12px;">
         <p style="margin: 0; color: #333333; line-height: 1.5;">${description}</p>
       </td>
     </tr>
-  ` : '';
+  `
+    : '';
 
-  const buttonRow = actionButton ? `
+  const buttonRow = actionButton
+    ? `
     <tr>
       <td style="padding-top: 18px;">
         <a href="${actionButton.url}" style="${BUTTONS.primary}" target="_blank" rel="noopener noreferrer">${actionButton.text}</a>
       </td>
     </tr>
-  ` : '';
+  `
+    : '';
 
   return `
 <table cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 30px; background-color: ${COLORS.white}; border-radius: 8px; border: 1px solid ${COLORS.border};">
   <tr>
-    ${imageUrl ? `
+    ${
+      imageUrl
+        ? `
     <td style="width: 110px; padding: 20px 0 20px 20px; vertical-align: top;">
       <img src="${imageUrl}" alt="Poster" style="width: 110px; height: auto; border-radius: 8px; display: block;" />
     </td>
-    ` : ''}
+    `
+        : ''
+    }
     <td style="padding: 20px; vertical-align: top;">
       <table cellpadding="0" cellspacing="0" style="width: 100%;">
         <tr>
@@ -192,14 +204,20 @@ export const getMediaCard = (
 
 // Media grid for posters
 export const getMediaGrid = (medias: Array<{ title: string; posterUrl: string; imdbId: string }>): string => {
-  if (medias.length === 0) return '';
-  
-  const mediaItems = medias.map(media => `
+  if (medias.length === 0) {
+    return '';
+  }
+
+  const mediaItems = medias
+    .map(
+      (media) => `
     <td style="width: 120px; padding: 10px; text-align: center; vertical-align: top;">
       <img src="${media.posterUrl}" alt="${media.title}" style="width: 100px; height: auto; border-radius: 5px; display: block; margin: 0 auto;" />
       <div style="margin-top: 8px; font-size: 14px; color: ${COLORS.text}; line-height: 1.3;">${media.title}</div>
     </td>
-  `).join('');
+  `,
+    )
+    .join('');
 
   return `
 <table cellpadding="0" cellspacing="0" style="width: 100%; margin: 15px 0;">
@@ -217,7 +235,7 @@ export const getFormField = (
   name: string,
   label: string,
   placeholder?: string,
-  required = false
+  required = false,
 ): string => `
 <table cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
   <tr>
@@ -253,11 +271,7 @@ export const getFormButton = (text: string, type: 'submit' | 'button' = 'submit'
 `;
 
 // Complete email template wrapper
-export const getEmailTemplate = (
-  title: string,
-  serviceName: string,
-  content: string
-): string => `
+export const getEmailTemplate = (title: string, serviceName: string, content: string): string => `
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -281,7 +295,7 @@ export const getWebTemplate = (
   serviceName: string,
   content: string,
   additionalCSS = '',
-  additionalJS = ''
+  additionalJS = '',
 ): string => `
 <!DOCTYPE html>
 <html lang="fr">

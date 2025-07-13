@@ -6,7 +6,7 @@ resource "docker_network" "network" {
 # Datasource module
 module "datasource" {
   source = "./components/datasource"
-  
+
   slug              = var.slug
   network_name      = docker_network.network.name
   sql_scripts_path  = "${path.cwd}/../components/database/schema"
@@ -17,20 +17,20 @@ module "datasource" {
 # API module
 module "api" {
   source = "./components/api"
-  
+
   slug                  = var.slug
   app_version           = var.api_version
   api_port              = var.api_port
   image_registry        = var.image_registry
   network_name          = docker_network.network.name
   database_container_id = module.datasource.container_id
-  
+
   # Application configuration
-  server_url        = var.server_url
-  service_name      = var.service_name
-  sync_interval_ms  = var.sync_interval_ms
-  database_config   = module.datasource.connection_details
-  
+  server_url       = var.server_url
+  service_name     = var.service_name
+  sync_interval_ms = var.sync_interval_ms
+  database_config  = module.datasource.connection_details
+
   # External services
   trakt_client_id     = var.trakt_client_id
   trakt_client_secret = var.trakt_client_secret

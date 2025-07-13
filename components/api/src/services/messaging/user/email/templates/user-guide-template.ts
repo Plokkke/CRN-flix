@@ -13,9 +13,13 @@ const getSection = (title: string, content: string) => `
 
 const getPreviewGallery = (images: Array<{ src: string; alt: string }>) => `
   <div class="preview-gallery">
-    ${images.map(img => `
+    ${images
+      .map(
+        (img) => `
       <img src="${img.src}" alt="${img.alt}" class="preview-thumb" onclick="showPreview('${img.src}')">
-    `).join('')}
+    `,
+      )
+      .join('')}
   </div>
 `;
 
@@ -31,8 +35,8 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
       </ul>
       ${getPreviewGallery([
         { src: '/assets/jellyfin-server-page.jpg', alt: 'Page serveur Jellyfin' },
-        { src: '/assets/jellyfin-login-page.png', alt: 'Page login Jellyfin' }
-      ])}`
+        { src: '/assets/jellyfin-login-page.png', alt: 'Page login Jellyfin' },
+      ])}`,
     )}
     ${getSection(
       'Demander un nouveau contenu',
@@ -42,7 +46,7 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
           <li style="margin-bottom: 8px;">Utilisez le lien disponible dans votre email d'inscription pour connecter votre compte à ${serviceName} <span title="Si vous n'avez plus accès à cet email, contactez un administrateur">ℹ️</span></li>
           <li style="margin-bottom: 8px;">Ajoutez simplement les films ou séries souhaités à votre liste "Watchlist" sur Trakt</li>
       </ol>
-      <p>Vous serez notifié par email lorsque vos contenus demandés seront disponibles sur la plateforme !</p>`
+      <p>Vous serez notifié par email lorsque vos contenus demandés seront disponibles sur la plateforme !</p>`,
     )}
     ${getSection(
       'Ajouter un film à ma liste de souhaits',
@@ -53,8 +57,8 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
       </ul>
       ${getPreviewGallery([
         { src: '/assets/trakt-anticipated-page.png', alt: 'Page anticipated Trakt' },
-        { src: '/assets/trakt-movie-detail-page.png', alt: 'Page détail film Trakt' }
-      ])}`
+        { src: '/assets/trakt-movie-detail-page.png', alt: 'Page détail film Trakt' },
+      ])}`,
     )}
     ${getSection(
       'Quand mes demandes seront-elles disponibles ?',
@@ -62,14 +66,14 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
         <li>La synchronisation des requêtes a lieu toutes les 10 minutes.</li>
         <li>Les mise à disposition de contenu sont effectuées manuellement. Les administrateurs font le nécessaire pour vous satisfaire dans les plus brefs délais.</li>
         <li>Une fois disponible, vous recevrez immédiatement un email d'information.</li>
-      </ul>`
+      </ul>`,
     )}
     ${getSection(
       'Quels contenus sont synchronisés ?',
       `<ul style="margin: 10px 0 10px 20px;">
         <li><b>${serviceName}</b> prend en compte tous les éléments de votre <b>watchlist</b>, les <b>séries en cours</b> de visionnage, et les contenus <b>notés 10</b>/10.</li>
         <li>Si une nouvelle saison est disponible pour une série déjà regardée, elle sera automatiquement ajoutée à vos requêtes. Pas besoin de l'ajouter à votre watchlist.</li>
-      </ul>`
+      </ul>`,
     )}
     
     <!-- Modal Preview -->
@@ -144,11 +148,5 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
     });
   `;
 
-  return getWebTemplate(
-    `Guide d'utilisation – ${serviceName}`,
-    serviceName,
-    content,
-    additionalCSS,
-    additionalJS
-  );
+  return getWebTemplate(`Guide d'utilisation – ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
 }

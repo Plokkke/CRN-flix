@@ -73,11 +73,5 @@ export const registrationFormTemplate = (params: RegistrationFormParams): string
     }
   `;
 
-  return getWebTemplate(
-    `Inscription - ${serviceName}`,
-    serviceName,
-    content,
-    additionalCSS,
-    additionalJS
-  );
+  return getWebTemplate(`Inscription - ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
 };
