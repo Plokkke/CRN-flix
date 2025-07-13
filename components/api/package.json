@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "crn-flix",
+  "name": "@crn-flix/api",
   "version": "1.0.3-draft.0",
   "author": "Antoine Caron <antoine@crn-tech.fr>",
   "license": "ISC",

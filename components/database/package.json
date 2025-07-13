@@ -1,7 +1,8 @@
 {
-  "name": "@traktsync/database",
+  "private": true,
+  "name": "@crn-flix/database",
   "version": "1.0.0",
-  "description": "Database schema and migration scripts for TraktSync",
+  "description": "Database schema and migration scripts for CRN-Flix",
   "scripts": {
     "migrate": "node src/migrate.js",
     "generate": "prisma generate --schema=src/schema.prisma",

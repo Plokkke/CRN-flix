@@ -1,0 +1,47 @@
+{
+  "name": "crn-flix",
+  "version": "1.0.3",
+  "private": true,
+  "description": "TraktSync Multi-Component Platform - Media synchronization between Trakt.tv and Jellyfin",
+  "keywords": ["trakt", "jellyfin", "media", "sync", "terraform", "docker"],
+  "workspaces": [
+    "components/*"
+  ],
+  "scripts": {
+    "version:sync": "node scripts/sync-versions.js",
+    "version:check": "node scripts/check-versions.js",
+    "validate": "npm run validate --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present", 
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present && rm -rf node_modules terraform/versions.json",
+    "outdated": "npm outdated --workspaces",
+    "audit": "npm audit --workspaces",
+    "docker:build": "node scripts/docker-build.js",
+    "docker:build:all": "npm run docker:build -- --all",
+    "deploy:local": "cd terraform && terraform apply -var-file=local.tfvars",
+    "deploy:staging": "cd terraform && terraform apply -var-file=staging.tfvars", 
+    "deploy:production": "cd terraform && terraform apply -var-file=production.tfvars",
+    "terraform:init": "cd terraform && terraform init",
+    "terraform:plan": "cd terraform && terraform plan",
+    "terraform:validate": "cd terraform && terraform validate",
+    "dev": "npm run start:dev --workspace=components/api",
+    "start": "npm run start --workspace=components/api"
+  },
+  "devDependencies": {
+    "@semantic-release/changelog": "^6.0.0",
+    "@semantic-release/git": "^10.0.0",
+    "semantic-release": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Plokkke/CRN-flix.git"
+  },
+  "author": "Antoine Caron <antoine@crn-tech.fr>",
+  "license": "ISC"
+}

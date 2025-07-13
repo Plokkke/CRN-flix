@@ -1,25 +1,231 @@
-name: Validate
+name: Validate Components
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
+env:
+  DOCKER_BUILDKIT: 1
+
 jobs:
-  validate:
+  detect-changes:
+    name: Detect Changes
     runs-on: ubuntu-latest
-
+    outputs:
+      components: ${{ steps.changes.outputs.components }}
+      has-changes: ${{ steps.changes.outputs.has-changes }}
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version-file: '.nvmrc'
-        cache: 'npm'
+      - name: Detect component changes
+        id: changes
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Manual trigger - validate all components
+            components=$(find components -maxdepth 1 -type d -not -path components | sed 's|components/||' | jq -R -s -c 'split("\n")[:-1]')
+            has_changes="true"
+          else
+            # PR trigger - detect changed files
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+            
+            changed_files=$(git diff --name-only $base_sha $head_sha)
+            components=""
+            
+            # Check each component directory
+            for component in $(find components -maxdepth 1 -type d -not -path components | sed 's|components/||'); do
+              if echo "$changed_files" | grep -q "^components/$component/"; then
+                components="$components,$component"
+              fi
+            done
+            
+            # Check if terraform infrastructure changed
+            if echo "$changed_files" | grep -q "^terraform/"; then
+              components="$components,infrastructure"
+            fi
+            
+            # Check if root files changed
+            if echo "$changed_files" | grep -qE "^(package\.json|\.nvmrc|scripts/|\.github/workflows/)"; then
+              components="$components,root"
+            fi
+            
+            # Convert to JSON array
+            if [[ -n "$components" ]]; then
+              components=$(echo "$components" | sed 's/^,//' | tr ',' '\n' | sort -u | jq -R -s -c 'split("\n")[:-1]')
+              has_changes="true"
+            else
+              components="[]"
+              has_changes="false"
+            fi
+          fi
+          
+          echo "components=$components" >> $GITHUB_OUTPUT
+          echo "has-changes=$has_changes" >> $GITHUB_OUTPUT
+          echo "Detected components: $components"
 
-    - name: Install dependencies
-      run: npm ci
+  validate-components:
+    name: Validate ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has-changes == 'true'
+    strategy:
+      matrix:
+        component: ${{ fromJSON(needs.detect-changes.outputs.components) }}
+      fail-fast: false
+    steps:
+      - name: Skip infrastructure and root
+        if: contains(fromJSON('["infrastructure", "root"]'), matrix.component)
+        run: echo "Skipping ${{ matrix.component }} - handled by separate job"
 
-    - name: Run validation
-      run: npm run validate
+      - name: Checkout code
+        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: 'components/${{ matrix.component }}/.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: 'components/${{ matrix.component }}/package-lock.json'
+
+      - name: Install dependencies
+        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        run: |
+          cd components/${{ matrix.component }}
+          npm ci
+
+      - name: Run linting
+        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        run: |
+          cd components/${{ matrix.component }}
+          npm run lint
+
+      - name: Run tests
+        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        run: |
+          cd components/${{ matrix.component }}
+          npm run test
+
+      - name: Build application
+        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        run: |
+          cd components/${{ matrix.component }}
+          npm run build
+
+      - name: Setup Docker Buildx
+        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        uses: docker/build-push-action@v5
+        with:
+          context: components/${{ matrix.component }}
+          file: components/${{ matrix.component }}/Dockerfile
+          platforms: linux/amd64
+          tags: crn-flix-${{ matrix.component }}:pr-${{ github.event.number || 'manual' }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+  validate-infrastructure:
+    name: Validate Infrastructure
+    runs-on: ubuntu-latest
+    if: contains(fromJSON(needs.detect-changes.outputs.components), 'infrastructure')
+    needs: detect-changes
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.7.0'
+
+      - name: Terraform Format Check
+        run: |
+          cd terraform
+          terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init -backend=false
+
+      - name: Terraform Validate
+        run: |
+          cd terraform
+          terraform validate
+
+  validate-root:
+    name: Validate Root
+    runs-on: ubuntu-latest
+    if: contains(fromJSON(needs.detect-changes.outputs.components), 'root')
+    needs: detect-changes
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate versions
+        run: npm run version:check
+
+  validation-summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [detect-changes, validate-components]
+    if: always()
+    steps:
+      - name: Check validation results
+        run: |
+          if [[ "${{ needs.detect-changes.outputs.has-changes }}" == "false" ]]; then
+            echo "✅ No changes detected - validation skipped"
+          elif [[ "${{ needs.validate-components.result }}" == "success" ]]; then
+            echo "✅ All component validations passed"
+          elif [[ "${{ needs.validate-components.result }}" == "skipped" ]]; then
+            echo "ℹ️  Component validation was skipped"
+          else
+            echo "❌ Some component validations failed"
+            exit 1
+          fi
+
+      - name: Post PR comment
+        if: github.event_name == 'pull_request' && needs.detect-changes.outputs.has-changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const components = JSON.parse('${{ needs.detect-changes.outputs.components }}');
+            const validationResult = '${{ needs.validate-components.result }}';
+            
+            const emoji = validationResult === 'success' ? '✅' : '❌';
+            const status = validationResult === 'success' ? 'passed' : 'failed';
+            
+            const successMessage = '🎉 All validation checks passed! This PR is ready for review.';
+            const failureMessage = '⚠️  Some validation checks failed. Please review the logs and fix any issues.';
+            const statusMessage = validationResult === 'success' ? successMessage : failureMessage;
+            
+            const titleCase = status.charAt(0).toUpperCase() + status.slice(1);
+            const body = '## ' + emoji + ' Component Validation ' + titleCase + '\n\n' +
+                        '**Components validated:** ' + components.join(', ') + '\n' +
+                        '**Status:** ' + status + '\n\n' +
+                        statusMessage;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

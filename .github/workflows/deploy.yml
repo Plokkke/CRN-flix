@@ -1,8 +1,8 @@
-name: Deploy to Raspberry Pi
+name: Deploy Components
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
@@ -13,179 +13,324 @@ on:
         options:
           - production
           - staging
+          - local
+      version:
+        description: 'Version to deploy'
+        required: false
+        type: string
+      components:
+        description: 'Components to deploy (comma-separated, empty for all)'
+        required: false
+        type: string
 
 env:
   TF_VERSION: '1.7.0'
   DOCKER_BUILDKIT: 1
 
 jobs:
-  deploy:
-    name: Deploy Application
+  prepare-deployment:
+    name: Prepare Deployment
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'production' }}
-    
+    outputs:
+      components: ${{ steps.components.outputs.components }}
+      version: ${{ steps.version.outputs.version }}
+      environment: ${{ steps.environment.outputs.environment }}
+      tf-backend: ${{ steps.backend.outputs.tf-backend }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: ${{ env.TF_VERSION }}
-        
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Configure Docker Context for Remote
-      run: |
-        # Create SSH key file
-        echo "${{ secrets.RASPBERRY_PI_SSH_KEY }}" > ~/.ssh_key
-        chmod 600 ~/.ssh_key
-        
-        # Add Raspberry Pi to known hosts
-        mkdir -p ~/.ssh
-        ssh-keyscan -H ${{ secrets.RASPBERRY_PI_HOST }} >> ~/.ssh/known_hosts
-        
-        # Create Docker context for remote host
-        docker context create raspberry-pi \
-          --docker "host=ssh://${{ secrets.RASPBERRY_PI_USER }}@${{ secrets.RASPBERRY_PI_HOST }}" \
-          --description "Raspberry Pi Docker daemon"
-        
-        # Use the remote context
-        docker context use raspberry-pi
-        
-    - name: Test Docker Connection
-      run: |
-        docker info
-        docker version
-        
-    - name: Build and Push Docker Image
-      run: |
-        # Build for ARM64 architecture (Raspberry Pi)
-        docker buildx build \
-          --platform linux/arm64 \
-          --tag traktsync:${{ github.sha }} \
-          --tag traktsync:latest \
-          --load \
-          .
-          
-    - name: Create Environment File
-      run: |
-        cat > .env << EOF
-        # Database Configuration
-        DATABASE_HOST=traktsync-postgres
-        DATABASE_PORT=5432
-        DATABASE_NAME=traktsync
-        DATABASE_USER=traktsync
-        DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}
-        
-        # Trakt API Configuration
-        TRAKT_CLIENT_ID=${{ secrets.TRAKT_CLIENT_ID }}
-        TRAKT_CLIENT_SECRET=${{ secrets.TRAKT_CLIENT_SECRET }}
-        
-        # Jellyfin Configuration
-        JELLYFIN_URL=${{ secrets.JELLYFIN_URL }}
-        JELLYFIN_API_KEY=${{ secrets.JELLYFIN_API_KEY }}
-        
-        # ClickUp Configuration
-        CLICKUP_API_KEY=${{ secrets.CLICKUP_API_KEY }}
-        CLICKUP_WORKSPACE_ID=${{ secrets.CLICKUP_WORKSPACE_ID }}
-        CLICKUP_FOLDER_ID=${{ secrets.CLICKUP_FOLDER_ID }}
-        
-        # Discord Configuration (optional)
-        DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
-        DISCORD_CHANNEL_ID=${{ secrets.DISCORD_CHANNEL_ID }}
-        
-        # Application Configuration
-        SERVICE_NAME=${{ secrets.SERVICE_NAME }}
-        PUBLIC_URL=${{ secrets.PUBLIC_URL }}
-        NODE_ENV=production
-        PORT=3000
-        EOF
-        
-    - name: Create Terraform Variables
-      run: |
-        cat > terraform/terraform.tfvars << EOF
-        app_name = "traktsync"
-        app_version = "${{ github.sha }}"
-        database_password = "${{ secrets.DATABASE_PASSWORD }}"
-        docker_host = "ssh://${{ secrets.RASPBERRY_PI_USER }}@${{ secrets.RASPBERRY_PI_HOST }}"
-        
-        environment_variables = {
-          DATABASE_HOST = "traktsync-postgres"
-          DATABASE_PORT = "5432"
-          DATABASE_NAME = "traktsync"
-          DATABASE_USER = "traktsync"
-          DATABASE_PASSWORD = "${{ secrets.DATABASE_PASSWORD }}"
-          TRAKT_CLIENT_ID = "${{ secrets.TRAKT_CLIENT_ID }}"
-          TRAKT_CLIENT_SECRET = "${{ secrets.TRAKT_CLIENT_SECRET }}"
-          JELLYFIN_URL = "${{ secrets.JELLYFIN_URL }}"
-          JELLYFIN_API_KEY = "${{ secrets.JELLYFIN_API_KEY }}"
-          CLICKUP_API_KEY = "${{ secrets.CLICKUP_API_KEY }}"
-          CLICKUP_WORKSPACE_ID = "${{ secrets.CLICKUP_WORKSPACE_ID }}"
-          CLICKUP_FOLDER_ID = "${{ secrets.CLICKUP_FOLDER_ID }}"
-          EMAIL_HOST = "${{ secrets.EMAIL_HOST }}"
-          EMAIL_PORT = "${{ secrets.EMAIL_PORT }}"
-          EMAIL_USER = "${{ secrets.EMAIL_USER }}"
-          EMAIL_PASSWORD = "${{ secrets.EMAIL_PASSWORD }}"
-          EMAIL_FROM = "${{ secrets.EMAIL_FROM }}"
-          DISCORD_TOKEN = "${{ secrets.DISCORD_TOKEN }}"
-          DISCORD_CHANNEL_ID = "${{ secrets.DISCORD_CHANNEL_ID }}"
-          SERVICE_NAME = "${{ secrets.SERVICE_NAME }}"
-          PUBLIC_URL = "${{ secrets.PUBLIC_URL }}"
-        }
-        EOF
-        
-    - name: Terraform Init
-      run: |
-        cd terraform
-        terraform init
-        
-    - name: Terraform Validate
-      run: |
-        cd terraform
-        terraform validate
-        
-    - name: Terraform Plan
-      run: |
-        cd terraform
-        terraform plan -detailed-exitcode
-        
-    - name: Terraform Apply
-      run: |
-        cd terraform
-        terraform apply -auto-approve
-        
-    - name: Health Check
-      run: |
-        # Wait for application to start
-        sleep 30
-        
-        # Check if application is responding
-        max_attempts=10
-        attempt=1
-        
-        while [ $attempt -le $max_attempts ]; do
-          if curl -f http://${{ secrets.RASPBERRY_PI_HOST }}:3000/health; then
-            echo "Application is healthy!"
-            break
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine deployment version
+        id: version
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version=$(node -p "require('./package.json').version")
           fi
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "Deploying version: $version"
+
+      - name: Determine components to deploy
+        id: components
+        run: |
+          if [[ -n "${{ github.event.inputs.components }}" ]]; then
+            # Use specified components
+            components=$(echo "${{ github.event.inputs.components }}" | tr ',' '\n' | jq -R -s -c 'split("\n")[:-1]')
+          else
+            # Deploy all components with Dockerfiles
+            components=$(find components -maxdepth 1 -type d -not -path components | sed 's|components/||' | \
+                       xargs -I {} sh -c 'test -f components/{}/Dockerfile && echo {}' | \
+                       jq -R -s -c 'split("\n")[:-1]')
+          fi
+          echo "components=$components" >> $GITHUB_OUTPUT
+          echo "Components to deploy: $components"
+
+      - name: Determine environment
+        id: environment
+        run: |
+          environment="${{ github.event.inputs.environment || 'production' }}"
+          echo "environment=$environment" >> $GITHUB_OUTPUT
+          echo "Target environment: $environment"
+
+      - name: Configure Terraform backend
+        id: backend
+        run: |
+          case "${{ steps.environment.outputs.environment }}" in
+            local)
+              echo "tf-backend=false" >> $GITHUB_OUTPUT
+              ;;
+            staging|production)
+              echo "tf-backend=true" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Generate version manifest
+        run: npm run version:sync
+
+  build-components:
+    name: Build ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    needs: prepare-deployment
+    if: needs.prepare-deployment.outputs.components != '[]'
+    strategy:
+      matrix:
+        component: ${{ fromJSON(needs.prepare-deployment.outputs.components) }}
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to Google Cloud
+        if: needs.prepare-deployment.outputs.environment != 'local'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Get deployment secrets
+        if: needs.prepare-deployment.outputs.environment != 'local'
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            terraform_vars:projects/${{ vars.GCP_PROJECT_ID }}/secrets/crn-flix-${{ needs.prepare-deployment.outputs.environment }}/versions/latest
+
+      - name: Configure Docker Context for Remote
+        if: needs.prepare-deployment.outputs.environment != 'local'
+        run: |
+          # Extract connection info from terraform vars
+          ssh_key=$(echo '${{ steps.secrets.outputs.terraform_vars }}' | jq -r '.docker.ssh_key')
+          ssh_host=$(echo '${{ steps.secrets.outputs.terraform_vars }}' | jq -r '.docker.host')
+          ssh_user=$(echo '${{ steps.secrets.outputs.terraform_vars }}' | jq -r '.docker.user')
           
-          if [ $attempt -eq $max_attempts ]; then
-            echo "Application health check failed after $max_attempts attempts"
+          # Create SSH key file
+          echo "$ssh_key" > ~/.ssh_key
+          chmod 600 ~/.ssh_key
+          
+          # Add Raspberry Pi to known hosts
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$ssh_host" >> ~/.ssh/known_hosts
+          
+          # Create Docker context for remote host
+          docker context create raspberry-pi \
+            --docker "host=ssh://$ssh_user@$ssh_host" \
+            --description "Raspberry Pi Docker daemon"
+          
+          # Use the remote context
+          docker context use raspberry-pi
+
+      - name: Test Docker Connection
+        if: needs.prepare-deployment.outputs.environment != 'local'
+        run: |
+          docker info
+          docker version
+
+      - name: Build and Load Docker Image
+        run: |
+          component="${{ matrix.component }}"
+          version="${{ needs.prepare-deployment.outputs.version }}"
+          
+          # Build for ARM64 architecture (Raspberry Pi)
+          docker buildx build \
+            --platform linux/arm64 \
+            --tag crn-flix-${component}:${version} \
+            --tag crn-flix-${component}:latest \
+            --load \
+            components/${component}
+
+      - name: Cleanup Docker Context
+        if: always() && needs.prepare-deployment.outputs.environment != 'local'
+        run: |
+          # Clean up SSH key
+          rm -f ~/.ssh_key
+          
+          # Reset Docker context
+          docker context use default || true
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, build-components]
+    environment: ${{ needs.prepare-deployment.outputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Get Terraform Variables
+        id: terraform-secrets
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            terraform_vars:projects/${{ vars.GCP_PROJECT_ID }}/secrets/crn-flix-${{ needs.prepare-deployment.outputs.environment }}/versions/latest
+
+      - name: Create Terraform Variables
+        run: |
+          environment="${{ needs.prepare-deployment.outputs.environment }}"
+          version="${{ needs.prepare-deployment.outputs.version }}"
+          
+          # Get terraform vars from Secret Manager and add deployment context
+          echo '${{ steps.terraform-secrets.outputs.terraform_vars }}' | jq --arg env "$environment" --arg ver "$version" '
+          . + {
+            app_name: "crn-flix",
+            app_version: $ver,
+            environment: $env
+          }
+          ' > terraform/terraform.tfvars.json
+
+      - name: Configure Terraform Backend
+        if: needs.prepare-deployment.outputs.tf-backend == 'true'
+        run: |
+          cd terraform
+          cat > backend.tf << EOF
+          terraform {
+            backend "gcs" {
+              bucket = "${{ vars.TF_STATE_BUCKET }}"
+              prefix = "crn-flix/${{ needs.prepare-deployment.outputs.environment }}"
+            }
+          }
+          EOF
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          if [[ "${{ needs.prepare-deployment.outputs.tf-backend }}" == "true" ]]; then
+            terraform init
+          else
+            terraform init -backend=false
+          fi
+
+      - name: Terraform Validate
+        run: |
+          cd terraform
+          terraform validate
+
+      - name: Terraform Plan
+        run: |
+          cd terraform
+          terraform plan -detailed-exitcode -var-file=terraform.tfvars.json
+
+      - name: Terraform Apply
+        run: |
+          cd terraform
+          terraform apply -auto-approve -var-file=terraform.tfvars.json
+
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, deploy-infrastructure]
+    if: needs.prepare-deployment.outputs.environment != 'local'
+    steps:
+      - name: Wait for Application Startup
+        run: sleep 30
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Get deployment config
+        id: health-secrets
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            terraform_vars:projects/${{ vars.GCP_PROJECT_ID }}/secrets/crn-flix-${{ needs.prepare-deployment.outputs.environment }}/versions/latest
+
+      - name: Health Check
+        run: |
+          # Extract health check endpoint from config
+          health_host=$(echo '${{ steps.health-secrets.outputs.terraform_vars }}' | jq -r '.health_check.host // empty')
+          health_port=$(echo '${{ steps.health-secrets.outputs.terraform_vars }}' | jq -r '.health_check.port // "3000"')
+          
+          if [[ -z "$health_host" ]]; then
+            echo "❌ No health check host configured"
             exit 1
           fi
           
-          echo "Attempt $attempt/$max_attempts failed, retrying in 10 seconds..."
-          sleep 10
-          ((attempt++))
-        done
-        
-    - name: Cleanup
-      if: always()
-      run: |
-        # Clean up SSH key
-        rm -f ~/.ssh_key
-        
-        # Reset Docker context
-        docker context use default || true
+          max_attempts=10
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            if curl -f "http://${health_host}:${health_port}/health"; then
+              echo "✅ Application is healthy!"
+              break
+            fi
+            
+            if [ $attempt -eq $max_attempts ]; then
+              echo "❌ Application health check failed after $max_attempts attempts"
+              exit 1
+            fi
+            
+            echo "⏳ Attempt $attempt/$max_attempts failed, retrying in 10 seconds..."
+            sleep 10
+            ((attempt++))
+          done
+
+  deployment-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, build-components, deploy-infrastructure, health-check]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "🚀 Deployment Summary"
+          echo "===================="
+          echo "Environment: ${{ needs.prepare-deployment.outputs.environment }}"
+          echo "Version: ${{ needs.prepare-deployment.outputs.version }}"
+          echo "Components: ${{ needs.prepare-deployment.outputs.components }}"
+          echo ""
+          echo "Build Status: ${{ needs.build-components.result }}"
+          echo "Infrastructure Status: ${{ needs.deploy-infrastructure.result }}"
+          echo "Health Check Status: ${{ needs.health-check.result || 'skipped' }}"
+          
+          if [[ "${{ needs.deploy-infrastructure.result }}" == "success" ]]; then
+            echo "✅ Deployment completed successfully!"
+          else
+            echo "❌ Deployment failed!"
+            exit 1
+          fi

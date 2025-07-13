@@ -1,4 +1,4 @@
-name: Release
+name: Release Components
 
 on:
   push:
@@ -7,13 +7,77 @@ on:
 permissions: write-all
 
 jobs:
-  release:
+  detect-changes:
+    name: Detect Changes
     runs-on: ubuntu-latest
-    name: Release
+    outputs:
+      components: ${{ steps.changes.outputs.components }}
+      has-changes: ${{ steps.changes.outputs.has-changes }}
+      should-release: ${{ steps.changes.outputs.should-release }}
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Node.js
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect releasable changes
+        id: changes
+        run: |
+          # Get all changed files since last release tag
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [[ -z "$last_tag" ]]; then
+            changed_files=$(git ls-files)
+          else
+            changed_files=$(git diff --name-only $last_tag HEAD)
+          fi
+          
+          components=""
+          should_release="false"
+          
+          # Check each component directory for changes
+          for component in $(find components -maxdepth 1 -type d -not -path components | sed 's|components/||'); do
+            if echo "$changed_files" | grep -q "^components/$component/"; then
+              components="$components,$component"
+              should_release="true"
+            fi
+          done
+          
+          # Check if root package.json or scripts changed (affects global version)
+          if echo "$changed_files" | grep -qE "^(package\.json|scripts/|\.github/workflows/)"; then
+            should_release="true"
+          fi
+          
+          # Convert to JSON array
+          if [[ -n "$components" ]]; then
+            components=$(echo "$components" | sed 's/^,//' | tr ',' '\n' | sort -u | jq -R -s -c 'split("\n")[:-1]')
+            has_changes="true"
+          else
+            components="[]"
+            has_changes="false"
+          fi
+          
+          echo "components=$components" >> $GITHUB_OUTPUT
+          echo "has-changes=$has_changes" >> $GITHUB_OUTPUT
+          echo "should-release=$should_release" >> $GITHUB_OUTPUT
+          echo "Changed components: $components"
+          echo "Should release: $should_release"
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should-release == 'true'
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      released: ${{ steps.release.outputs.released }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
@@ -22,37 +86,162 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Release
-        env:
-            GITHUB_TOKEN: ${{ secrets.X_GITHUB_TOKEN }}
-        run: npx semantic-release
+      - name: Synchronize versions before release
+        run: npm run version:sync
 
-      - name: Trigger publish workflow
-        if: success()
+      - name: Run semantic release
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.X_GITHUB_TOKEN }}
+        run: |
+          npx semantic-release
+          if [[ $? -eq 0 ]]; then
+            version=$(node -p "require('./package.json').version")
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "released=true" >> $GITHUB_OUTPUT
+          else
+            echo "released=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update component versions
+        if: steps.release.outputs.released == 'true'
+        run: |
+          # Update all component versions to match global version
+          new_version="${{ steps.release.outputs.version }}"
+          
+          for component_dir in components/*/; do
+            if [[ -f "$component_dir/package.json" ]]; then
+              component=$(basename "$component_dir")
+              echo "Updating $component to version $new_version"
+              
+              cd "$component_dir"
+              npm version "$new_version" --no-git-tag
+              cd - > /dev/null
+            fi
+          done
+
+      - name: Commit version updates
+        if: steps.release.outputs.released == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add components/*/package.json
+          git commit -m "chore: sync component versions to ${{ steps.release.outputs.version }}" || echo "No changes to commit"
+          git push https://${{ secrets.X_GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+
+      - name: Regenerate version manifest
+        if: steps.release.outputs.released == 'true'
+        run: npm run version:sync
+
+  publish:
+    name: Publish Components
+    runs-on: ubuntu-latest
+    needs: [detect-changes, release]
+    if: needs.release.outputs.released == 'true' && needs.detect-changes.outputs.has-changes == 'true'
+    strategy:
+      matrix:
+        component: ${{ fromJSON(needs.detect-changes.outputs.components) }}
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: 'components/${{ matrix.component }}/.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: 'components/${{ matrix.component }}/package-lock.json'
+
+      - name: Install component dependencies
+        run: |
+          cd components/${{ matrix.component }}
+          npm ci
+
+      - name: Build component
+        run: |
+          cd components/${{ matrix.component }}
+          npm run build
+
+      - name: Setup Docker Buildx
+        if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and tag Docker image
+        if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
+        uses: docker/build-push-action@v5
+        with:
+          context: components/${{ matrix.component }}
+          file: components/${{ matrix.component }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            crn-flix-${{ matrix.component }}:${{ needs.release.outputs.version }}
+            crn-flix-${{ matrix.component }}:latest
+          push: false
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+  post-release:
+    name: Post-Release Actions
+    runs-on: ubuntu-latest
+    needs: [detect-changes, release, publish]
+    if: always() && needs.release.outputs.released == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create next development iteration
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Create draft version for global project
+          npm version prepatch --no-git-tag --preid="draft"
+          global_draft_version=$(node -p "require('./package.json').version")
+          
+          # Update all component versions to draft
+          for component_dir in components/*/; do
+            if [[ -f "$component_dir/package.json" ]]; then
+              component=$(basename "$component_dir")
+              echo "Updating $component to draft version"
+              
+              cd "$component_dir"
+              npm version prepatch --no-git-tag --preid="draft"
+              cd - > /dev/null
+            fi
+          done
+          
+          # Create and push draft branch
+          git checkout -b "$global_draft_version"
+          git add .
+          git commit -m "chore($global_draft_version): prepare for next development iteration"
+          git push https://${{ secrets.X_GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:"$global_draft_version"
+
+      - name: Trigger deployment workflow
+        if: needs.detect-changes.outputs.has-changes == 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            const version = require('./package.json').version;
+            const components = JSON.parse('${{ needs.detect-changes.outputs.components }}');
+            const version = '${{ needs.release.outputs.version }}';
+            
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: 'publish.yml',
+              workflow_id: 'deploy.yml',
               ref: 'main',
               inputs: {
-                version: version
+                version: version,
+                components: components.join(',')
               }
             });
-
-      - name: Create draft branch
-        if: success()
-        run: |
-            git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-            
-            npm version prepatch --no-git-tag --preid="draft"
-            DRAFT_VERSION=$(node -p "require('./package.json').version")
-            
-            git checkout -b ${DRAFT_VERSION}
-            git add .
-            git commit -m "chore(${DRAFT_VERSION}): prepare for next development iteration"
-            git push https://${{ secrets.X_GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${DRAFT_VERSION}
