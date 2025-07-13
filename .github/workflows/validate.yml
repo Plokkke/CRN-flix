@@ -82,11 +82,11 @@ jobs:
         run: echo "Skipping ${{ matrix.component }} - handled by separate job"
 
       - name: Checkout code
-        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        if: ${{ !contains(fromJSON('["infrastructure", "root"]'), matrix.component) }}
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        if: ${{ !contains(fromJSON('["infrastructure", "root"]'), matrix.component) }}
         uses: actions/setup-node@v4
         with:
           node-version-file: 'components/${{ matrix.component }}/.nvmrc'
@@ -94,35 +94,35 @@ jobs:
           cache-dependency-path: 'components/${{ matrix.component }}/package-lock.json'
 
       - name: Install dependencies
-        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        if: ${{ !contains(fromJSON('["infrastructure", "root"]'), matrix.component) }}
         run: |
           cd components/${{ matrix.component }}
           npm ci
 
       - name: Run linting
-        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        if: ${{ !contains(fromJSON('["infrastructure", "root"]'), matrix.component) }}
         run: |
           cd components/${{ matrix.component }}
           npm run lint
 
       - name: Run tests
-        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        if: ${{ !contains(fromJSON('["infrastructure", "root"]'), matrix.component) }}
         run: |
           cd components/${{ matrix.component }}
           npm run test
 
       - name: Build application
-        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        if: ${{ !contains(fromJSON('["infrastructure", "root"]'), matrix.component) }}
         run: |
           cd components/${{ matrix.component }}
           npm run build
 
       - name: Setup Docker Buildx
-        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        if: ${{ !contains(fromJSON('["infrastructure", "root"]'), matrix.component) }}
         uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
-        if: '!contains(fromJSON("[\"infrastructure\", \"root\"]"), matrix.component)'
+        if: ${{ !contains(fromJSON('["infrastructure", "root"]'), matrix.component) }}
         uses: docker/build-push-action@v5
         with:
           context: components/${{ matrix.component }}
