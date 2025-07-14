@@ -183,20 +183,50 @@ jobs:
   validation-summary:
     name: Validation Summary
     runs-on: ubuntu-latest
-    needs: [detect-changes, validate-components]
+    needs: [detect-changes, validate-components, validate-infrastructure, validate-root]
     if: always()
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
       - name: Check validation results
         run: |
           if [[ "${{ needs.detect-changes.outputs.has-changes }}" == "false" ]]; then
             echo "✅ No changes detected - validation skipped"
-          elif [[ "${{ needs.validate-components.result }}" == "success" ]]; then
-            echo "✅ All component validations passed"
-          elif [[ "${{ needs.validate-components.result }}" == "skipped" ]]; then
-            echo "ℹ️  Component validation was skipped"
           else
-            echo "❌ Some component validations failed"
-            exit 1
+            echo "🔍 Checking validation results..."
+            
+            # Check component validation
+            if [[ "${{ needs.validate-components.result }}" == "success" ]]; then
+              echo "✅ Components: passed"
+            elif [[ "${{ needs.validate-components.result }}" == "skipped" ]]; then
+              echo "ℹ️  Components: skipped"
+            else
+              echo "❌ Components: failed"
+              exit 1
+            fi
+            
+            # Check infrastructure validation
+            if [[ "${{ needs.validate-infrastructure.result }}" == "success" ]]; then
+              echo "✅ Infrastructure: passed"
+            elif [[ "${{ needs.validate-infrastructure.result }}" == "skipped" ]]; then
+              echo "ℹ️  Infrastructure: skipped"
+            else
+              echo "❌ Infrastructure: failed"
+              exit 1
+            fi
+            
+            # Check root validation
+            if [[ "${{ needs.validate-root.result }}" == "success" ]]; then
+              echo "✅ Root: passed"
+            elif [[ "${{ needs.validate-root.result }}" == "skipped" ]]; then
+              echo "ℹ️  Root: skipped"
+            else
+              echo "❌ Root: failed"
+              exit 1
+            fi
+            
+            echo "✅ All validations completed successfully"
           fi
 
       - name: Post PR comment
@@ -205,20 +235,38 @@ jobs:
         with:
           script: |
             const components = JSON.parse('${{ needs.detect-changes.outputs.components }}');
-            const validationResult = '${{ needs.validate-components.result }}';
+            const infraChanged = '${{ needs.detect-changes.outputs.infrastructure-changed }}' === 'true';
+            const rootChanged = '${{ needs.detect-changes.outputs.root-changed }}' === 'true';
             
-            const emoji = validationResult === 'success' ? '✅' : '❌';
-            const status = validationResult === 'success' ? 'passed' : 'failed';
+            const componentResult = '${{ needs.validate-components.result }}';
+            const infraResult = '${{ needs.validate-infrastructure.result }}';
+            const rootResult = '${{ needs.validate-root.result }}';
+            
+            const allSuccess = (componentResult === 'success' || componentResult === 'skipped') &&
+                              (infraResult === 'success' || infraResult === 'skipped') &&
+                              (rootResult === 'success' || rootResult === 'skipped');
+            
+            const emoji = allSuccess ? '✅' : '❌';
+            const status = allSuccess ? 'passed' : 'failed';
+            
+            let validationDetails = '';
+            
+            if (components.length > 0) {
+              validationDetails += `**Components:** ${components.join(', ')} (${componentResult})\n`;
+            }
+            if (infraChanged) {
+              validationDetails += `**Infrastructure:** ${infraResult}\n`;
+            }
+            if (rootChanged) {
+              validationDetails += `**Root:** ${rootResult}\n`;
+            }
             
             const successMessage = '🎉 All validation checks passed! This PR is ready for review.';
             const failureMessage = '⚠️  Some validation checks failed. Please review the logs and fix any issues.';
-            const statusMessage = validationResult === 'success' ? successMessage : failureMessage;
+            const statusMessage = allSuccess ? successMessage : failureMessage;
             
             const titleCase = status.charAt(0).toUpperCase() + status.slice(1);
-            const body = '## ' + emoji + ' Component Validation ' + titleCase + '\n\n' +
-                        '**Components validated:** ' + components.join(', ') + '\n' +
-                        '**Status:** ' + status + '\n\n' +
-                        statusMessage;
+            const body = `## ${emoji} Validation ${titleCase}\n\n${validationDetails}\n${statusMessage}`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
