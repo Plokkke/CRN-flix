@@ -1,0 +1,7 @@
+{
+  "global": "1.0.3",
+  "components": {
+    "api": "1.0.3-draft.0",
+    "database": "1.0.0"
+  }
+}

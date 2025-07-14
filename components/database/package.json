@@ -4,9 +4,10 @@
   "version": "1.0.0",
   "description": "Database schema and migration scripts for CRN-Flix",
   "scripts": {
-    "migrate": "node src/migrate.js",
+    "build": "npm run generate",
     "generate": "prisma generate --schema=src/schema.prisma",
     "introspect": "prisma db pull --schema=src/schema.prisma",
+    "migrate": "node src/migrate.js",
     "studio": "prisma studio --schema=src/schema.prisma"
   },
   "dependencies": {
