@@ -3,33 +3,33 @@ resource "docker_network" "network" {
   name = "${var.slug}-network"
 }
 
-# Datasource module
-module "datasource" {
-  source = "./components/datasource"
+# Database module (includes migration)
+module "database" {
+  source = "../components/database/terraform"
 
   slug              = var.slug
   network_name      = docker_network.network.name
-  sql_scripts_path  = "${path.cwd}/../components/database/schema"
   database_password = var.database_password
   image_registry    = var.image_registry
+  app_version       = var.versions.migration
 }
 
 # API module
 module "api" {
-  source = "./components/api"
+  source = "../components/api/terraform"
 
   slug                  = var.slug
-  app_version           = var.api_version
+  app_version           = var.versions.api
   api_port              = var.api_port
   image_registry        = var.image_registry
   network_name          = docker_network.network.name
-  database_container_id = module.datasource.container_id
+  database_container_id = module.database.container_id
 
   # Application configuration
   server_url       = var.server_url
   service_name     = var.service_name
   sync_interval_ms = var.sync_interval_ms
-  database_config  = module.datasource.connection_details
+  database_config  = module.database.connection_details
 
   # External services
   trakt_client_id     = var.trakt_client_id
@@ -46,4 +46,6 @@ module "api" {
   clickup_api_token   = var.clickup_api_token
   clickup_team_id     = var.clickup_team_id
   clickup_list_id     = var.clickup_list_id
+
+  depends_on = [module.database]
 }

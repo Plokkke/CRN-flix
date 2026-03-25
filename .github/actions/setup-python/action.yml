@@ -1,0 +1,15 @@
+name: 'Setup Python'
+description: 'Setup Python with consistent version'
+inputs:
+  version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.version }}

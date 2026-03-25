@@ -11,22 +11,20 @@ RUN addgroup -g 1001 -S appgroup && \
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
-RUN npm ci --only=production && npm cache clean --force
+COPY components/database/migration/package.json ./
+RUN npm install && npm cache clean --force
 
-# Copy schema and migrations
-COPY src/schema.prisma ./src/
-COPY migrations/ ./migrations/
+# Copy schema and scripts from database component
+COPY components/database/src/schema.prisma ./src/
+COPY components/database/src/scripts/ ./src/scripts/
+COPY components/database/src/migrate.js ./src/
 
 # Generate Prisma client
 RUN npx prisma generate --schema=src/schema.prisma
-
-# Copy migration runner
-COPY src/ ./src/
 
 # Change ownership
 RUN chown -R migrator:appgroup /app
 
 USER migrator
 
-ENTRYPOINT ["npm", "run", "migrate"]
+ENTRYPOINT ["node", "src/migrate.js"]

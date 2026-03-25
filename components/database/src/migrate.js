@@ -16,7 +16,7 @@ async function waitForDatabase() {
   
   while (attempts < maxAttempts) {
     try {
-      await execAsync('pg_isready -h $DATABASE_HOST -p $DATABASE_PORT -U $DATABASE_USER');
+      await execAsync(`pg_isready -h ${process.env.DATABASE_HOST} -p ${process.env.DATABASE_PORT} -U ${process.env.DATABASE_USER}`);
       console.log('✅ Database is ready!');
       return;
     } catch (error) {
@@ -33,7 +33,7 @@ async function waitForDatabase() {
 async function runSQLMigrations() {
   console.log('🚀 Running SQL migrations...');
   
-  const migrationsDir = path.join(__dirname, '../migrations');
+  const migrationsDir = path.join(__dirname, 'scripts');
   
   if (!fs.existsSync(migrationsDir)) {
     console.log('📁 No migrations directory found, skipping SQL migrations');
@@ -50,7 +50,7 @@ async function runSQLMigrations() {
       const migrationPath = path.join(migrationsDir, file);
       
       try {
-        const { stdout } = await execAsync(`psql $DATABASE_URL -f "${migrationPath}"`);
+        const { stdout } = await execAsync(`psql "${process.env.DATABASE_URL}" -f "${migrationPath}"`);
         console.log(stdout);
         console.log(`✅ Migration ${file} completed`);
       } catch (error) {
@@ -66,7 +66,7 @@ async function runSQLMigrations() {
 
 // Run custom scripts in order
 async function runCustomScripts() {
-  const migrationsDir = path.join(__dirname, '../migrations');
+  const migrationsDir = path.join(__dirname, 'scripts');
   
   if (!fs.existsSync(migrationsDir)) {
     console.log('📁 No migrations directory found, skipping custom scripts');
@@ -108,11 +108,11 @@ async function runCustomScripts() {
 async function migrate() {
   try {
     console.log('🎯 Starting migration process...');
-    
+
     await waitForDatabase();
     await runSQLMigrations();
     await runCustomScripts();
-    
+
     console.log('🎉 Migration process completed successfully!');
     process.exit(0);
   } catch (error) {

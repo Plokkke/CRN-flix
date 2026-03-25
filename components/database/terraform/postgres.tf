@@ -50,13 +50,6 @@ resource "docker_container" "postgres" {
     container_path = "/var/lib/postgresql/data"
   }
 
-  # Mount SQL initialization scripts
-  volumes {
-    host_path      = var.sql_scripts_path
-    container_path = "/docker-entrypoint-initdb.d"
-    read_only      = true
-  }
-
   # Labels for grouping
   labels {
     label = "com.docker.compose.project"
@@ -73,22 +66,5 @@ resource "docker_container" "postgres" {
     interval = "30s"
     timeout  = "10s"
     retries  = 3
-  }
-}
-
-# Migration module
-module "migration" {
-  source = "./migration"
-
-  slug                  = var.slug
-  network_name          = var.network_name
-  database_container_id = docker_container.postgres.id
-  image_registry        = var.image_registry
-  database_config = {
-    host     = docker_container.postgres.name
-    port     = "5432"
-    database = var.slug
-    user     = var.slug
-    password = local.database_password
   }
 }

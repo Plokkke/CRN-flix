@@ -28,6 +28,8 @@ export const environmentVariablesSchema = z
     CLICKUP_API_TOKEN: z.string(),
     CLICKUP_TEAM_ID: z.string(),
     CLICKUP_LIST_ID: z.string(),
+    DARKIWORLD_API_KEY: z.string(),
+    DARKIWORLD_HOST: z.string().default('https://darkiworld.com'),
   })
   .transform((env) => ({
     name: env.SERVICE_NAME,
@@ -70,6 +72,10 @@ export const environmentVariablesSchema = z
       apiToken: env.CLICKUP_API_TOKEN,
       teamId: env.CLICKUP_TEAM_ID,
       listId: env.CLICKUP_LIST_ID,
+    },
+    darkiworld: {
+      apiKey: env.DARKIWORLD_API_KEY,
+      host: env.DARKIWORLD_HOST,
     },
   }));
 

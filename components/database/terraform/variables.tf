@@ -8,12 +8,6 @@ variable "network_name" {
   type        = string
 }
 
-variable "sql_scripts_path" {
-  description = "Path to SQL initialization scripts"
-  type        = string
-  default     = "./sql"
-}
-
 variable "database_password" {
   description = "Database password (optional, will be randomly generated if not provided)"
   type        = string
@@ -21,8 +15,14 @@ variable "database_password" {
   sensitive   = true
 }
 
+variable "app_version" {
+  description = "Application version for docker images"
+  type        = string
+  default     = "latest"
+}
+
 variable "image_registry" {
-  description = "Docker image registry URL (e.g., europe-west1-docker.pkg.dev/project-id/repository). If empty, images will be built locally."
+  description = "Docker image registry (empty string for local build)"
   type        = string
   default     = ""
-} 
+}

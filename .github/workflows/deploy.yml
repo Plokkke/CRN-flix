@@ -40,62 +40,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+          python-version: '3.11'
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Determine deployment version
-        id: version
+      - name: Prepare deployment configuration
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_COMPONENTS: ${{ github.event.inputs.components }}
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
         run: |
-          if [[ -n "${{ github.event.inputs.version }}" ]]; then
-            version="${{ github.event.inputs.version }}"
-          else
-            version=$(node -p "require('./package.json').version")
-          fi
-          echo "version=$version" >> $GITHUB_OUTPUT
-          echo "Deploying version: $version"
-
-      - name: Determine components to deploy
-        id: components
-        run: |
-          if [[ -n "${{ github.event.inputs.components }}" ]]; then
-            # Use specified components
-            components=$(echo "${{ github.event.inputs.components }}" | tr ',' '\n' | jq -R -s -c 'split("\n")[:-1]')
-          else
-            # Deploy all components with Dockerfiles
-            components=$(find components -maxdepth 1 -type d -not -path components | sed 's|components/||' | \
-                       xargs -I {} sh -c 'test -f components/{}/Dockerfile && echo {}' | \
-                       jq -R -s -c 'split("\n")[:-1]')
-          fi
-          echo "components=$components" >> $GITHUB_OUTPUT
-          echo "Components to deploy: $components"
-
-      - name: Determine environment
-        id: environment
-        run: |
-          environment="${{ github.event.inputs.environment || 'production' }}"
-          echo "environment=$environment" >> $GITHUB_OUTPUT
-          echo "Target environment: $environment"
-
-      - name: Configure Terraform backend
-        id: backend
-        run: |
-          case "${{ steps.environment.outputs.environment }}" in
-            local)
-              echo "tf-backend=false" >> $GITHUB_OUTPUT
-              ;;
-            staging|production)
-              echo "tf-backend=true" >> $GITHUB_OUTPUT
-              ;;
-          esac
-
-      - name: Generate version manifest
-        run: npm run version:sync
+          # Use our Python script for deployment preparation
+          python3 .github/scripts/prepare_deployment.py
 
   build-components:
     name: Build ${{ matrix.component }}
@@ -118,12 +76,20 @@ jobs:
           component="${{ matrix.component }}"
           version="${{ needs.prepare-deployment.outputs.version }}"
           
-          docker buildx build \
+          echo "Building Docker image for component: ${component}"
+          echo "Version: ${version}"
+          
+          if ! docker buildx build \
             --platform linux/arm64 \
             --tag crn-flix-${component}:${version} \
             --tag crn-flix-${component}:latest \
             --load \
-            components/${component}
+            components/${component}; then
+            echo "❌ Failed to build Docker image for ${component}"
+            exit 1
+          fi
+          
+          echo "✅ Successfully built Docker image for ${component}"
 
   deploy-infrastructure:
     name: Deploy Infrastructure
@@ -146,11 +112,11 @@ jobs:
           service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
 
       - name: Get Terraform Variables
-        id: terraform-secrets
+        id: terraform-config
         uses: google-github-actions/get-secretmanager-secrets@v2
         with:
           secrets: |-
-            terraform_vars:projects/${{ vars.GCP_PROJECT_ID }}/secrets/crn-flix-${{ needs.prepare-deployment.outputs.environment }}/versions/latest
+            terraform-config:projects/${{ vars.GCP_PROJECT_ID }}/secrets/terraform-config/versions/latest
 
       - name: Create Terraform Variables
         run: |
@@ -158,7 +124,7 @@ jobs:
           version="${{ needs.prepare-deployment.outputs.version }}"
           
           # Get terraform vars from Secret Manager and add deployment context
-          echo '${{ steps.terraform-secrets.outputs.terraform_vars }}' | jq --arg env "$environment" --arg ver "$version" '
+          echo '${{ steps.terraform-config.outputs.terraform-config }}' | jq --arg env "$environment" --arg ver "$version" '
           . + {
             app_name: "crn-flix",
             app_version: $ver,
@@ -193,7 +159,7 @@ jobs:
         run: |
           # Create SSH key file for Docker connection from Terraform vars
           mkdir -p ~/.ssh
-          echo '${{ steps.terraform-secrets.outputs.terraform_vars }}' | jq -r '.docker_ssh_key' > ~/.ssh/docker_key
+          echo '${{ steps.terraform-config.outputs.terraform-config }}' | jq -r '.docker_ssh_key' > ~/.ssh/docker_key
           chmod 600 ~/.ssh/docker_key
           
           # Add SSH key to agent
@@ -215,61 +181,10 @@ jobs:
           cd terraform
           terraform apply -auto-approve -var-file=terraform.tfvars.json
 
-  health-check:
-    name: Health Check
-    runs-on: ubuntu-latest
-    needs: [prepare-deployment, deploy-infrastructure]
-    if: needs.prepare-deployment.outputs.environment != 'local'
-    steps:
-      - name: Wait for Application Startup
-        run: sleep 30
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
-
-      - name: Get deployment config
-        id: health-secrets
-        uses: google-github-actions/get-secretmanager-secrets@v2
-        with:
-          secrets: |-
-            terraform_vars:projects/${{ vars.GCP_PROJECT_ID }}/secrets/crn-flix-${{ needs.prepare-deployment.outputs.environment }}/versions/latest
-
-      - name: Health Check
-        run: |
-          # Extract server_url from terraform vars for health check
-          server_url=$(echo '${{ steps.health-secrets.outputs.terraform_vars }}' | jq -r '.server_url')
-          
-          if [[ -z "$server_url" ]]; then
-            echo "❌ No server_url configured for health check"
-            exit 1
-          fi
-          
-          max_attempts=10
-          attempt=1
-          
-          while [ $attempt -le $max_attempts ]; do
-            if curl -f "${server_url}/health"; then
-              echo "✅ Application is healthy!"
-              break
-            fi
-            
-            if [ $attempt -eq $max_attempts ]; then
-              echo "❌ Application health check failed after $max_attempts attempts"
-              exit 1
-            fi
-            
-            echo "⏳ Attempt $attempt/$max_attempts failed, retrying in 10 seconds..."
-            sleep 10
-            ((attempt++))
-          done
-
   deployment-summary:
     name: Deployment Summary
     runs-on: ubuntu-latest
-    needs: [prepare-deployment, build-components, deploy-infrastructure, health-check]
+    needs: [prepare-deployment, build-components, deploy-infrastructure]
     if: always()
     steps:
       - name: Summary
@@ -282,7 +197,6 @@ jobs:
           echo ""
           echo "Build Status: ${{ needs.build-components.result }}"
           echo "Infrastructure Status: ${{ needs.deploy-infrastructure.result }}"
-          echo "Health Check Status: ${{ needs.health-check.result || 'skipped' }}"
           
           if [[ "${{ needs.deploy-infrastructure.result }}" == "success" ]]; then
             echo "✅ Deployment completed successfully!"

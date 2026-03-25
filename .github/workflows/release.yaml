@@ -4,70 +4,48 @@ on:
   push:
     branches: [ main ]
 
-permissions: write-all
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+  actions: read
 
 jobs:
   detect-changes:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
+      has_changes: ${{ steps.changes.outputs.has_changes }}
+      has_infra_changes: ${{ steps.changes.outputs.has_infra_changes }}
+      has_docs_changes: ${{ steps.changes.outputs.has_docs_changes }}
       components: ${{ steps.changes.outputs.components }}
-      has-changes: ${{ steps.changes.outputs.has-changes }}
-      should-release: ${{ steps.changes.outputs.should-release }}
+      release_type: ${{ steps.changes.outputs.release_type }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
       - name: Detect releasable changes
         id: changes
         run: |
-          # Get all changed files since last release tag
-          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          # Get last release tag or fallback to first commit
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          current_sha=$(git rev-parse HEAD)
           
-          if [[ -z "$last_tag" ]]; then
-            changed_files=$(git ls-files)
-          else
-            changed_files=$(git diff --name-only $last_tag HEAD)
-          fi
-          
-          components=""
-          should_release="false"
-          
-          # Check each component directory for changes
-          for component in $(find components -maxdepth 1 -type d -not -path components | sed 's|components/||'); do
-            if echo "$changed_files" | grep -q "^components/$component/"; then
-              components="$components,$component"
-              should_release="true"
-            fi
-          done
-          
-          # Check if root package.json or scripts changed (affects global version)
-          if echo "$changed_files" | grep -qE "^(package\.json|scripts/|\.github/workflows/)"; then
-            should_release="true"
-          fi
-          
-          # Convert to JSON array
-          if [[ -n "$components" ]]; then
-            components=$(echo "$components" | sed 's/^,//' | tr ',' '\n' | sort -u | jq -R -s -c 'split("\n")[:-1]')
-            has_changes="true"
-          else
-            components="[]"
-            has_changes="false"
-          fi
-          
-          echo "components=$components" >> $GITHUB_OUTPUT
-          echo "has-changes=$has_changes" >> $GITHUB_OUTPUT
-          echo "should-release=$should_release" >> $GITHUB_OUTPUT
-          echo "Changed components: $components"
-          echo "Should release: $should_release"
+          echo "Comparing changes from $last_tag to $current_sha"
+          python3 .github/scripts/detect_changes.py "$last_tag" "$current_sha" --release
 
   release:
     name: Create Release
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.should-release == 'true'
+    if: needs.detect-changes.outputs.has_changes == 'true'
     outputs:
       version: ${{ steps.release.outputs.version }}
       released: ${{ steps.release.outputs.released }}
@@ -86,9 +64,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Synchronize versions before release
-        run: npm run version:sync
-
       - name: Run semantic release
         id: release
         env:
@@ -103,22 +78,20 @@ jobs:
             echo "released=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Update component versions
+      - name: Setup Python for version management
+        if: steps.release.outputs.released == 'true'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Update component versions (selective)
         if: steps.release.outputs.released == 'true'
         run: |
-          # Update all component versions to match global version
-          new_version="${{ steps.release.outputs.version }}"
-          
-          for component_dir in components/*/; do
-            if [[ -f "$component_dir/package.json" ]]; then
-              component=$(basename "$component_dir")
-              echo "Updating $component to version $new_version"
-              
-              cd "$component_dir"
-              npm version "$new_version" --no-git-tag
-              cd - > /dev/null
-            fi
-          done
+          # Use our Python script for selective version management
+          python3 .github/scripts/manage_versions.py \
+            '${{ needs.detect-changes.outputs.components }}' \
+            '${{ needs.detect-changes.outputs.release_type }}' \
+            '${{ fromJSON(needs.detect-changes.outputs.components) != fromJSON("[]") }}'
 
       - name: Commit version updates
         if: steps.release.outputs.released == 'true'
@@ -130,19 +103,54 @@ jobs:
           git commit -m "chore: sync component versions to ${{ steps.release.outputs.version }}" || echo "No changes to commit"
           git push https://${{ secrets.X_GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
 
-      - name: Regenerate version manifest
-        if: steps.release.outputs.released == 'true'
-        run: npm run version:sync
+
+  get-registry-config:
+    name: Get Registry Configuration
+    runs-on: ubuntu-latest
+    needs: [detect-changes, release]
+    if: needs.release.outputs.released == 'true' && needs.detect-changes.outputs.has_changes == 'true'
+    outputs:
+      image_registry: ${{ steps.config.outputs.image_registry }}
+      app_slug: ${{ steps.config.outputs.app_slug }}
+      registry_host: ${{ steps.config.outputs.registry_host }}
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Get Production Secrets
+        id: terraform-config
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            terraform-config:projects/${{ vars.GCP_PROJECT_ID }}/secrets/terraform-config/versions/latest
+
+      - name: Extract registry configuration
+        id: config
+        run: |
+          # Extract image_registry from secrets
+          image_registry=$(echo '${{ steps.terraform-config.outputs.terraform-config }}' | jq -r '.image_registry')
+          registry_host=$(echo "$image_registry" | cut -d'/' -f1)
+          slug=$(echo '${{ steps.terraform-config.outputs.terraform-config }}' | jq -r '.slug')
+          
+          echo "image_registry=$image_registry" >> $GITHUB_OUTPUT
+          echo "registry_host=$registry_host" >> $GITHUB_OUTPUT
+          echo "app_slug=$slug" >> $GITHUB_OUTPUT
 
   publish:
     name: Publish Components
     runs-on: ubuntu-latest
-    needs: [detect-changes, release]
-    if: needs.release.outputs.released == 'true' && needs.detect-changes.outputs.has-changes == 'true'
+    needs: [detect-changes, release, get-registry-config]
+    if: needs.release.outputs.released == 'true' && needs.detect-changes.outputs.has_changes == 'true'
     strategy:
       matrix:
         component: ${{ fromJSON(needs.detect-changes.outputs.components) }}
       fail-fast: false
+    defaults:
+      run:
+        working-directory: components/${{ matrix.component }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -156,19 +164,30 @@ jobs:
 
       - name: Install component dependencies
         run: |
-          cd components/${{ matrix.component }}
           npm ci
 
       - name: Build component
         run: |
-          cd components/${{ matrix.component }}
           npm run build
+
+      - name: Authenticate to Google Cloud
+        if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker registry
+        if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
+        run: |
+          # Configure Docker auth using registry host from previous job
+          gcloud auth configure-docker "${{ needs.get-registry-config.outputs.registry_host }}"
 
       - name: Setup Docker Buildx
         if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and tag Docker image
+      - name: Build and push Docker image
         if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
         uses: docker/build-push-action@v5
         with:
@@ -176,9 +195,9 @@ jobs:
           file: components/${{ matrix.component }}/Dockerfile
           platforms: linux/amd64,linux/arm64
           tags: |
-            crn-flix-${{ matrix.component }}:${{ needs.release.outputs.version }}
-            crn-flix-${{ matrix.component }}:latest
-          push: false
+            ${{ needs.get-registry-config.outputs.image_registry }}/${{ needs.get-registry-config.outputs.app_slug }}-${{ matrix.component }}:${{ needs.release.outputs.version }}
+            ${{ needs.get-registry-config.outputs.image_registry }}/${{ needs.get-registry-config.outputs.app_slug }}-${{ matrix.component }}:latest
+          push: true
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
 
@@ -186,7 +205,7 @@ jobs:
     name: Post-Release Actions
     runs-on: ubuntu-latest
     needs: [detect-changes, release, publish]
-    if: always() && needs.release.outputs.released == 'true'
+    if: always()
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -200,35 +219,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Python for draft creation
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
       - name: Create next development iteration
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # Create draft version for global project
-          npm version prepatch --no-git-tag --preid="draft"
-          global_draft_version=$(node -p "require('./package.json').version")
-          
-          # Update all component versions to draft
-          for component_dir in components/*/; do
-            if [[ -f "$component_dir/package.json" ]]; then
-              component=$(basename "$component_dir")
-              echo "Updating $component to draft version"
-              
-              cd "$component_dir"
-              npm version prepatch --no-git-tag --preid="draft"
-              cd - > /dev/null
-            fi
-          done
-          
-          # Create and push draft branch
-          git checkout -b "$global_draft_version"
-          git add .
-          git commit -m "chore($global_draft_version): prepare for next development iteration"
-          git push https://${{ secrets.X_GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:"$global_draft_version"
+          # Use our Python script to create draft versions and branch
+          python3 .github/scripts/create_drafts.py true
 
       - name: Trigger deployment workflow
-        if: needs.detect-changes.outputs.has-changes == 'true'
+        if: fromJSON(needs.detect-changes.outputs.components) != '[]'
         uses: actions/github-script@v7
         with:
           script: |

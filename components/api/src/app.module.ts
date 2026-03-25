@@ -9,10 +9,12 @@ import { MailingController } from '@/controllers/MailingController';
 import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
+import { configSchema as darkiworldConfigSchema } from '@/modules/darkiworld/api';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
 import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
 import { clickupProvider } from '@/providers/clickup';
 import { contextProvider } from '@/providers/context';
+import { darkiworldProvider } from '@/providers/darkiworld';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
 import { jellyfinProvider } from '@/providers/jellyfin';
@@ -41,6 +43,7 @@ export const configSchema = z.object({
   mailing: mailingConfigSchema,
   discord: discordConfigSchema,
   clickup: clickupConfigSchema,
+  darkiworld: darkiworldConfigSchema,
   administration: z.object({
     discordChannelId: z.string(),
     adminIds: z.array(z.string().min(1)).min(1),
@@ -70,6 +73,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
     jellyfin: env.jellyfin,
     discord: env.discord,
     clickup: env.clickup,
+    darkiworld: env.darkiworld,
     administration: {
       adminIds: env.server.adminIds,
       discordChannelId: env.discord.channelId,
@@ -94,6 +98,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       traktPluginProvider,
       discordProvider,
       clickupProvider,
+      darkiworldProvider,
       ...userMessagingProviders,
       allUserMessagingProvider,
       adminMessagingProvider,

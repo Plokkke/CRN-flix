@@ -15,7 +15,6 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "npm run lint -- --fix",
     "start": "nest start --env-file .env",
-    "start:local": "npm run start -- --entryFile local",
     "start:dev": "npm run start -- --watch",
     "start:debug": "npm run start:dev -- --debug",
     "start:prod": "node dist/main",

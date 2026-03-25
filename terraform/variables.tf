@@ -26,10 +26,16 @@ variable "postgres_version" {
   default     = "15-alpine"
 }
 
-variable "api_version" {
-  description = "API version"
-  type        = string
-  default     = "latest"
+variable "versions" {
+  description = "Component versions object for CI-built components"
+  type = object({
+    api       = string
+    migration = string
+  })
+  default = {
+    api       = "latest"
+    migration = "latest"
+  }
 }
 
 variable "api_port" {
