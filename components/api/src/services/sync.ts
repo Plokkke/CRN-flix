@@ -3,6 +3,7 @@ import * as _ from 'lodash';
 import { DateTime } from 'luxon';
 import { z } from 'zod';
 
+import { concurrent } from '@/helpers/concurrent';
 import { DarkiworldService } from '@/modules/darkiworld/service';
 import { JellyfinMedia, JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
@@ -43,33 +44,9 @@ function compositeKey(media: Pick<MediaInfos, 'imdbId' | 'seasonNumber' | 'episo
   return `${media.imdbId}:${media.seasonNumber ?? -1}:${media.episodeNumber ?? -1}`;
 }
 
-// --- Changeset types ---
+const DARKIWORLD_CONCURRENCY = 5;
 
-type RequestToCreate = {
-  mediaInfos: MediaInfos;
-  finalStatus: RequestStatus;
-  darkiworldTitleId: number | null;
-  darkiworldUrl: string | null;
-  requestKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>;
-};
-
-type UserReasonToAdd = {
-  mediaId: string;
-  userId: string;
-  reason: RequestKind;
-};
-
-type UserReasonToRemove = {
-  mediaId: string;
-  userId: string;
-  reason: RequestKind;
-};
-
-type SyncChangeset = {
-  requestsToCreate: RequestToCreate[];
-  userReasonsToAdd: UserReasonToAdd[];
-  userReasonsToRemove: UserReasonToRemove[];
-};
+// --- Per-media types ---
 
 // --- Gather types ---
 
@@ -81,7 +58,7 @@ type DesiredMedia = {
 type GatheredData = {
   jellyfinAssets: Set<MediaCompositeKey>;
   desiredMediaByKey: Record<MediaCompositeKey, DesiredMedia>;
-  syncedKindsByUser: Record<UserEntity['id'], Set<RequestKind>>;
+  syncedKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>;
   mediaRequests: RequestEntity[];
 };
 
@@ -148,19 +125,24 @@ export class SyncService {
     SyncService.logger.log('Starting batch synchronization');
 
     const gathered = await this.gather();
+    const mediaRequestByKey = <Record<MediaCompositeKey, RequestEntity>>_.keyBy(gathered.mediaRequests, (r) => compositeKey(r.media!));
 
-    SyncService.logger.log('Computing changeset');
-    const changeset = await this.compute(gathered);
+    // Existing requests: sync user reasons (synchronous, no API calls)
+    for (const request of gathered.mediaRequests) {
+      const desiredKindsByUserId = gathered.desiredMediaByKey[compositeKey(request.media!)]?.requestKindsByUserId ?? {};
+      await this.syncRequestReasons(request, desiredKindsByUserId, gathered.syncedKindsByUserId);
+    }
 
-    SyncService.logger.log(
-      `Changeset: ${changeset.requestsToCreate.length} new, ` +
-        `${changeset.userReasonsToAdd.length} user adds, ` +
-        `${changeset.userReasonsToRemove.length} user removes`,
+    // New requests: compute + apply concurrently (Darkiworld calls)
+    const newMediaRequests = Object.entries(gathered.desiredMediaByKey).filter(([key]) => !mediaRequestByKey[key]);
+    SyncService.logger.log(`Processing ${newMediaRequests.length} new medias (concurrency: ${DARKIWORLD_CONCURRENCY})`);
+
+    await concurrent(newMediaRequests, DARKIWORLD_CONCURRENCY, ([key, desired]) =>
+      this.processNewRequest(key, desired, gathered.jellyfinAssets),
     );
 
-    await this.apply(changeset);
-
-    for (const [userId, kinds] of Object.entries(gathered.syncedKindsByUser)) {
+    // Update activity timestamps
+    for (const [userId, kinds] of Object.entries(gathered.syncedKindsByUserId)) {
       for (const kind of kinds) {
         await this.userActivitiesRepository.upsert(userId, kind);
       }
@@ -176,7 +158,7 @@ export class SyncService {
 
     SyncService.logger.log('Gathering Trakt activities');
     const desiredMediaByKey: Record<MediaCompositeKey, DesiredMedia> = {};
-    const syncedKindsByUser: GatheredData['syncedKindsByUser'] = {};
+    const syncedKindsByUser: GatheredData['syncedKindsByUserId'] = {};
 
     for (const user of users) {
       syncedKindsByUser[user.id] = await this.getKindsToSync(user);
@@ -213,79 +195,38 @@ export class SyncService {
     const mediaRequests = await this.requestsRepository.listAllWithDetails();
     SyncService.logger.log(`Current requests: ${mediaRequests.length}`);
 
-    return { jellyfinAssets, desiredMediaByKey, syncedKindsByUser, mediaRequests };
+    return { jellyfinAssets, desiredMediaByKey, syncedKindsByUserId: syncedKindsByUser, mediaRequests };
   }
 
-  // --- Phase 2: COMPUTE ---
+  // --- Per-media sync ---
 
-  private async compute({
-    jellyfinAssets,
-    desiredMediaByKey,
-    syncedKindsByUser,
-    mediaRequests,
-  }: GatheredData): Promise<SyncChangeset> {
-    const changeset: SyncChangeset = {
-      requestsToCreate: [],
-      userReasonsToAdd: [],
-      userReasonsToRemove: [],
-    };
-
-    const mediaRequestByKey = <Record<MediaCompositeKey, RequestEntity>>(
-      _.keyBy(mediaRequests, (mediaRequest) => compositeKey(mediaRequest.media!))
-    );
-
-    // Darkiworld cache to avoid duplicate checks
-    const darkiworldCache = new Map<MediaCompositeKey, { titleId: number | null; url: string | null }>();
-
-    // New requests
-    for (const [mediaKey, desiredMedia] of Object.entries(desiredMediaByKey)) {
-      if (!mediaRequestByKey[mediaKey]) {
-        await this.registerNewRequest(changeset, mediaKey, desiredMedia, jellyfinAssets, darkiworldCache);
-      }
-    }
-
-    // Existing requests - diff user associations
-    for (const request of mediaRequests) {
-      const desiredKindsByUserId = desiredMediaByKey[compositeKey(request.media!)]?.requestKindsByUserId ?? {};
-      this.registerRequestReasonChanges(changeset, request, desiredKindsByUserId, syncedKindsByUser);
-    }
-
-    return changeset;
-  }
-
-  private registerRequestReasonChanges(
-    changeset: SyncChangeset,
+  private async syncRequestReasons(
     request: RequestEntity,
     desiredKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>,
-    syncedKindsByUser: Record<UserEntity['id'], Set<RequestKind>>,
-  ): void {
+    syncedKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>,
+  ): Promise<void> {
     const existingReasonsByUserId = new Map(
       (request.userRequests ?? []).map((ur) => [ur.userId, new Set(<RequestKind[]>ur.reasons)]),
     );
 
-    // For each kind being synced of each user
-    for (const [userId, syncedKinds] of Object.entries(syncedKindsByUser)) {
+    for (const [userId, concernedKinds] of Object.entries(syncedKindsByUserId)) {
       const desiredKinds = desiredKindsByUserId[userId] ?? new Set<RequestKind>();
       const existingKinds = existingReasonsByUserId.get(userId) ?? new Set<RequestKind>();
 
-      for (const kind of syncedKinds) {
+      for (const kind of concernedKinds) {
         if (desiredKinds.has(kind) && !existingKinds.has(kind)) {
-          // If the kind is desired but not currently associated, add it
-          changeset.userReasonsToAdd.push({ mediaId: request.mediaId, userId, reason: kind });
+          await this.requestsRepository.setUserRequestReason(request.mediaId, userId, kind);
         } else if (!desiredKinds.has(kind) && existingKinds.has(kind)) {
-          // If the kind is not desired but currently associated, remove it
-          changeset.userReasonsToRemove.push({ mediaId: request.mediaId, userId, reason: kind });
+          await this.requestsRepository.removeUserRequestReason(request.mediaId, userId, kind);
         }
       }
     }
   }
 
-  private async registerNewRequest(
-    changeset: SyncChangeset,
+  private async processNewRequest(
     mediaKey: MediaCompositeKey,
     desiredMedia: DesiredMedia,
     jellyfinAssets: Set<MediaCompositeKey>,
-    darkiworldCache: Map<MediaCompositeKey, { titleId: number | null; url: string | null }>,
   ): Promise<void> {
     let finalStatus: RequestStatus = RequestStatus.Missing;
     let darkiworldTitleId: number | null = null;
@@ -294,77 +235,26 @@ export class SyncService {
     if (jellyfinAssets.has(mediaKey)) {
       finalStatus = RequestStatus.Fulfilled;
     } else {
-      const darkiResult = await this.checkDarkiworld(mediaKey, desiredMedia.mediaInfos, darkiworldCache);
-      darkiworldTitleId = darkiResult.titleId;
-      darkiworldUrl = darkiResult.url;
-      if (darkiResult.url) {
-        finalStatus = RequestStatus.Pending;
+      try {
+        const result = await this.darkiworldService.find(desiredMedia.mediaInfos);
+        darkiworldTitleId = result.title?.id ?? null;
+        darkiworldUrl = result.available ? result.downloadUrl : null;
+        if (darkiworldUrl) {
+          finalStatus = RequestStatus.Pending;
+        }
+      } catch (error) {
+        SyncService.logger.error(
+          `Darkiworld check failed for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId})`,
+          error,
+        );
       }
     }
 
-    changeset.requestsToCreate.push({
-      mediaInfos: desiredMedia.mediaInfos,
-      finalStatus,
-      darkiworldTitleId,
-      darkiworldUrl,
-      requestKindsByUserId: desiredMedia.requestKindsByUserId,
-    });
-  }
+    const media = await this.mediasRepository.create(desiredMedia.mediaInfos);
+    await this.requestsRepository.createWithStatus(media.id, finalStatus, darkiworldTitleId, darkiworldUrl);
 
-  private async checkDarkiworld(
-    mediaKey: MediaCompositeKey,
-    mediaInfos: MediaInfos,
-    cache: Map<MediaCompositeKey, { titleId: number | null; url: string | null }>,
-  ): Promise<{ titleId: number | null; url: string | null }> {
-    const cached = cache.get(mediaKey);
-    if (cached) {
-      return cached;
-    }
-
-    try {
-      const result = await this.darkiworldService.find(mediaInfos);
-      const entry = {
-        titleId: result.title?.id ?? null,
-        url: result.available ? result.downloadUrl : null,
-      };
-      cache.set(mediaKey, entry);
-      return entry;
-    } catch (error) {
-      SyncService.logger.error(`Darkiworld check failed for "${mediaInfos.title}" (${mediaInfos.imdbId})`, error);
-      const entry = { titleId: null, url: null };
-      cache.set(mediaKey, entry);
-      return entry;
-    }
-  }
-
-  // --- Phase 3: APPLY ---
-
-  private async apply(changeset: SyncChangeset): Promise<void> {
-    SyncService.logger.log('Applying changeset');
-
-    // Create new requests with final status
-    for (const req of changeset.requestsToCreate) {
-      const media = await this.mediasRepository.create(req.mediaInfos);
-      await this.requestsRepository.createWithStatus(
-        media.id,
-        req.finalStatus,
-        req.darkiworldTitleId,
-        req.darkiworldUrl,
-      );
-
-      for (const [userId, reasons] of Object.entries(req.requestKindsByUserId)) {
-        await this.requestsRepository.setUserRequestReasons(media.id, userId, reasons);
-      }
-    }
-
-    // Add user reasons to existing requests
-    for (const add of changeset.userReasonsToAdd) {
-      await this.requestsRepository.setUserRequestReason(add.mediaId, add.userId, add.reason);
-    }
-
-    // Remove user reasons from existing requests
-    for (const remove of changeset.userReasonsToRemove) {
-      await this.requestsRepository.removeUserRequestReason(remove.mediaId, remove.userId, remove.reason);
+    for (const [userId, reasons] of Object.entries(desiredMedia.requestKindsByUserId)) {
+      await this.requestsRepository.setUserRequestReasons(media.id, userId, reasons);
     }
   }
 
