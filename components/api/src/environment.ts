@@ -22,7 +22,6 @@ export const environmentVariablesSchema = z
     DATABASE_NAME: z.string(),
     DATABASE_USERNAME: z.string(),
     DATABASE_PASSWORD: z.string(),
-    SYNC_CRON: z.string(),
     CLICKUP_API_TOKEN: z.string(),
     CLICKUP_TEAM_ID: z.string(),
     CLICKUP_LIST_ID: z.string(),
@@ -31,7 +30,6 @@ export const environmentVariablesSchema = z
   })
   .transform((env) => ({
     name: env.SERVICE_NAME,
-    syncCron: env.SYNC_CRON,
     server: {
       url: env.SERVER_URL,
       port: env.PORT,

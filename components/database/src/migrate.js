@@ -2,135 +2,156 @@
 
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { createHash } = require('crypto');
 const path = require('path');
 const fs = require('fs');
 
 const execAsync = promisify(exec);
 
-// Wait for database to be ready
+const MIGRATIONS_TABLE = '_migrations';
+const SCRIPTS_DIR = path.join(__dirname, 'scripts');
+
+function psqlCommand(sql) {
+  const oneLine = sql.split('\n').map(l => l.trim()).join(' ');
+  return execAsync(`psql "${process.env.DATABASE_URL}" -tAc ${JSON.stringify(oneLine)}`);
+}
+
+function psqlFile(filePath) {
+  return execAsync(`psql "${process.env.DATABASE_URL}" -f "${filePath}"`);
+}
+
+function fileHash(filePath) {
+  const content = fs.readFileSync(filePath);
+  return createHash('sha256').update(content).digest('hex');
+}
+
 async function waitForDatabase() {
   const maxAttempts = 30;
-  let attempts = 0;
-  
-  console.log('🔍 Waiting for database to be ready...');
-  
-  while (attempts < maxAttempts) {
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       await execAsync(`pg_isready -h ${process.env.DATABASE_HOST} -p ${process.env.DATABASE_PORT} -U ${process.env.DATABASE_USER}`);
-      console.log('✅ Database is ready!');
+      console.log('Database is ready');
       return;
-    } catch (error) {
-      attempts++;
-      console.log(`❌ Database not ready (attempt ${attempts}/${maxAttempts})`);
+    } catch {
+      console.log(`Database not ready (attempt ${attempt}/${maxAttempts})`);
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
-  
+
   throw new Error('Database did not become ready in time');
 }
 
-// Run SQL migrations
-async function runSQLMigrations() {
-  console.log('🚀 Running SQL migrations...');
-  
-  const migrationsDir = path.join(__dirname, 'scripts');
-  
-  if (!fs.existsSync(migrationsDir)) {
-    console.log('📁 No migrations directory found, skipping SQL migrations');
-    return;
+async function ensureMigrationsTable() {
+  await psqlCommand(`
+    CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (
+      id SERIAL PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      hash TEXT NOT NULL,
+      duration_ms INTEGER NOT NULL,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+async function getAppliedMigrations() {
+  const { stdout } = await psqlCommand(`SELECT name, hash FROM ${MIGRATIONS_TABLE} ORDER BY name`);
+  const applied = new Map();
+  for (const line of stdout.trim().split('\n')) {
+    if (!line) continue;
+    const [name, hash] = line.split('|');
+    applied.set(name, hash);
   }
-  
-  try {
-    const files = fs.readdirSync(migrationsDir)
-      .filter(file => file.endsWith('.sql'))
-      .sort(); // Natural sort: 00001_initial.sql, 00002_triggers.sql, etc.
-    
-    for (const file of files) {
-      console.log(`🔧 Running migration: ${file}`);
-      const migrationPath = path.join(migrationsDir, file);
-      
-      try {
-        const { stdout } = await execAsync(`psql "${process.env.DATABASE_URL}" -f "${migrationPath}"`);
-        console.log(stdout);
-        console.log(`✅ Migration ${file} completed`);
-      } catch (error) {
-        console.error(`❌ Migration ${file} failed:`, error.message);
-        throw error;
-      }
-    }
-  } catch (error) {
-    console.error('❌ SQL migrations failed:', error.message);
-    throw error;
+  return applied;
+}
+
+async function recordMigration(name, hash, durationMs) {
+  await psqlCommand(`INSERT INTO ${MIGRATIONS_TABLE} (name, hash, duration_ms) VALUES ('${name}', '${hash}', ${durationMs})`);
+}
+
+async function runSQLFile(filePath) {
+  const { stdout } = await psqlFile(filePath);
+  if (stdout) console.log(stdout);
+}
+
+async function runJSFile(filePath) {
+  const script = require(filePath);
+  if (typeof script === 'function') {
+    await script();
+  } else if (script.default && typeof script.default === 'function') {
+    await script.default();
   }
 }
 
-// Run custom scripts in order
-async function runCustomScripts() {
-  const migrationsDir = path.join(__dirname, 'scripts');
-  
-  if (!fs.existsSync(migrationsDir)) {
-    console.log('📁 No migrations directory found, skipping custom scripts');
+async function runMigrations() {
+  if (!fs.existsSync(SCRIPTS_DIR)) {
+    console.log('No scripts directory found, nothing to migrate');
     return;
   }
-  
-  console.log('📜 Running custom scripts...');
-  
-  try {
-    const files = fs.readdirSync(migrationsDir)
-      .filter(file => file.endsWith('.js'))
-      .sort(); // This will sort naturally: 00001_script.js, 00002_script.js, etc.
-    
-    for (const file of files) {
-      console.log(`🔧 Running script: ${file}`);
-      const scriptPath = path.join(migrationsDir, file);
-      
-      try {
-        // Import and execute the script
-        const script = require(scriptPath);
-        if (typeof script === 'function') {
-          await script();
-        } else if (script.default && typeof script.default === 'function') {
-          await script.default();
-        }
-        console.log(`✅ Script ${file} completed`);
-      } catch (error) {
-        console.error(`❌ Script ${file} failed:`, error.message);
-        throw error;
+
+  const applied = await getAppliedMigrations();
+
+  const files = fs.readdirSync(SCRIPTS_DIR)
+    .filter(file => file.endsWith('.sql') || file.endsWith('.js'))
+    .sort();
+
+  const lastApplied = [...applied.keys()].sort().at(-1);
+  let appliedCount = 0;
+
+  for (const file of files) {
+    const filePath = path.join(SCRIPTS_DIR, file);
+    const hash = fileHash(filePath);
+
+    if (applied.has(file)) {
+      const appliedHash = applied.get(file);
+      if (appliedHash !== hash) {
+        throw new Error(`Migration ${file} was modified after being applied (expected hash ${appliedHash}, got ${hash})`);
       }
+      console.log(`Skipping ${file} (already applied)`);
+      continue;
     }
-  } catch (error) {
-    console.error('❌ Custom scripts failed:', error.message);
-    throw error;
+
+    if (lastApplied && file < lastApplied) {
+      throw new Error(`Migration ${file} sorts before already applied migration ${lastApplied}. Cannot insert a migration out of order.`);
+    }
+
+    console.log(`Applying ${file}...`);
+    const start = Date.now();
+
+    if (file.endsWith('.sql')) {
+      await runSQLFile(filePath);
+    } else {
+      await runJSFile(filePath);
+    }
+
+    const durationMs = Date.now() - start;
+    await recordMigration(file, hash, durationMs);
+    console.log(`Applied ${file} (${durationMs}ms)`);
+    appliedCount++;
+  }
+
+  if (appliedCount === 0) {
+    console.log('No new migrations to apply');
+  } else {
+    console.log(`${appliedCount} migration(s) applied`);
   }
 }
 
-// Main migration function
 async function migrate() {
   try {
-    console.log('🎯 Starting migration process...');
-
+    console.log('Starting migration process...');
     await waitForDatabase();
-    await runSQLMigrations();
-    await runCustomScripts();
-
-    console.log('🎉 Migration process completed successfully!');
+    await ensureMigrationsTable();
+    await runMigrations();
+    console.log('Migration process completed successfully');
     process.exit(0);
   } catch (error) {
-    console.error('💥 Migration process failed:', error);
+    console.error('Migration process failed:', error);
     process.exit(1);
   }
 }
 
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('📛 Received SIGTERM, shutting down gracefully');
-  process.exit(0);
-});
+process.on('SIGTERM', () => process.exit(0));
+process.on('SIGINT', () => process.exit(0));
 
-process.on('SIGINT', () => {
-  console.log('📛 Received SIGINT, shutting down gracefully');
-  process.exit(0);
-});
-
-// Run migration
 migrate();

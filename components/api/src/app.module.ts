@@ -50,7 +50,6 @@ export const configSchema = z.object({
     discordChannelId: z.string(),
     adminIds: z.array(z.string().min(1)).min(1),
   }),
-  syncCron: z.string(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -58,7 +57,6 @@ export type Config = z.infer<typeof configSchema>;
 export function loadConfig(env: EnvironmentVariables): Config {
   return configSchema.parse({
     name: env.name,
-    syncCron: env.syncCron,
     server: {
       url: env.server.url,
     },

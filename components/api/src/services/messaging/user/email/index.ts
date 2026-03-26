@@ -113,30 +113,16 @@ export class EmailUserMessaging extends UserMessaging<string> implements OnModul
   private async sendRequestUpdateEmail(email: string, requests: RequestEntity[]): Promise<void> {
     try {
       EmailUserMessaging.logger.log(`Sending email to ${email} for media request update`);
-      // await this.transporter.sendMail({
-      //   from: this.from,
-      //   to: email,
-      //   ...requestUpdateTemplate({
-      //     serviceName: this.contextService.name,
-      //     mediaServerUrl: this.contextService.mediaServerUrl,
-      //     requests,
-      //     posterUrlByImdbId: {}, // TODO get jellyfin item
-      //   }),
-      // });
-      console.log('--- Email content ---');
-      console.log(
-        JSON.stringify(
-          requestUpdateTemplate({
-            serviceName: this.contextService.name,
-            mediaServerUrl: this.contextService.mediaServerUrl,
-            requests,
-            posterUrlByImdbId: {}, // TODO get jellyfin item
-          }).text,
-          null,
-          2,
-        ),
-      );
-      console.log('--- End of email content ---');
+      await this.transporter.sendMail({
+        from: this.from,
+        to: email,
+        ...requestUpdateTemplate({
+          serviceName: this.contextService.name,
+          mediaServerUrl: this.contextService.mediaServerUrl,
+          requests,
+          posterUrlByImdbId: {}, // TODO get jellyfin item
+        }),
+      });
       EmailUserMessaging.logger.log(`Request update email sent successfully to ${email}`);
     } catch (error) {
       EmailUserMessaging.logger.error(`Failed to send request update email to ${email}`, error);
