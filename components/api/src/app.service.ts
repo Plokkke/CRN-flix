@@ -9,16 +9,17 @@ import {
   RequestCreatedEvent,
   RequestEvents,
   RequestsRepository,
+  RequestStatus,
   RequestStatusChangedEvent,
   UserJoinedRequestEvent,
   UserLeftRequestEvent,
 } from '@/services/database/requests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
 import {
+  AdminEvents,
   AdminUserAcceptedEvent,
   AdminUserRejectedEvent,
   DiscordAdminMessaging,
-  AdminEvents,
 } from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { SyncService } from '@/services/sync';
@@ -85,7 +86,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       created: (event: RequestCreatedEvent) =>
         this.trackEvent(async () => {
           const request = await this.requestsRepository.get(event.requestId);
-          if (!request || request.taskId) {
+          if (!request || request.taskId || request.status === RequestStatus.Fulfilled) {
             return;
           }
 
@@ -105,11 +106,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             const user = await this.usersRepository.get(userId);
             if (user) {
               const userCtxt = { key: user.messagingKey, id: user.messagingId };
-              try {
-                await this.messaging.requestUpdated(userCtxt, request);
-              } catch (error) {
-                AppService.logger.error(`Failed to send notification to user ${user.name}`, error);
-              }
+              await this.messaging.requestUpdated(userCtxt, request);
             }
           }
         }),
@@ -121,18 +118,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          // Do we update the user list ?
-          // await this.requestsTicketings.updateTaskUsers(request);
-
-          if (request.userRequests?.length !== 1) {
-            try {
-              await this.messaging.requestUpdated({ key: user.messagingKey, id: user.messagingId }, request);
-            } catch (error) {
-              AppService.logger.error(`Failed to send notification to user ${user.name}`, error);
-            }
-          } else if (request.status === 'canceled') {
-            await this.requestsRepository.updateStatus(request.mediaId, 'pending');
-          }
+          await this.messaging.requestUpdated({ key: user.messagingKey, id: user.messagingId }, request);
         }),
       userLeft: (event: UserLeftRequestEvent) =>
         this.trackEvent(async () => {
@@ -141,13 +127,9 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          // Do we update the user list ?
-          // await this.requestsTicketings.updateTaskUsers(request);
-
           if (request.userRequests?.length === 0) {
-            if (request.status === 'pending' || request.status === 'fulfilled') {
-              await this.requestsRepository.updateStatus(request.mediaId, 'canceled');
-            }
+            await this.requestsTicketings.deleteTask(request);
+            await this.requestsRepository.removeRequest(request.mediaId);
           }
         }),
     });

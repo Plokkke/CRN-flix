@@ -131,6 +131,22 @@ export class ClickUpService {
     }
   }
 
+  async deleteTask(taskId: string): Promise<void> {
+    try {
+      ClickUpService.logger.debug(`Deleting ClickUp task ${taskId}`);
+      await this.api.delete(`/v2/task/${taskId}`, {
+        params: { team_id: this.config.teamId },
+      });
+    } catch (error) {
+      ClickUpService.logger.error(`Failed to delete ClickUp task ${taskId}`, {
+        taskId,
+        teamId: this.config.teamId,
+        error: error instanceof Error ? error.message : error,
+      });
+      throw error;
+    }
+  }
+
   async updateTaskDescription(taskId: string, description: string): Promise<void> {
     try {
       ClickUpService.logger.debug(`Updating ClickUp task ${taskId} description`);

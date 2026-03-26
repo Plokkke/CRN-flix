@@ -8,7 +8,8 @@ export const darkiworldProvider = {
   provide: DarkiworldService,
   inject: [ConfigService],
   useFactory: (configService: ConfigService<Config, true>): DarkiworldService => {
-    const api = new DarkiworldApi(configService.get('darkiworld'));
-    return new DarkiworldService(api);
+    const config = configService.get('darkiworld');
+    const api = new DarkiworldApi(config);
+    return new DarkiworldService(api, config.host);
   },
 };

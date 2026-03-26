@@ -1,6 +1,5 @@
 import { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { ZodSchema } from 'zod';
-import { ZodTypeDef } from 'zod/lib/types';
+import { z } from 'zod';
 
 export function truthy<T>(value: T): value is NonNullable<T> {
   return value !== null && value !== undefined;
@@ -19,22 +18,22 @@ export async function request(instance: AxiosInstance, config: AxiosRequestConfi
 export async function request<I>(
   instance: AxiosInstance,
   config: AxiosRequestConfig,
-  schemas: { in: ZodSchema<I>; out: never },
+  schemas: { in: z.ZodType<I>; out: never },
 ): Promise<unknown>;
 export async function request<O>(
   instance: AxiosInstance,
   config: AxiosRequestConfig,
-  schemas: { in: never; out: ZodSchema<O> },
+  schemas: { in: never; out: z.ZodType<O> },
 ): Promise<O>;
 export async function request<I, O>(
   instance: AxiosInstance,
   config: AxiosRequestConfig,
-  schemas: { in: ZodSchema<I>; out: ZodSchema<O> },
+  schemas: { in: z.ZodType<I>; out: z.ZodType<O> },
 ): Promise<O>;
 export async function request<I = unknown, O = unknown>(
   instance: AxiosInstance,
   config: AxiosRequestConfig,
-  schemas?: { in?: ZodSchema<unknown, ZodTypeDef, I>; out?: ZodSchema<O, ZodTypeDef, unknown> },
+  schemas?: { in?: z.ZodType<I>; out?: z.ZodType<O> },
 ): Promise<O | unknown> {
   if (schemas?.in) {
     config.data = schemas.in.parse(config.data);

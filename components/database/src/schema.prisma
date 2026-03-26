@@ -55,11 +55,13 @@ model Media {
 }
 
 model MediaRequest {
-  mediaId   String              @id @map("media_id") @db.Uuid
-  status    MediaRequestStatus  @default(pending)
-  threadId  String?             @map("thread_id") @db.VarChar(50)
-  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  mediaId            String              @id @map("media_id") @db.Uuid
+  status             MediaRequestStatus  @default(missing)
+  threadId           String?             @map("thread_id") @db.VarChar(50)
+  darkiworldTitleId  Int?                @map("darkiworld_title_id")
+  darkiworldUrl      String?             @map("darkiworld_url")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   media         Media           @relation(fields: [mediaId], references: [id], onDelete: Cascade)
   requestUsers  RequestUser[]

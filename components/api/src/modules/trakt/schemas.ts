@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 import { isoDateSchema } from '@/schemas';
 
-import { ACTIVITY_TYPES, MEDIA_TYPES } from './constants';
+import { ActivityType, TraktMediaType } from './constants';
 
-export const mediaTypeSchema = z.enum(MEDIA_TYPES);
+export const mediaTypeSchema = z.enum(TraktMediaType);
 
 export const mediaIdsSchema = z.object({
   trakt: z.number().int(),
@@ -219,7 +219,7 @@ export const deviceTokenSchema = z.object({
   refresh_token: z.string(),
 });
 
-export const activityTypeSchema = z.enum(ACTIVITY_TYPES);
+export const activityTypeSchema = z.enum(ActivityType);
 
 export const lastActivitiesSchema = z.object({
   all: isoDateSchema,

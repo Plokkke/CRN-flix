@@ -10,7 +10,7 @@ export const configSchema = z.object({
   host: z.string(),
 });
 
-type DarkiworldConfig = z.infer<typeof configSchema>;
+export type DarkiworldConfig = z.infer<typeof configSchema>;
 
 export class DarkiworldApi {
   private static readonly logger = new Logger(DarkiworldApi.name);

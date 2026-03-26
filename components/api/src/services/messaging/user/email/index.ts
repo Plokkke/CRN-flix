@@ -18,7 +18,12 @@ export const configSchema = z.object({
 
 export type Config = z.infer<typeof configSchema>;
 
-const ALLOWED_STATUS_UPDATE: RequestStatus[] = ['pending', 'fulfilled', 'missing', 'rejected'];
+const ALLOWED_STATUS_UPDATE: RequestStatus[] = [
+  RequestStatus.Pending,
+  RequestStatus.Fulfilled,
+  RequestStatus.Missing,
+  RequestStatus.Rejected,
+];
 
 export class EmailUserMessaging extends UserMessaging<string> implements OnModuleDestroy {
   private static logger = new Logger(EmailUserMessaging.name);

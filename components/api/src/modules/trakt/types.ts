@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { MEDIA_CATEGORIES, MEDIA_TYPES } from './constants';
+import { TraktMediaCategory, TraktMediaType } from './constants';
 import {
   authDeviceCtxtSchema,
   authDevicePublicCtxtSchema,
@@ -21,7 +21,6 @@ import {
   userSettingsSchema,
   watchedShowSchema,
   lastActivitiesSchema,
-  activityTypeSchema,
 } from './schemas';
 
 export type Movie = z.infer<typeof movieSchema>;
@@ -36,8 +35,8 @@ export type MediaDetails = z.infer<typeof mediaDetailsSchema>;
 export type WantedMedia = { media: Media; userIds: string[] };
 export type ReleasedMedia = z.infer<typeof releasedMediaSchema>;
 
-export type MediaType = (typeof MEDIA_TYPES)[number];
-export type MediaCategory = (typeof MEDIA_CATEGORIES)[number];
+export type MediaType = TraktMediaType;
+export type MediaCategory = TraktMediaCategory;
 
 export type UserAuthCtxt = z.infer<typeof userAuthContextSchema>;
 export type AuthDeviceCtxt = z.infer<typeof authDeviceCtxtSchema>;
@@ -48,5 +47,5 @@ export type HiddenShow = z.infer<typeof hiddenShowSchema>;
 export type ProgressShowNoDetails = z.infer<typeof progressShowSchema>;
 export type ProgressShow = ProgressShowNoDetails & { show: Show };
 export type DeviceToken = z.infer<typeof deviceTokenSchema>;
-export type ActivityType = z.infer<typeof activityTypeSchema>;
+export type { ActivityType } from './constants';
 export type LastActivities = z.infer<typeof lastActivitiesSchema>;

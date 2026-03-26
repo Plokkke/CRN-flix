@@ -1,16 +1,20 @@
 import { Logger, OnModuleInit } from '@nestjs/common';
 import { Pool } from 'pg';
-import { z, ZodSchema, ZodTypeDef } from 'zod';
+import { z } from 'zod';
 
 import { Emitter } from '@/helpers/events';
 import { listen } from '@/helpers/sql';
-import { isSameMedia, MediaEntity, MediaInfos, MediasRepository } from '@/services/database/medias';
+import { MediaEntity } from '@/services/database/medias';
 import { UserEntity } from '@/services/database/users';
-import { RequestKind } from '@/services/sync';
+import { RequestKind } from '../sync';
 
-export const REQUEST_STATUS = ['pending', 'fulfilled', 'missing', 'rejected', 'canceled'] as const;
-export const requestStatusSchema = z.enum(REQUEST_STATUS);
-export type RequestStatus = z.infer<typeof requestStatusSchema>;
+export enum RequestStatus {
+  Pending = 'pending',
+  Fulfilled = 'fulfilled',
+  Missing = 'missing',
+  Rejected = 'rejected',
+}
+export const requestStatusSchema = z.enum(RequestStatus);
 
 export type RequestEntity = {
   mediaId: string;
@@ -18,6 +22,8 @@ export type RequestEntity = {
   createdAt: Date;
   updatedAt: Date;
   taskId: string | null;
+  darkiworldTitleId: number | null;
+  darkiworldUrl: string | null;
   media?: MediaEntity;
   userRequests?: RequestUserEntity[];
 };
@@ -35,6 +41,8 @@ type RequestRecord = {
   media_id: string;
   status: RequestStatus;
   thread_id: string | null;
+  darkiworld_title_id: number | null;
+  darkiworld_url: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -52,6 +60,8 @@ function fromRequestRecord(record: RequestRecord): RequestEntity {
     mediaId: record.media_id,
     status: record.status,
     taskId: record.thread_id,
+    darkiworldTitleId: record.darkiworld_title_id,
+    darkiworldUrl: record.darkiworld_url,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -105,7 +115,7 @@ export type RequestEvents = {
 
 const LISTENING_MAP: {
   channel: string;
-  schema: ZodSchema<RequestEvents[keyof RequestEvents], ZodTypeDef, string>;
+  schema: z.ZodType<RequestEvents[keyof RequestEvents]>;
   event: keyof RequestEvents;
 }[] = [
   {
@@ -135,7 +145,6 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
 
   constructor(
     private readonly pool: Pool,
-    private readonly mediasRepository: MediasRepository,
   ) {
     super();
   }
@@ -166,65 +175,6 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return fromRequestRecord(rows[0]);
   }
 
-  async listByUserAndKind(userId: string, kind: RequestKind): Promise<RequestEntity[]> {
-    const query = `
-            SELECT 
-                json_build_object(
-                    'mediaId', request.media_id,
-                    'status', request.status,
-                    'threadId', request.thread_id,
-                    'createdAt', request.created_at,
-                    'updatedAt', request.updated_at,
-                    'media', json_build_object(
-                        'id', media.id,
-                        'imdbId', media.imdb_id,
-                        'type', media.type,
-                        'title', media.title,
-                        'year', media.year,
-                        'seasonNumber', media.season_number,
-                        'episodeNumber', media.episode_number,
-                        'createdAt', media.created_at,
-                        'updatedAt', media.updated_at
-                    ),
-                    'userRequests', (
-                        SELECT json_agg(
-                            json_build_object(
-                                'requestId', ru.request_media_id,
-                                'userId', ru.user_id,
-                                'reasons', ru.reasons,
-                                'createdAt', ru.created_at,
-                                'updatedAt', ru.updated_at,
-                                'user', json_build_object(
-                                    'id', u.id,
-                                    'name', u.name,
-                                    'jellyfinId', u.jellyfin_id,
-                                    'messagingKey', u.messaging_key,
-                                    'messagingId', u.messaging_id,
-                                    'approvalMessageId', u.approval_message_id,
-                                    'createdAt', u.created_at,
-                                    'updatedAt', u.updated_at
-                                )
-                            )
-                        )
-                        FROM request_users ru
-                        LEFT JOIN users u ON u.id = ru.user_id
-                        WHERE ru.request_media_id = request.media_id
-                    )
-                ) as request
-            FROM media_requests request
-            JOIN medias media ON media.id = request.media_id
-            LEFT JOIN request_users ru ON ru.request_media_id = request.media_id
-            LEFT JOIN users u ON u.id = ru.user_id
-            WHERE u.id = $1 AND array_position(ru.reasons, $2) IS NOT NULL
-            GROUP BY request.media_id, request.status, request.thread_id, request.created_at, request.updated_at,
-            media.id, media.imdb_id, media.type, media.title, media.year, media.season_number, media.episode_number,
-            media.created_at, media.updated_at
-            ORDER BY request.created_at DESC
-    `;
-    const { rows } = await this.pool.query<{ request: RequestEntity }>(query, [userId, kind]);
-    return rows.map((row) => row.request);
-  }
-
   async get(id: string): Promise<RequestEntity | null> {
     const query = `
             SELECT 
@@ -232,6 +182,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                     'mediaId', request.media_id,
                     'status', request.status,
                     'taskId', request.thread_id,
+                    'darkiworldTitleId', request.darkiworld_title_id,
+                    'darkiworldUrl', request.darkiworld_url,
                     'createdAt', request.created_at,
                     'updatedAt', request.updated_at,
                     'media', json_build_object(
@@ -307,19 +259,6 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows.map(fromRequestUserRecord);
   }
 
-  async createUserRequest(mediaInfos: MediaInfos, userId: string, reason: string): Promise<RequestUserEntity> {
-    const mediaEntity = await this.mediasRepository.create(mediaInfos);
-
-    // Check if request already exists
-    let request = await this.getByMediaId(mediaEntity.id);
-
-    if (!request) {
-      request = await this.create(mediaEntity.id);
-    }
-
-    return this.setUserRequestReason(request.mediaId, userId, reason);
-  }
-
   async getByMediaId(mediaId: string): Promise<RequestEntity | null> {
     const query = `
       SELECT * FROM media_requests
@@ -329,7 +268,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows.length > 0 ? fromRequestRecord(rows[0]) : null;
   }
 
-  async setUserRequestReason(mediaId: string, userId: string, reason: string): Promise<RequestUserEntity> {
+  async setUserRequestReason(mediaId: string, userId: string, reason: RequestKind): Promise<RequestUserEntity> {
     const query = `
       INSERT INTO request_users (request_media_id, user_id, reasons)
       VALUES ($1, $2, ARRAY[$3]::VARCHAR(64)[]) -- Initialize reasons with the new reason as a single-element array
@@ -343,14 +282,14 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return fromRequestUserRecord(rows[0]);
   }
 
-  async setUserRequestReasons(mediaId: string, userId: string, reasons: string[]): Promise<RequestUserEntity> {
+  async setUserRequestReasons(mediaId: string, userId: string, reasons: Set<RequestKind>): Promise<RequestUserEntity> {
     const query = `
       UPDATE request_users
       SET reasons = $3
       WHERE request_media_id = $1 AND user_id = $2
       RETURNING *
     `;
-    const { rows } = await this.pool.query<RequestUserRecord>(query, [mediaId, userId, reasons]);
+    const { rows } = await this.pool.query<RequestUserRecord>(query, [mediaId, userId, Array.from(reasons)]);
     return fromRequestUserRecord(rows[0]);
   }
 
@@ -362,41 +301,92 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     await this.pool.query(query, [mediaId, userId]);
   }
 
-  async dropByUserAndKind(userId: string, kind: RequestKind, requests: RequestEntity[]): Promise<void> {
-    for (const request of requests) {
-      const reqUser = request.userRequests?.find((ru) => ru.userId === userId);
-      if (reqUser) {
-        reqUser.reasons = reqUser.reasons.filter((r) => r !== kind);
-        // Keep due to other reasons
-        if (reqUser.reasons.length) {
-          await this.setUserRequestReasons(request.mediaId, userId, reqUser.reasons);
-        } else {
-          await this.removeUserRequest(request.mediaId, userId);
-          // If no more users drop media_requests
-          if (request.userRequests?.length === 1) {
-            await this.removeRequest(request.mediaId);
-          }
-        }
-      }
-    }
+  async removeUserRequestReason(mediaId: string, userId: string, reason: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE request_users SET reasons = array_remove(reasons, $3)
+       WHERE request_media_id = $1 AND user_id = $2`,
+      [mediaId, userId, reason],
+    );
+    await this.pool.query(
+      `DELETE FROM request_users
+       WHERE request_media_id = $1 AND user_id = $2 AND array_length(reasons, 1) IS NULL`,
+      [mediaId, userId],
+    );
   }
 
-  async syncMediasForUserAndKind(user: UserEntity, kind: RequestKind, medias: MediaInfos[]): Promise<void> {
-    const requests = await this.listByUserAndKind(user.id, kind);
-
-    const newMedias = medias.filter((media) => !requests.some((request) => isSameMedia(request.media!, media)));
-    const extraMedias = requests.filter((request) => !medias.some((media) => isSameMedia(request.media!, media)));
-
-    RequestsRepository.logger.log(`Syncing user(${user.name}) requests for kind:${kind}`);
-    RequestsRepository.logger.log(`Target requests: ${medias.length}`);
-    RequestsRepository.logger.log(`Existing requests: ${requests.length}`);
-    RequestsRepository.logger.log(`New: ${newMedias.length}, Extra: ${extraMedias.length}`);
-
-    for (const media of newMedias) {
-      await this.createUserRequest(media, user.id, kind);
+  async createWithStatus(
+    mediaId: string,
+    status: RequestStatus,
+    darkiworldTitleId: number | null,
+    darkiworldUrl: string | null,
+  ): Promise<RequestEntity> {
+    const query = `
+      INSERT INTO media_requests (media_id, status, darkiworld_title_id, darkiworld_url)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (media_id) DO NOTHING
+      RETURNING *
+    `;
+    const { rows } = await this.pool.query<RequestRecord>(query, [mediaId, status, darkiworldTitleId, darkiworldUrl]);
+    if (!rows.length) {
+      return (await this.get(mediaId))!;
     }
+    return fromRequestRecord(rows[0]);
+  }
 
-    await this.dropByUserAndKind(user.id, kind, extraMedias);
+  async listAllWithDetails(): Promise<RequestEntity[]> {
+    const query = `
+      SELECT
+        json_build_object(
+          'mediaId', request.media_id,
+          'status', request.status,
+          'taskId', request.thread_id,
+          'darkiworldTitleId', request.darkiworld_title_id,
+          'darkiworldUrl', request.darkiworld_url,
+          'createdAt', request.created_at,
+          'updatedAt', request.updated_at,
+          'media', json_build_object(
+            'id', media.id,
+            'imdbId', media.imdb_id,
+            'type', media.type,
+            'title', media.title,
+            'year', media.year,
+            'seasonNumber', media.season_number,
+            'episodeNumber', media.episode_number,
+            'createdAt', media.created_at,
+            'updatedAt', media.updated_at
+          ),
+          'userRequests', (
+            SELECT COALESCE(json_agg(
+              json_build_object(
+                'requestId', ru.request_media_id,
+                'userId', ru.user_id,
+                'reasons', ru.reasons,
+                'createdAt', ru.created_at,
+                'updatedAt', ru.updated_at,
+                'user', json_build_object(
+                  'id', u.id,
+                  'name', u.name,
+                  'jellyfinId', u.jellyfin_id,
+                  'messagingKey', u.messaging_key,
+                  'messagingId', u.messaging_id,
+                  'approvalMessageId', u.approval_message_id,
+                  'createdAt', u.created_at,
+                  'updatedAt', u.updated_at
+                )
+              ) ORDER BY ru.created_at DESC
+            ), '[]'::json)
+            FROM request_users ru
+            LEFT JOIN users u ON u.id = ru.user_id
+            WHERE ru.request_media_id = request.media_id
+          )
+        ) as request
+      FROM media_requests request
+      JOIN medias media ON media.id = request.media_id
+      WHERE request.status NOT IN ('rejected')
+      ORDER BY request.created_at DESC
+    `;
+    const { rows } = await this.pool.query<{ request: RequestEntity }>(query);
+    return rows.map((row) => row.request);
   }
 
   async attachTask(mediaId: string, taskId: string): Promise<void> {
@@ -451,7 +441,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       LEFT JOIN request_users ru ON mr.media_id = ru.request_media_id
       LEFT JOIN users u ON ru.user_id = u.id
       WHERE mr.thread_id IS NULL
-      GROUP BY mr.media_id, mr.status, mr.thread_id, mr.created_at, mr.updated_at,
+      GROUP BY mr.media_id, mr.status, mr.thread_id, mr.darkiworld_title_id, mr.darkiworld_url, mr.created_at, mr.updated_at,
                m.id, m.imdb_id, m.type, m.title, m.year, m.season_number, m.episode_number, m.created_at, m.updated_at
       ORDER BY mr.created_at DESC
     `;
@@ -462,6 +452,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       mediaId: row.media_id,
       status: row.status,
       taskId: row.thread_id,
+      darkiworldTitleId: row.darkiworld_title_id,
+      darkiworldUrl: row.darkiworld_url,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       media: {
@@ -477,5 +469,46 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       },
       userRequests: row.user_requests || [],
     }));
+  }
+
+  async setDarkiworldInfo(mediaId: string, titleId: number, url: string | null): Promise<void> {
+    const query = `
+      UPDATE media_requests
+      SET darkiworld_title_id = $2, darkiworld_url = $3
+      WHERE media_id = $1
+    `;
+    await this.pool.query(query, [mediaId, titleId, url]);
+  }
+
+  async listByStatuses(statuses: RequestStatus[]): Promise<RequestEntity[]> {
+    const query = `
+      SELECT
+        json_build_object(
+          'mediaId', request.media_id,
+          'status', request.status,
+          'taskId', request.thread_id,
+          'darkiworldTitleId', request.darkiworld_title_id,
+          'darkiworldUrl', request.darkiworld_url,
+          'createdAt', request.created_at,
+          'updatedAt', request.updated_at,
+          'media', json_build_object(
+            'id', media.id,
+            'imdbId', media.imdb_id,
+            'type', media.type,
+            'title', media.title,
+            'year', media.year,
+            'seasonNumber', media.season_number,
+            'episodeNumber', media.episode_number,
+            'createdAt', media.created_at,
+            'updatedAt', media.updated_at
+          )
+        ) as request
+      FROM media_requests request
+      JOIN medias media ON media.id = request.media_id
+      WHERE request.status = ANY($1)
+      ORDER BY request.created_at DESC
+    `;
+    const { rows } = await this.pool.query<{ request: RequestEntity }>(query, [statuses]);
+    return rows.map((row) => row.request);
   }
 }

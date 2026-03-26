@@ -18,25 +18,37 @@ function normalize(str: string): string {
     .replace(/[^a-z0-9]/g, '');
 }
 
+function buildFiltersBase64(quality: number): string {
+  const filters = [
+    { key: 'id_host', value: HOST_1FICHIER, valueKey: HOST_1FICHIER, isInactive: false },
+    { key: 'qualite', value: quality, isInactive: false, operator: '=', valueKey: quality },
+    { key: 'langues', value: LANG_TRUEFRENCH, isInactive: false, operator: 'has', valueKey: LANG_TRUEFRENCH },
+  ];
+  return Buffer.from(JSON.stringify(filters)).toString('base64');
+}
+
 export class DarkiworldService {
   private static readonly logger = new Logger(DarkiworldService.name);
 
-  constructor(private readonly api: DarkiworldApi) {}
+  constructor(
+    private readonly api: DarkiworldApi,
+    private readonly siteHost: string,
+  ) {}
 
   async find(media: MediaInfos): Promise<DarkiworldAvailability> {
     const title = await this.findTitle(media);
 
     if (!title) {
       DarkiworldService.logger.debug(`No Darkiworld match for "${media.title}" (${media.imdbId})`);
-      return { available: false, title: null };
+      return { available: false, title: null, downloadUrl: null };
     }
 
-    const available = await this.checkAvailability(title.id, media);
+    const downloadUrl = await this.checkAvailability(title.id, media);
     DarkiworldService.logger.log(
-      `Darkiworld "${title.name}" (${title.id}): ${available ? 'available' : 'not available'}`,
+      `Darkiworld "${title.name}" (${title.id}): ${downloadUrl ? 'available' : 'not available'}`,
     );
 
-    return { available, title };
+    return { available: downloadUrl !== null, title, downloadUrl };
   }
 
   private async findTitle(media: MediaInfos): Promise<DarkiworldTitle | null> {
@@ -100,7 +112,7 @@ export class DarkiworldService {
     );
   }
 
-  private async checkAvailability(titleId: number, media: MediaInfos): Promise<boolean> {
+  private async checkAvailability(titleId: number, media: MediaInfos): Promise<string | null> {
     const baseOptions = {
       lang: LANG_TRUEFRENCH,
       host: HOST_1FICHIER,
@@ -115,10 +127,21 @@ export class DarkiworldService {
     for (const quality of QUALITY_IDS) {
       const available = await this.api.listLinks(titleId, { ...baseOptions, quality });
       if (available) {
-        return true;
+        return this.buildDownloadUrl(titleId, quality, media);
       }
     }
 
-    return false;
+    return null;
+  }
+
+  private buildDownloadUrl(titleId: number, quality: number, media: MediaInfos): string {
+    const filters = buildFiltersBase64(quality);
+    const basePath = `${this.siteHost}/titles/${titleId}`;
+
+    if (media.type === 'episode' && media.seasonNumber !== null && media.episodeNumber !== null) {
+      return `${basePath}/season/${media.seasonNumber}/episode/${media.episodeNumber}/download?filters=${filters}`;
+    }
+
+    return `${basePath}/download?filters=${filters}`;
   }
 }

@@ -2,8 +2,9 @@
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
     "allowUnreachableCode": false,
-    "baseUrl": "./",
-    "declaration": true,
+    "types": ["node"],
+    "rootDir": "./src",
+    "declaration": false,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "forceConsistentCasingInFileNames": false,
@@ -13,13 +14,13 @@
     "noImplicitReturns": true,
     "outDir": "./dist",
     "paths": {
-      "@/*": ["src/*"],
-      "?/*": ["test/*"]
+      "@/*": ["./src/*"],
+      "?/*": ["./test/*"]
     },
     "removeComments": true,
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "target": "ES2022"
+    "target": "esnext"
   }
 }

@@ -7,19 +7,19 @@ import { DiscordService } from '@/services/discord';
 import { UserMessaging } from '@/services/messaging/user';
 
 const COLOR_BY_STATUS: Record<RequestStatus, ColorResolvable> = {
-  pending: '#3498db',
-  fulfilled: '#2ecc71',
-  rejected: '#e74c3c',
-  canceled: '#94312d',
-  missing: '#94312d',
+  [RequestStatus.Pending]: '#3498db',
+  [RequestStatus.Fulfilled]: '#2ecc71',
+  [RequestStatus.Rejected]: '#e74c3c',
+  [RequestStatus.Missing]: '#f39c12',
 };
 
 const DESCRIPTION_BY_STATUS: Record<RequestStatus, string> = {
-  pending: 'Nous avons bien reçu votre demande. Vous serez notifié lorsque elle sera terminée.',
-  fulfilled: 'Votre demande est disponible sur [CRN-Flix](https://jellyfin.crn-tech.fr).',
-  rejected: 'Le contenu demandé ne respecte pas les règles du serveur. Veuillez réessayer avec un contenu approprié.',
-  canceled: 'Vous avez annulé votre demande.',
-  missing: 'Le contenu demandé est introuvable. Nous sommes navrés de ne pas pouvoir vous satisfaire.',
+  [RequestStatus.Pending]: 'Nous avons bien reçu votre demande. Vous serez notifié lorsque elle sera terminée.',
+  [RequestStatus.Fulfilled]: 'Votre demande est disponible sur [CRN-Flix](https://jellyfin.crn-tech.fr).',
+  [RequestStatus.Rejected]:
+    'Le contenu demandé ne respecte pas les règles du serveur. Veuillez réessayer avec un contenu approprié.',
+  [RequestStatus.Missing]:
+    "Le contenu demandé n'est pas encore disponible. Nous vérifions régulièrement et vous serez notifié dès qu'il sera disponible.",
 };
 
 function embedBuilder(request: RequestEntity): EmbedBuilder {

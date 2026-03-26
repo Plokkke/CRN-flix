@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+
 import { RequestEntity } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
 import { UserMessaging } from '@/services/messaging/user';
@@ -8,6 +10,8 @@ export type UserMessagingCtxt = {
 };
 
 export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
+  private static readonly logger: Logger = new Logger(AllUserMessaging.name);
+
   constructor(private readonly messagingByKey: Record<string, UserMessaging<string>>) {
     super();
   }
@@ -31,7 +35,11 @@ export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
   }
 
   async requestUpdated(ctxt: UserMessagingCtxt, request: RequestEntity): Promise<void> {
-    const messaging = this.getMessaging(ctxt.key);
-    await messaging.requestUpdated(ctxt.id, request);
+    try {
+      const messaging = this.getMessaging(ctxt.key);
+      await messaging.requestUpdated(ctxt.id, request);
+    } catch (error) {
+      AllUserMessaging.logger.error(`Failed to send notification to user ${ctxt.id}`, error);
+    }
   }
 }

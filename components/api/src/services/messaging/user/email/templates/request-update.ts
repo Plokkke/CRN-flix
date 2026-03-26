@@ -4,11 +4,12 @@ import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from './email-styles';
 
 const getStatusDescription = (status: RequestStatus): string => {
   const descriptions: Record<RequestStatus, string> = {
-    pending: 'Nous avons bien reçu votre demande. Vous serez notifié lorsque elle sera terminée.',
-    fulfilled: 'Votre demande est disponible.',
-    rejected: 'Le contenu demandé ne respecte pas les règles du serveur. Veuillez réessayer avec un contenu approprié.',
-    canceled: 'Vous avez annulé votre demande.',
-    missing: 'Le contenu demandé est introuvable. Nous sommes navrés de ne pas pouvoir vous satisfaire.',
+    [RequestStatus.Pending]: 'Nous avons bien reçu votre demande. Vous serez notifié lorsque elle sera terminée.',
+    [RequestStatus.Fulfilled]: 'Votre demande est disponible.',
+    [RequestStatus.Rejected]:
+      'Le contenu demandé ne respecte pas les règles du serveur. Veuillez réessayer avec un contenu approprié.',
+    [RequestStatus.Missing]:
+      "Le contenu demandé n'est pas encore disponible. Nous vérifions régulièrement et vous serez notifié dès qu'il sera disponible.",
   };
   return descriptions[status] || 'Status update received.';
 };
@@ -48,7 +49,7 @@ export const requestUpdateTemplate = (
         posterUrl,
         request.status,
         getStatusDescription(request.status),
-        request.status === 'fulfilled'
+        request.status === RequestStatus.Fulfilled
           ? {
               text: `Regarder sur ${serviceName}`,
               url: mediaServerUrl,
@@ -81,7 +82,7 @@ ${request.media!.title} (${request.media!.year})
 ${request.media!.type === 'episode' ? `Saison ${request.media!.seasonNumber} - Episode ${request.media!.episodeNumber}\n` : ''}
 Statut: ${request.status.replace('_', ' ').toUpperCase()}
 ${getStatusDescription(request.status)}
-${request.status === 'fulfilled' ? `Regarder sur ${serviceName}: ${mediaServerUrl}` : ''}
+${request.status === RequestStatus.Fulfilled ? `Regarder sur ${serviceName}: ${mediaServerUrl}` : ''}
 ---`,
   )
   .join('\n')}

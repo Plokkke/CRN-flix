@@ -1,8 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 
-export const MEDIA_TYPE = ['movie', 'episode'] as const;
-export type MediaType = (typeof MEDIA_TYPE)[number];
+export enum MediaType {
+  Movie = 'movie',
+  Episode = 'episode',
+}
 
 export type MediaEntity = {
   id: string;
@@ -113,17 +115,5 @@ export class MediasRepository {
     }
 
     return (await this.findByInfos(infos))!;
-  }
-
-  async setAvailable(media: MediaInfos): Promise<void> {
-    const mediaEntity = await this.create(media);
-
-    const updateQuery = `
-      UPDATE media_requests
-      SET status = 'fulfilled'
-      WHERE media_id = $1
-        AND status IN ('pending', 'missing')
-    `;
-    await this.pool.query(updateQuery, [mediaEntity.id]);
   }
 }

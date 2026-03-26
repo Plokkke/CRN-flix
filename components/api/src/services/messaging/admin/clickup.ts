@@ -5,19 +5,17 @@ import { MediaEntity } from '@/services/database/medias';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { truthy } from '@/utils';
 
-const CLICKUP_STATUS_BY_REQUEST_STATUS: Record<RequestStatus, string> = {
-  pending: 'Open',
-  fulfilled: 'Closed',
-  missing: 'missing',
-  rejected: 'rejected',
-  canceled: 'canceled',
+const CLICKUP_STATUS_BY_REQUEST_STATUS: Partial<Record<RequestStatus, string>> = {
+  [RequestStatus.Pending]: 'Open',
+  [RequestStatus.Fulfilled]: 'Closed',
+  [RequestStatus.Rejected]: 'rejected',
 };
 
 function mediaName(media: MediaEntity): string {
   return `${media.title} (${media.year}) ${media.type === 'episode' ? `S${media.seasonNumber}E${media.episodeNumber}` : ''}`;
 }
 
-function buildDescription(media: MediaEntity, userNames: string[]): string {
+function buildDescription(media: MediaEntity, userNames: string[], darkiworldUrl?: string | null): string {
   const userNamesText = userNames.length > 0 ? userNames.join(', ') : 'Aucun utilisateur associé';
   return [
     `- Type: ${media.type}`,
@@ -25,18 +23,12 @@ function buildDescription(media: MediaEntity, userNames: string[]): string {
     ...(media.type === 'episode' ? [`- Saison: ${media.seasonNumber}`, `- Épisode: ${media.episodeNumber}`] : []),
     `- IMDb ID: ${media.imdbId}`,
     `- Utilisateurs: ${userNamesText}`,
+    ...(darkiworldUrl ? [`- Darkiworld: ${darkiworldUrl}`] : []),
   ].join('\n');
 }
 
 export class ClickUpAdminMessaging {
   private static readonly logger = new Logger(ClickUpAdminMessaging.name);
-  private readonly pendingRegistrations = new Map<
-    string,
-    {
-      promise: Promise<string>;
-      resolve: (taskId: string) => void;
-    }
-  >();
 
   static async create(
     clickupService: ClickUpService,
@@ -50,48 +42,17 @@ export class ClickUpAdminMessaging {
     private readonly requestsRepository: RequestsRepository,
   ) {}
 
-  private async assertHavingTaskId(request: RequestEntity): Promise<string> {
-    if (request.taskId) {
-      return request.taskId;
-    }
-
-    ClickUpAdminMessaging.logger.debug(`No taskId for request ${request.mediaId}, waiting for registration...`);
-
-    const pendingRegistration = this.pendingRegistrations.get(request.mediaId);
-    if (pendingRegistration) {
-      return pendingRegistration.promise;
-    } else {
-      let resolve: (taskId: string) => void;
-      const promise = new Promise<string>((done) => {
-        resolve = done;
-      });
-      this.pendingRegistrations.set(request.mediaId, { promise, resolve: resolve! });
-
-      return promise;
-    }
-  }
-
-  private async completeRegistration(mediaId: string, taskId: string): Promise<void> {
-    await this.requestsRepository.attachTask(mediaId, taskId);
-
-    const pendingRegistration = this.pendingRegistrations.get(mediaId);
-    if (pendingRegistration) {
-      ClickUpAdminMessaging.logger.debug(`ClickUp task registration completed: ${taskId} for media ${mediaId}`);
-      pendingRegistration.resolve(taskId);
-      this.pendingRegistrations.delete(mediaId);
-    }
-  }
-
   async register(request: RequestEntity): Promise<RequestEntity> {
     const media = request.media!;
 
     const title = mediaName(media);
-    const description = buildDescription(media, request.userRequests?.map((ur) => ur.user?.name).filter(truthy) || []);
+    const userNames = request.userRequests?.map((ur) => ur.user?.name).filter(truthy) || [];
+    const description = buildDescription(media, userNames, request.darkiworldUrl);
     const tags = [media.type];
 
     try {
       request.taskId = await this.clickupService.createTask(title, description, tags);
-      await this.completeRegistration(request.mediaId, request.taskId);
+      await this.requestsRepository.attachTask(request.mediaId, request.taskId);
 
       ClickUpAdminMessaging.logger.log(`ClickUp task created successfully: ${request.taskId} for media ${media.title}`);
     } catch (error) {
@@ -103,12 +64,13 @@ export class ClickUpAdminMessaging {
   }
 
   async updateMediaStatus(request: RequestEntity): Promise<void> {
-    const taskId = await this.assertHavingTaskId(request);
-
     const clickupStatus = CLICKUP_STATUS_BY_REQUEST_STATUS[request.status];
+    if (!clickupStatus || !request.taskId) {
+      return;
+    }
 
     try {
-      await this.clickupService.updateTaskStatus(taskId, clickupStatus);
+      await this.clickupService.updateTaskStatus(request.taskId, clickupStatus);
       ClickUpAdminMessaging.logger.log(`Updated ClickUp task ${request.taskId} status(${clickupStatus})`);
     } catch (error) {
       ClickUpAdminMessaging.logger.error(`Failed to update ClickUp task ${request.taskId}`, error);
@@ -116,8 +78,23 @@ export class ClickUpAdminMessaging {
     }
   }
 
+  async deleteTask(request: RequestEntity): Promise<void> {
+    if (!request.taskId) {
+      return;
+    }
+
+    try {
+      await this.clickupService.deleteTask(request.taskId);
+      ClickUpAdminMessaging.logger.log(`Deleted ClickUp task ${request.taskId}`);
+    } catch (error) {
+      ClickUpAdminMessaging.logger.error(`Failed to delete ClickUp task ${request.taskId}`, error);
+    }
+  }
+
   async updateTaskUsers(request: RequestEntity): Promise<void> {
-    const taskId = await this.assertHavingTaskId(request);
+    if (!request.taskId) {
+      return;
+    }
 
     const media = request.media!;
     const userNames = request.userRequests?.map((ur) => ur.user?.name).filter(truthy) || [];
@@ -125,10 +102,10 @@ export class ClickUpAdminMessaging {
     const description = buildDescription(media, userNames);
 
     try {
-      await this.clickupService.updateTaskDescription(taskId, description);
-      ClickUpAdminMessaging.logger.log(`Updated ClickUp task ${taskId} users list`);
+      await this.clickupService.updateTaskDescription(request.taskId, description);
+      ClickUpAdminMessaging.logger.log(`Updated ClickUp task ${request.taskId} users list`);
     } catch (error) {
-      ClickUpAdminMessaging.logger.error(`Failed to update ClickUp task users for ${taskId}`, error);
+      ClickUpAdminMessaging.logger.error(`Failed to update ClickUp task users for ${request.taskId}`, error);
     }
   }
 }

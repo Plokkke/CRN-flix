@@ -17,4 +17,5 @@ export type ListLinksOptions = {
 export type DarkiworldAvailability = {
   available: boolean;
   title: DarkiworldTitle | null;
+  downloadUrl: string | null;
 };

@@ -28,7 +28,7 @@ export const jellyfinConfigSchema = z
 type JellyfinConfig = z.infer<typeof jellyfinConfigSchema>;
 
 export type ExternalIds = {
-  Imdb?: string;
+  Imdb: string;
   Tvdb?: string;
   Tmdb?: string;
   TmdbCollection?: string;

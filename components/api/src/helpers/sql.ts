@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { PoolClient, Pool, Notification } from 'pg';
-import { ZodSchema, ZodTypeDef } from 'zod';
+import { z } from 'zod';
 
 export function upsertQuery(table: string, record: Record<string, unknown>): string;
 export function upsertQuery(table: string, record: Record<string, unknown>, primaryKeys: string[]): string;
@@ -61,7 +61,7 @@ export async function transaction(pool: Pool, runner: (client: PoolClient) => Pr
 export function listen<T>(
   client: PoolClient,
   channel: string,
-  schema: ZodSchema<T, ZodTypeDef, string>,
+  schema: z.ZodType<T>,
   callback: (payload: T) => void,
 ): void {
   client.on('notification', (msg: Notification): void => {

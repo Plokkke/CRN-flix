@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 
 import { Config } from '@/app.module';
+import { DarkiworldService } from '@/modules/darkiworld/service';
 import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
@@ -21,6 +22,7 @@ export const syncProvider = {
     UserActivitiesRepository,
     MediasRepository,
     RequestsRepository,
+    DarkiworldService,
   ],
   useFactory: (
     configService: ConfigService<Config, true>,
@@ -31,6 +33,7 @@ export const syncProvider = {
     userActivitySyncsRepository: UserActivitiesRepository,
     mediasRepository: MediasRepository,
     requestsRepository: RequestsRepository,
+    darkiworldService: DarkiworldService,
   ): SyncService => {
     return new SyncService(
       configService.get('sync'),
@@ -41,6 +44,7 @@ export const syncProvider = {
       userActivitySyncsRepository,
       mediasRepository,
       requestsRepository,
+      darkiworldService,
     );
   },
 };

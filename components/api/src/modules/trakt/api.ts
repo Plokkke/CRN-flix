@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { wait } from '@/utils';
 
-import { MEDIA_TYPES } from './constants';
+import { ActivityType, TraktMediaType } from './constants';
 import {
   authDeviceCtxtSchema,
   deviceTokenSchema,
@@ -25,7 +25,6 @@ import {
 } from './schemas';
 import {
   AuthDeviceCtxt,
-  ActivityType,
   AuthDevicePublicCtxt,
   HiddenShow,
   LastActivities,
@@ -43,14 +42,14 @@ import {
 } from './types';
 
 const ACTIVITY_PATHS_BY_TYPE: Record<ActivityType, string[]> = {
-  ALL: ['all'],
-  WATCHED: ['movies.watched_at', 'episodes.watched_at'],
-  RATED: ['movies.rated_at', 'episodes.rated_at', 'shows.rated_at', 'seasons.rated_at'],
-  HIDDEN: ['shows.hidden_at', 'seasons.hidden_at', 'movies.hidden_at', 'episodes.hidden_at'],
-  DROPPED: ['shows.dropped_at'],
-  LISTED: ['lists.liked_at'],
-  WATCHLISTED: ['watchlist.updated_at'],
-  FAVORITED: ['favorites.updated_at'],
+  [ActivityType.All]: ['all'],
+  [ActivityType.Watched]: ['movies.watched_at', 'episodes.watched_at'],
+  [ActivityType.Rated]: ['movies.rated_at', 'episodes.rated_at', 'shows.rated_at', 'seasons.rated_at'],
+  [ActivityType.Hidden]: ['shows.hidden_at', 'seasons.hidden_at', 'movies.hidden_at', 'episodes.hidden_at'],
+  [ActivityType.Dropped]: ['shows.dropped_at'],
+  [ActivityType.Listed]: ['lists.liked_at'],
+  [ActivityType.Watchlisted]: ['watchlist.updated_at'],
+  [ActivityType.Favorited]: ['favorites.updated_at'],
 };
 
 export const configSchema = z.object({
@@ -239,7 +238,7 @@ export class TraktApi {
   async requestUserWatchlist(user: UserAuthCtxt, released: true): Promise<ReleasedMedia[]>;
   async requestUserWatchlist(user: UserAuthCtxt, released: false): Promise<Media[]>;
   async requestUserWatchlist(user: UserAuthCtxt, released: boolean = false): Promise<ReleasedMedia[] | Media[]> {
-    return this.withCache(user, 'WATCHLISTED', async () => {
+    return this.withCache(user, ActivityType.Watchlisted, async () => {
       const response = await this.api.get<unknown>(`/sync/watchlist`, {
         headers: { Authorization: `Bearer ${user.accessToken}` },
         params: released ? { extended: 'full' } : {},
@@ -247,7 +246,7 @@ export class TraktApi {
       if (released) {
         const medias = mediaDetailsSchema.array().parse(response.data);
         return medias.filter((media: MediaDetails) => {
-          if (media.type === 'movie') {
+          if (media.type === TraktMediaType.Movie) {
             return media.movie.released !== null && media.movie.released <= DateTime.now();
           } else {
             return !!media.show.first_aired && media.show.first_aired <= DateTime.now();
@@ -260,7 +259,7 @@ export class TraktApi {
   }
 
   async requestUserList(user: UserAuthCtxt, listName: string): Promise<Media[]> {
-    return this.withCache(user, 'LISTED', async () => {
+    return this.withCache(user, ActivityType.Listed, async () => {
       const listsResponse = await this.api.get<{ name: string; ids: { slug: string } }[]>('/users/me/lists', {
         headers: { Authorization: getAuthorization(user) },
       });
@@ -279,9 +278,9 @@ export class TraktApi {
   async requestUserHidden(
     user: UserAuthCtxt,
     section: 'progress_watched' = 'progress_watched',
-    type: MediaType = 'show',
+    type: MediaType = TraktMediaType.Show,
   ): Promise<HiddenShow[]> {
-    return this.withCache(user, 'HIDDEN', async () => {
+    return this.withCache(user, ActivityType.Hidden, async () => {
       const response = await this.api.get<unknown>(`/users/hidden/${section}`, {
         headers: { Authorization: getAuthorization(user) },
         params: { type, limit: 9999 },
@@ -290,8 +289,8 @@ export class TraktApi {
     });
   }
 
-  async requestUserWatched(user: UserAuthCtxt, type: MediaType = 'show'): Promise<WatchedShow[]> {
-    return this.withCache(user, 'WATCHED', async () => {
+  async requestUserWatched(user: UserAuthCtxt, type: MediaType = TraktMediaType.Show): Promise<WatchedShow[]> {
+    return this.withCache(user, ActivityType.Watched, async () => {
       const response = await this.api.get<unknown>(`/sync/watched/${type}s`, {
         headers: { Authorization: `Bearer ${user.accessToken}` },
         params: { extended: 'noseasons' },
@@ -301,7 +300,7 @@ export class TraktApi {
   }
 
   async requestShowProgress(user: UserAuthCtxt, showId: number): Promise<ProgressShowNoDetails> {
-    return this.withCache(user, 'WATCHED', async () => {
+    return this.withCache(user, ActivityType.Watched, async () => {
       const response = await this.api.get<unknown>(`/shows/${showId}/progress/watched`, {
         headers: { Authorization: getAuthorization(user) },
       });
@@ -331,7 +330,7 @@ export class TraktApi {
   }
 
   async requestUserRated(user: UserAuthCtxt, type: MediaType, rates: number[]): Promise<Media[]> {
-    return this.withCache(user, 'RATED', async () => {
+    return this.withCache(user, ActivityType.Rated, async () => {
       const response = await this.api.get<unknown>(`/sync/ratings/${type}s/${rates.join(',')}`, {
         headers: { Authorization: getAuthorization(user) },
       });
@@ -346,7 +345,9 @@ export class TraktApi {
     const rates = range(ratingThreshold, 10 + 1);
 
     return (
-      await Promise.all(MEDIA_TYPES.map((type): Promise<Media[]> => this.requestUserRated(user, type, rates)))
+      await Promise.all(
+        Object.values(TraktMediaType).map((type): Promise<Media[]> => this.requestUserRated(user, type, rates)),
+      )
     ).flat();
   }
 

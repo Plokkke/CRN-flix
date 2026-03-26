@@ -7,7 +7,7 @@ import { RequestsRepository } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { UsersRepository } from '@/services/database/users';
 
-const REPOSITORIES = [UsersRepository, MediasRepository, UserActivitiesRepository];
+const REPOSITORIES = [UsersRepository, MediasRepository, UserActivitiesRepository, RequestsRepository];
 
 export const repositoryProviders: Provider[] = [
   ...REPOSITORIES.map((Repository) => ({
@@ -16,10 +16,4 @@ export const repositoryProviders: Provider[] = [
     useFactory: async (syncDataSource: Pool): Promise<InstanceType<typeof Repository>> =>
       new Repository(syncDataSource),
   })),
-  {
-    provide: RequestsRepository,
-    inject: [SYNC_DATASOURCE, MediasRepository],
-    useFactory: async (syncDataSource: Pool, mediasRepository: MediasRepository): Promise<RequestsRepository> =>
-      new RequestsRepository(syncDataSource, mediasRepository),
-  },
 ];

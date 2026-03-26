@@ -3,14 +3,15 @@ import * as _ from 'lodash';
 import { DateTime } from 'luxon';
 import { z } from 'zod';
 
+import { DarkiworldService } from '@/modules/darkiworld/service';
 import { JellyfinMedia, JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
 import { Episode, Media, ProgressShow, Show, UserAuthCtxt } from '@/modules/trakt/types';
-import { MediaInfos, MediasRepository } from '@/services/database/medias';
-import { RequestsRepository } from '@/services/database/requests';
+import { MediaInfos, MediasRepository, MediaType } from '@/services/database/medias';
+import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
-import { UserEntity, UsersRepository } from '@/services/database/users';
+import { UsersRepository, type UserEntity } from '@/services/database/users';
 
 export const syncConfigSchema = z.object({
   ratingThreshold: z.number().int().optional().default(10),
@@ -22,24 +23,73 @@ export const syncConfigSchema = z.object({
 
 export type SyncConfig = z.infer<typeof syncConfigSchema>;
 
-export const REQUEST_KINDS = [
-  'WATCHLISTED',
-  // 'LISTED',
-  'PROGRESS',
-  'HIGH_RATED',
-] as const;
-export type RequestKind = (typeof REQUEST_KINDS)[number];
+export enum RequestKind {
+  Watchlisted = 'WATCHLISTED',
+  // Listed = 'LISTED',
+  Progress = 'PROGRESS',
+  HighRated = 'HIGH_RATED',
+}
 
 export const ACTIVITIES_INVOLVED_BY_REQUEST_KIND: Record<RequestKind, string[]> = {
-  WATCHLISTED: ['watchlist.updated_at'],
-  // LISTED: ['lists.liked_at'],
-  HIGH_RATED: ['movies.rated_at', 'episodes.rated_at', 'shows.rated_at', 'seasons.rated_at'],
-  PROGRESS: ['shows.hidden_at', 'shows.dropped_at', 'movies.watched_at', 'episodes.watched_at'],
+  [RequestKind.Watchlisted]: ['watchlist.updated_at'],
+  // [RequestKind.Listed]: ['lists.liked_at'],
+  [RequestKind.HighRated]: ['movies.rated_at', 'episodes.rated_at', 'shows.rated_at', 'seasons.rated_at'],
+  [RequestKind.Progress]: ['shows.hidden_at', 'shows.dropped_at', 'movies.watched_at', 'episodes.watched_at'],
 };
+
+type MediaCompositeKey = string;
+
+function compositeKey(media: Pick<MediaInfos, 'imdbId' | 'seasonNumber' | 'episodeNumber'>): MediaCompositeKey {
+  return `${media.imdbId}:${media.seasonNumber ?? -1}:${media.episodeNumber ?? -1}`;
+}
+
+// --- Changeset types ---
+
+type RequestToCreate = {
+  mediaInfos: MediaInfos;
+  finalStatus: RequestStatus;
+  darkiworldTitleId: number | null;
+  darkiworldUrl: string | null;
+  requestKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>;
+};
+
+type UserReasonToAdd = {
+  mediaId: string;
+  userId: string;
+  reason: RequestKind;
+};
+
+type UserReasonToRemove = {
+  mediaId: string;
+  userId: string;
+  reason: RequestKind;
+};
+
+type SyncChangeset = {
+  requestsToCreate: RequestToCreate[];
+  userReasonsToAdd: UserReasonToAdd[];
+  userReasonsToRemove: UserReasonToRemove[];
+};
+
+// --- Gather types ---
+
+type DesiredMedia = {
+  mediaInfos: MediaInfos;
+  requestKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>;
+};
+
+type GatheredData = {
+  jellyfinAssets: Set<MediaCompositeKey>;
+  desiredMediaByKey: Record<MediaCompositeKey, DesiredMedia>;
+  syncedKindsByUser: Record<UserEntity['id'], Set<RequestKind>>;
+  mediaRequests: RequestEntity[];
+};
+
+// --- Helpers ---
 
 function mapEpisodeToRequest(episode: Episode, show: Show): MediaInfos {
   return {
-    type: 'episode',
+    type: MediaType.Episode,
     title: show.title,
     year: show.year,
     imdbId: episode.ids.imdb ?? '',
@@ -91,7 +141,234 @@ export class SyncService {
     private readonly userActivitiesRepository: UserActivitiesRepository,
     private readonly mediasRepository: MediasRepository,
     private readonly requestsRepository: RequestsRepository,
+    private readonly darkiworldService: DarkiworldService,
   ) {}
+
+  async start(): Promise<void> {
+    SyncService.logger.log('Starting batch synchronization');
+
+    const gathered = await this.gather();
+
+    SyncService.logger.log('Computing changeset');
+    const changeset = await this.compute(gathered);
+
+    SyncService.logger.log(
+      `Changeset: ${changeset.requestsToCreate.length} new, ` +
+        `${changeset.userReasonsToAdd.length} user adds, ` +
+        `${changeset.userReasonsToRemove.length} user removes`,
+    );
+
+    await this.apply(changeset);
+
+    for (const [userId, kinds] of Object.entries(gathered.syncedKindsByUser)) {
+      for (const kind of kinds) {
+        await this.userActivitiesRepository.upsert(userId, kind);
+      }
+    }
+
+    SyncService.logger.log('Batch synchronization completed');
+  }
+
+  // --- Phase 1: GATHER ---
+
+  private async gather(): Promise<GatheredData> {
+    const users = await this.listUsers();
+
+    SyncService.logger.log('Gathering Trakt activities');
+    const desiredMediaByKey: Record<MediaCompositeKey, DesiredMedia> = {};
+    const syncedKindsByUser: GatheredData['syncedKindsByUser'] = {};
+
+    for (const user of users) {
+      syncedKindsByUser[user.id] = await this.getKindsToSync(user);
+      SyncService.logger.log(`User ${user.name}: syncing kinds ${Array.from(syncedKindsByUser[user.id]).join(', ')}`);
+
+      for (const kind of syncedKindsByUser[user.id]) {
+        const medias = await this.requestHandlerByKind[kind](user);
+        SyncService.logger.log(`User ${user.name} kind ${kind}: ${medias.length} medias`);
+
+        for (const media of medias) {
+          const key = compositeKey(media);
+          const entry =
+            desiredMediaByKey[key] ?? (desiredMediaByKey[key] = { mediaInfos: media, requestKindsByUserId: {} });
+          entry.requestKindsByUserId[user.id] ??= new Set();
+          entry.requestKindsByUserId[user.id].add(kind);
+        }
+      }
+    }
+
+    SyncService.logger.log('Gathering Jellyfin assets');
+    const jellyfinMedias = await this.jellyfin.listAssets();
+    const jellyfinAssets = new Set(
+      jellyfinMedias.map((m: JellyfinMedia) =>
+        compositeKey({
+          imdbId: m.ProviderIds.Imdb,
+          seasonNumber: m.ParentIndexNumber ?? null,
+          episodeNumber: m.IndexNumber ?? null,
+        }),
+      ),
+    );
+    SyncService.logger.log(`Jellyfin: ${jellyfinAssets.size} assets`);
+
+    SyncService.logger.log('Snapshotting current DB state');
+    const mediaRequests = await this.requestsRepository.listAllWithDetails();
+    SyncService.logger.log(`Current requests: ${mediaRequests.length}`);
+
+    return { jellyfinAssets, desiredMediaByKey, syncedKindsByUser, mediaRequests };
+  }
+
+  // --- Phase 2: COMPUTE ---
+
+  private async compute({
+    jellyfinAssets,
+    desiredMediaByKey,
+    syncedKindsByUser,
+    mediaRequests,
+  }: GatheredData): Promise<SyncChangeset> {
+    const changeset: SyncChangeset = {
+      requestsToCreate: [],
+      userReasonsToAdd: [],
+      userReasonsToRemove: [],
+    };
+
+    const mediaRequestByKey = <Record<MediaCompositeKey, RequestEntity>>(
+      _.keyBy(mediaRequests, (mediaRequest) => compositeKey(mediaRequest.media!))
+    );
+
+    // Darkiworld cache to avoid duplicate checks
+    const darkiworldCache = new Map<MediaCompositeKey, { titleId: number | null; url: string | null }>();
+
+    // New requests
+    for (const [mediaKey, desiredMedia] of Object.entries(desiredMediaByKey)) {
+      if (!mediaRequestByKey[mediaKey]) {
+        await this.registerNewRequest(changeset, mediaKey, desiredMedia, jellyfinAssets, darkiworldCache);
+      }
+    }
+
+    // Existing requests - diff user associations
+    for (const request of mediaRequests) {
+      const desiredKindsByUserId = desiredMediaByKey[compositeKey(request.media!)]?.requestKindsByUserId ?? {};
+      this.registerRequestReasonChanges(changeset, request, desiredKindsByUserId, syncedKindsByUser);
+    }
+
+    return changeset;
+  }
+
+  private registerRequestReasonChanges(
+    changeset: SyncChangeset,
+    request: RequestEntity,
+    desiredKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>,
+    syncedKindsByUser: Record<UserEntity['id'], Set<RequestKind>>,
+  ): void {
+    const existingReasonsByUserId = new Map(
+      (request.userRequests ?? []).map((ur) => [ur.userId, new Set(<RequestKind[]>ur.reasons)]),
+    );
+
+    // For each kind being synced of each user
+    for (const [userId, syncedKinds] of Object.entries(syncedKindsByUser)) {
+      const desiredKinds = desiredKindsByUserId[userId] ?? new Set<RequestKind>();
+      const existingKinds = existingReasonsByUserId.get(userId) ?? new Set<RequestKind>();
+
+      for (const kind of syncedKinds) {
+        if (desiredKinds.has(kind) && !existingKinds.has(kind)) {
+          // If the kind is desired but not currently associated, add it
+          changeset.userReasonsToAdd.push({ mediaId: request.mediaId, userId, reason: kind });
+        } else if (!desiredKinds.has(kind) && existingKinds.has(kind)) {
+          // If the kind is not desired but currently associated, remove it
+          changeset.userReasonsToRemove.push({ mediaId: request.mediaId, userId, reason: kind });
+        }
+      }
+    }
+  }
+
+  private async registerNewRequest(
+    changeset: SyncChangeset,
+    mediaKey: MediaCompositeKey,
+    desiredMedia: DesiredMedia,
+    jellyfinAssets: Set<MediaCompositeKey>,
+    darkiworldCache: Map<MediaCompositeKey, { titleId: number | null; url: string | null }>,
+  ): Promise<void> {
+    let finalStatus: RequestStatus = RequestStatus.Missing;
+    let darkiworldTitleId: number | null = null;
+    let darkiworldUrl: string | null = null;
+
+    if (jellyfinAssets.has(mediaKey)) {
+      finalStatus = RequestStatus.Fulfilled;
+    } else {
+      const darkiResult = await this.checkDarkiworld(mediaKey, desiredMedia.mediaInfos, darkiworldCache);
+      darkiworldTitleId = darkiResult.titleId;
+      darkiworldUrl = darkiResult.url;
+      if (darkiResult.url) {
+        finalStatus = RequestStatus.Pending;
+      }
+    }
+
+    changeset.requestsToCreate.push({
+      mediaInfos: desiredMedia.mediaInfos,
+      finalStatus,
+      darkiworldTitleId,
+      darkiworldUrl,
+      requestKindsByUserId: desiredMedia.requestKindsByUserId,
+    });
+  }
+
+  private async checkDarkiworld(
+    mediaKey: MediaCompositeKey,
+    mediaInfos: MediaInfos,
+    cache: Map<MediaCompositeKey, { titleId: number | null; url: string | null }>,
+  ): Promise<{ titleId: number | null; url: string | null }> {
+    const cached = cache.get(mediaKey);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const result = await this.darkiworldService.find(mediaInfos);
+      const entry = {
+        titleId: result.title?.id ?? null,
+        url: result.available ? result.downloadUrl : null,
+      };
+      cache.set(mediaKey, entry);
+      return entry;
+    } catch (error) {
+      SyncService.logger.error(`Darkiworld check failed for "${mediaInfos.title}" (${mediaInfos.imdbId})`, error);
+      const entry = { titleId: null, url: null };
+      cache.set(mediaKey, entry);
+      return entry;
+    }
+  }
+
+  // --- Phase 3: APPLY ---
+
+  private async apply(changeset: SyncChangeset): Promise<void> {
+    SyncService.logger.log('Applying changeset');
+
+    // Create new requests with final status
+    for (const req of changeset.requestsToCreate) {
+      const media = await this.mediasRepository.create(req.mediaInfos);
+      await this.requestsRepository.createWithStatus(
+        media.id,
+        req.finalStatus,
+        req.darkiworldTitleId,
+        req.darkiworldUrl,
+      );
+
+      for (const [userId, reasons] of Object.entries(req.requestKindsByUserId)) {
+        await this.requestsRepository.setUserRequestReasons(media.id, userId, reasons);
+      }
+    }
+
+    // Add user reasons to existing requests
+    for (const add of changeset.userReasonsToAdd) {
+      await this.requestsRepository.setUserRequestReason(add.mediaId, add.userId, add.reason);
+    }
+
+    // Remove user reasons from existing requests
+    for (const remove of changeset.userReasonsToRemove) {
+      await this.requestsRepository.removeUserRequestReason(remove.mediaId, remove.userId, remove.reason);
+    }
+  }
+
+  // --- Shared helpers (unchanged) ---
 
   private async listUsers(): Promise<UserWithAuthContext[]> {
     const users = await this.usersRepository.list();
@@ -110,7 +387,7 @@ export class SyncService {
   private async getLastUpdatedAtByKind(user: UserAuthCtxt): Promise<Record<RequestKind, DateTime<true> | null>> {
     const lastActivities = await this.traktClient.getLastActivities(user);
 
-    return REQUEST_KINDS.reduce(
+    return Object.values(RequestKind).reduce(
       (acc, kind) => {
         acc[kind] = ACTIVITIES_INVOLVED_BY_REQUEST_KIND[kind].reduce(
           (date: DateTime<true> | null, activityPath: string) => {
@@ -131,63 +408,17 @@ export class SyncService {
     );
   }
 
-  private async getKindsToSync(user: UserAuthCtxt): Promise<RequestKind[]> {
+  private async getKindsToSync(user: UserAuthCtxt): Promise<Set<RequestKind>> {
     const lastUpdatedAtByKind = await this.userActivitiesRepository.getForUserId(user.id);
     const updatedAtByKind = await this.getLastUpdatedAtByKind(user);
-    return REQUEST_KINDS.filter(
-      (kind) =>
-        !lastUpdatedAtByKind[kind] || !updatedAtByKind[kind] || updatedAtByKind[kind] > lastUpdatedAtByKind[kind],
+    return new Set(
+      Object.values(RequestKind).filter(
+        (kind) =>
+          !lastUpdatedAtByKind[kind] || !updatedAtByKind[kind] || updatedAtByKind[kind] > lastUpdatedAtByKind[kind],
+      ),
     );
   }
 
-  private async syncUserTargetedMedias(user: UserWithAuthContext): Promise<void> {
-    const kindToSync = await this.getKindsToSync(user);
-    SyncService.logger.log(`Syncing user ${user.name} with kinds ${kindToSync}`);
-
-    for (const kind of kindToSync) {
-      const medias = await this.requestHandlerByKind[kind](user);
-      SyncService.logger.log(`Syncing user ${user.name} kind ${kind} with ${medias.length} medias`);
-      await this.requestsRepository.syncMediasForUserAndKind(user, kind, medias);
-      await this.userActivitiesRepository.upsert(user.id, kind);
-    }
-  }
-
-  private async syncAvailableMedias(): Promise<void> {
-    const collectedMedias = await this.jellyfin.listAssets();
-    SyncService.logger.log(`Collecting ${collectedMedias.length} medias.`);
-
-    const medias: MediaInfos[] = collectedMedias.map(
-      (m: JellyfinMedia): MediaInfos => ({
-        type: m.Type === 'Movie' ? 'movie' : 'episode',
-        imdbId: m.ProviderIds.Imdb ?? '',
-        title: m.Type === 'Movie' ? m.Name : (m.SeriesName ?? m.Name),
-        year: m.ProductionYear,
-        seasonNumber: m.ParentIndexNumber ?? null,
-        episodeNumber: m.IndexNumber ?? null,
-      }),
-    );
-    for (const media of medias) {
-      await this.mediasRepository.setAvailable(media);
-    }
-    SyncService.logger.log(`Updating ${medias.length} medias.`);
-  }
-
-  // TODO split both syncs
-  async start(): Promise<void> {
-    SyncService.logger.log('Starting synchronization');
-
-    SyncService.logger.log('Syncing target medias');
-    for (const user of await this.listUsers()) {
-      await this.syncUserTargetedMedias(user);
-    }
-
-    SyncService.logger.log('Syncing collected medias');
-    await this.syncAvailableMedias();
-
-    SyncService.logger.log('Synchronization completed');
-  }
-
-  // TODO move helpers functions
   private async expandProgressShows(progressShows: ProgressShow[]): Promise<MediaInfos[]> {
     const episodes = await Promise.all(
       progressShows.map((p) =>
@@ -202,18 +433,17 @@ export class SyncService {
     const movies: MediaInfos[] = medias
       .filter((media) => media.type === 'movie')
       .map((m) => ({
-        type: 'movie',
+        type: MediaType.Movie,
         imdbId: m.movie.ids.imdb ?? '',
         title: m.movie.title,
         year: m.movie.year,
         seasonNumber: null,
         episodeNumber: null,
-        userIds: [],
       }));
     const episodes: MediaInfos[] = medias
       .filter((media) => media.type === 'episode')
       .map((m) => ({
-        type: 'episode',
+        type: MediaType.Episode,
         imdbId: m.episode.ids.imdb ?? '',
         title: m.show.title,
         year: m.show.year,

@@ -1,7 +1,7 @@
 import { Controller, Get, Header, Param } from '@nestjs/common';
 
 import { ContextService } from '@/services/context';
-import { REQUEST_STATUS, RequestEntity, RequestStatus } from '@/services/database/requests';
+import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { registeredTemplate } from '@/services/messaging/user/email/templates/registered';
 import { requestUpdateTemplate } from '@/services/messaging/user/email/templates/request-update';
 
@@ -28,9 +28,12 @@ export class MailingController {
 
   @Get(['media-request-updated/:status', 'media-request-updated'])
   @Header('content-type', 'text/html')
-  async previewMediaRequestUpdatedEmail(@Param('status') status: RequestStatus = 'pending'): Promise<string> {
-    const statusIdx = REQUEST_STATUS.indexOf(status);
-    const nextStatus = REQUEST_STATUS[(statusIdx + 1) % REQUEST_STATUS.length];
+  async previewMediaRequestUpdatedEmail(
+    @Param('status') status: RequestStatus = RequestStatus.Pending,
+  ): Promise<string> {
+    const statuses = Object.values(RequestStatus);
+    const statusIdx = statuses.indexOf(status);
+    const nextStatus = statuses[(statusIdx + 1) % statuses.length];
 
     const [movie] = await this.contextService.getRandomMedias(1, 'movie');
     const [show] = await this.contextService.getRandomMedias(1, 'show');

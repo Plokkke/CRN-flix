@@ -49,7 +49,6 @@ export const getStatusStyle = (status: string): string => {
     pending: { bg: COLORS.warning, text: '#000000' },
     fulfilled: { bg: COLORS.success, text: '#ffffff' },
     rejected: { bg: COLORS.error, text: '#ffffff' },
-    canceled: { bg: COLORS.gray, text: '#ffffff' },
     missing: { bg: COLORS.orange, text: '#ffffff' },
   };
 
