@@ -75,6 +75,13 @@ export class ClickUpService {
     });
   }
 
+  async getTask(taskId: string): Promise<{ status: { status: string } }> {
+    const response = await this.api.get(`/v2/task/${taskId}`, {
+      params: { team_id: this.config.teamId },
+    });
+    return response.data;
+  }
+
   async createTask(
     name: string,
     description: string,

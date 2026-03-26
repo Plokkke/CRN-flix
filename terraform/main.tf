@@ -28,7 +28,7 @@ module "api" {
   # Application configuration
   server_url       = var.server_url
   service_name     = var.service_name
-  sync_interval_ms = var.sync_interval_ms
+  sync_cron = var.sync_cron
   database_config  = module.database.connection_details
 
   # External services
@@ -36,8 +36,6 @@ module "api" {
   trakt_client_secret = var.trakt_client_secret
   jellyfin_host       = var.jellyfin_host
   jellyfin_token      = var.jellyfin_token
-  jellyfin_login      = var.jellyfin_login
-  jellyfin_password   = var.jellyfin_password
   discord_channel_id  = var.discord_channel_id
   discord_bot_token   = var.discord_bot_token
   discord_admin_ids   = var.discord_admin_ids

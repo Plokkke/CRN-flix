@@ -6,6 +6,7 @@ import { Emitter } from '@/helpers/events';
 import { listen } from '@/helpers/sql';
 import { MediaEntity } from '@/services/database/medias';
 import { UserEntity } from '@/services/database/users';
+
 import { RequestKind } from '../sync';
 
 export enum RequestStatus {
@@ -35,6 +36,14 @@ export type RequestUserEntity = {
   createdAt: Date;
   updatedAt: Date;
   user?: UserEntity;
+};
+
+export type SyncRequestSnapshot = {
+  mediaId: string;
+  imdbId: string;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  userReasons: { userId: string; reasons: string[] }[];
 };
 
 type RequestRecord = {
@@ -143,9 +152,7 @@ const LISTENING_MAP: {
 export class RequestsRepository extends Emitter<RequestEvents> implements OnModuleInit {
   static readonly logger = new Logger(RequestsRepository.name);
 
-  constructor(
-    private readonly pool: Pool,
-  ) {
+  constructor(private readonly pool: Pool) {
     super();
   }
 
@@ -284,9 +291,10 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
 
   async setUserRequestReasons(mediaId: string, userId: string, reasons: Set<RequestKind>): Promise<RequestUserEntity> {
     const query = `
-      UPDATE request_users
-      SET reasons = $3
-      WHERE request_media_id = $1 AND user_id = $2
+      INSERT INTO request_users (request_media_id, user_id, reasons)
+      VALUES ($1, $2, $3::VARCHAR(64)[])
+      ON CONFLICT (request_media_id, user_id)
+      DO UPDATE SET reasons = $3::VARCHAR(64)[]
       RETURNING *
     `;
     const { rows } = await this.pool.query<RequestUserRecord>(query, [mediaId, userId, Array.from(reasons)]);
@@ -382,11 +390,50 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         ) as request
       FROM media_requests request
       JOIN medias media ON media.id = request.media_id
-      WHERE request.status NOT IN ('rejected')
       ORDER BY request.created_at DESC
     `;
     const { rows } = await this.pool.query<{ request: RequestEntity }>(query);
     return rows.map((row) => row.request);
+  }
+
+  async listSyncSnapshot(
+    desiredCompositeKeys: { imdbId: string; seasonNumber: number | null; episodeNumber: number | null }[],
+    syncedUserIds: string[],
+  ): Promise<SyncRequestSnapshot[]> {
+    const query = `
+      SELECT
+        mr.media_id as "mediaId",
+        m.imdb_id as "imdbId",
+        m.season_number as "seasonNumber",
+        m.episode_number as "episodeNumber",
+        COALESCE(
+          json_agg(
+            json_build_object('userId', ru.user_id, 'reasons', ru.reasons)
+          ) FILTER (WHERE ru.user_id IS NOT NULL),
+          '[]'::json
+        ) as "userReasons"
+      FROM media_requests mr
+      JOIN medias m ON m.id = mr.media_id
+      LEFT JOIN request_users ru ON ru.request_media_id = mr.media_id
+      WHERE (m.imdb_id, COALESCE(m.season_number, -1), COALESCE(m.episode_number, -1))
+            IN (SELECT * FROM unnest($1::text[], $2::int[], $3::int[]))
+         OR EXISTS (
+           SELECT 1 FROM request_users sub
+           WHERE sub.request_media_id = mr.media_id
+             AND sub.user_id = ANY($4)
+         )
+      GROUP BY mr.media_id, m.imdb_id, m.season_number, m.episode_number
+    `;
+    const imdbIds = desiredCompositeKeys.map((k) => k.imdbId);
+    const seasonNumbers = desiredCompositeKeys.map((k) => k.seasonNumber ?? -1);
+    const episodeNumbers = desiredCompositeKeys.map((k) => k.episodeNumber ?? -1);
+    const { rows } = await this.pool.query<SyncRequestSnapshot>(query, [
+      imdbIds,
+      seasonNumbers,
+      episodeNumbers,
+      syncedUserIds,
+    ]);
+    return rows;
   }
 
   async attachTask(mediaId: string, taskId: string): Promise<void> {

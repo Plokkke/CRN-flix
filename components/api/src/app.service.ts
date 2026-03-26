@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import { AxiosError } from 'axios';
+import { CronJob } from 'cron';
 
 import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
@@ -22,6 +24,7 @@ import {
   DiscordAdminMessaging,
 } from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
+import { StatusCheckService } from '@/services/status-checks';
 import { SyncService } from '@/services/sync';
 
 import { ClickUpAdminMessaging } from './services/messaging/admin/clickup';
@@ -30,16 +33,15 @@ import { ClickUpAdminMessaging } from './services/messaging/admin/clickup';
 export class AppService implements OnModuleInit, OnModuleDestroy {
   private static readonly logger: Logger = new Logger(AppService.name);
 
-  private nextSyncTimeout?: NodeJS.Timeout;
-
   private listeners: Listener[] = [];
 
-  private syncInterval: number;
+  private isRunning = false;
 
   private pendingEvents = new Set<Promise<unknown>>();
 
   constructor(
     readonly config: ConfigService<Config, true>,
+    private readonly schedulerRegistry: SchedulerRegistry,
     private readonly sync: SyncService,
     private readonly jellyfin: JellyfinMediaService,
     private readonly messaging: AllUserMessaging,
@@ -47,18 +49,23 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly requestsTicketings: ClickUpAdminMessaging,
     private readonly usersRepository: UsersRepository, // TODO get user in event instead of fetching from db
     private readonly requestsRepository: RequestsRepository,
-  ) {
-    this.syncInterval = this.config.get<number>('syncInterval_ms');
-  }
+    private readonly statusChecks: StatusCheckService,
+  ) {}
 
   onModuleInit(): void {
     this.listeners.push(this.listenDatabaseEvents(), this.listenAdminMessages());
 
-    this.sync.start().then(() => this.scheduleNextSync());
+    this.registerCronJob('trakt-sync', this.config.get<string>('syncCron'), () => this.runSync());
+    this.registerCronJob('darkiworld-check', '0 * * * *', () => this.statusChecks.checkDarkiworldAvailability());
+    this.registerCronJob('jellyfin-check', '*/15 * * * *', () => this.statusChecks.checkJellyfinFulfillment());
+    this.registerCronJob('clickup-rejection-check', '*/15 * * * *', () => this.statusChecks.checkClickUpRejections());
   }
 
   async onModuleDestroy(): Promise<void> {
-    clearTimeout(this.nextSyncTimeout);
+    for (const [key, job] of this.schedulerRegistry.getCronJobs()) {
+      job.stop();
+      this.schedulerRegistry.deleteCronJob(key);
+    }
 
     for (const listener of this.listeners) {
       listener.cleanup();
@@ -70,15 +77,27 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private scheduleNextSync(): void {
-    if (process.argv.includes('--once')) {
-      process.emit('SIGINT');
+  private async runSync(): Promise<void> {
+    if (this.isRunning) {
+      AppService.logger.warn('Sync already in progress, skipping');
       return;
     }
 
-    this.nextSyncTimeout = setTimeout(() => {
-      this.sync.start().then(() => this.scheduleNextSync());
-    }, this.syncInterval);
+    this.isRunning = true;
+    try {
+      await this.sync.start();
+    } catch (error) {
+      AppService.logger.error(`Sync failed: ${error instanceof Error ? error.message : error}`);
+      if (error instanceof Error && error.stack) {
+        AppService.logger.debug(error.stack);
+      }
+    } finally {
+      this.isRunning = false;
+    }
+
+    if (process.argv.includes('--once')) {
+      process.emit('SIGINT');
+    }
   }
 
   private listenDatabaseEvents(): Listener<RequestEvents> {
@@ -86,7 +105,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       created: (event: RequestCreatedEvent) =>
         this.trackEvent(async () => {
           const request = await this.requestsRepository.get(event.requestId);
-          if (!request || request.taskId || request.status === RequestStatus.Fulfilled) {
+          if (
+            !request ||
+            request.taskId ||
+            request.status === RequestStatus.Fulfilled ||
+            request.status === RequestStatus.Missing
+          ) {
             return;
           }
 
@@ -127,7 +151,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          if (request.userRequests?.length === 0) {
+          if (request.userRequests?.length === 0 && request.status !== RequestStatus.Rejected) {
             await this.requestsTicketings.deleteTask(request);
             await this.requestsRepository.removeRequest(request.mediaId);
           }
@@ -169,6 +193,18 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   private async onUserRejected(user: UserEntity): Promise<void> {
     const messagingContext = { key: user.messagingKey, id: user.messagingId };
     this.messaging.error(messagingContext, 'Votre inscription a été refusée');
+  }
+
+  private registerCronJob(name: string, cronExpression: string, handler: () => Promise<void>): void {
+    const job = new CronJob(cronExpression, async () => {
+      try {
+        await handler();
+      } catch (error) {
+        AppService.logger.error(`Job "${name}" failed: ${error instanceof Error ? error.message : error}`);
+      }
+    });
+    this.schedulerRegistry.addCronJob(name, job);
+    job.start();
   }
 
   private trackEvent<T>(eventHandler: () => Promise<T>): Promise<T> {

@@ -12,8 +12,6 @@ export const environmentVariablesSchema = z
     TRAKT_CLIENT_SECRET: z.string(),
     JELLYFIN_URL: z.string(),
     JELLYFIN_TOKEN: z.string().optional(),
-    JELLYFIN_USERNAME: z.string().optional(),
-    JELLYFIN_PASSWORD: z.string().optional(),
     DISCORD_CHANNEL_ID: z.string(),
     DISCORD_BOT_TOKEN: z.string(),
     DISCORD_ADMIN_IDS: z.string(),
@@ -24,7 +22,7 @@ export const environmentVariablesSchema = z
     DATABASE_NAME: z.string(),
     DATABASE_USERNAME: z.string(),
     DATABASE_PASSWORD: z.string(),
-    SYNC_INTERVAL_MS: z.coerce.number(),
+    SYNC_CRON: z.string(),
     CLICKUP_API_TOKEN: z.string(),
     CLICKUP_TEAM_ID: z.string(),
     CLICKUP_LIST_ID: z.string(),
@@ -33,7 +31,7 @@ export const environmentVariablesSchema = z
   })
   .transform((env) => ({
     name: env.SERVICE_NAME,
-    syncInterval_ms: env.SYNC_INTERVAL_MS,
+    syncCron: env.SYNC_CRON,
     server: {
       url: env.SERVER_URL,
       port: env.PORT,
@@ -47,8 +45,6 @@ export const environmentVariablesSchema = z
     jellyfin: {
       url: env.JELLYFIN_URL,
       token: env.JELLYFIN_TOKEN,
-      username: env.JELLYFIN_USERNAME,
-      password: env.JELLYFIN_PASSWORD,
     },
     discord: {
       channelId: env.DISCORD_CHANNEL_ID,

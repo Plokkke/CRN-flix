@@ -55,10 +55,10 @@ variable "server_url" {
   type        = string
 }
 
-variable "sync_interval_ms" {
-  description = "Sync interval in milliseconds"
-  type        = number
-  default     = 600000
+variable "sync_cron" {
+  description = "Sync cron expression"
+  type        = string
+  default     = "*/10 * * * *"
 }
 
 # Trakt configuration
@@ -82,18 +82,6 @@ variable "jellyfin_host" {
 
 variable "jellyfin_token" {
   description = "Jellyfin API token"
-  type        = string
-  sensitive   = true
-}
-
-variable "jellyfin_login" {
-  description = "Jellyfin login username"
-  type        = string
-  default     = "AdminLogin"
-}
-
-variable "jellyfin_password" {
-  description = "Jellyfin login password"
   type        = string
   sensitive   = true
 }

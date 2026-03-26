@@ -148,8 +148,6 @@ cat > production-config.json << EOF
   "trakt_client_secret": "your-trakt-client-secret",
   "jellyfin_host": "https://your-jellyfin.com",
   "jellyfin_token": "your-jellyfin-api-token",
-  "jellyfin_login": "AdminLogin",
-  "jellyfin_password": "your-jellyfin-password",
   "discord_channel_id": "your-discord-channel-id", 
   "discord_bot_token": "your-discord-bot-token",
   "discord_admin_ids": "admin1,admin2,admin3",

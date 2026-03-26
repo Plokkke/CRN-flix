@@ -29,5 +29,8 @@
     "url": "git+https://github.com/Plokkke/CRN-flix.git"
   },
   "author": "Antoine Caron <antoine@crn-tech.fr>",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "reflect-metadata": "^0.2.2"
+  }
 }

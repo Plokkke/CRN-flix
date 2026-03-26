@@ -9,7 +9,8 @@ export async function concurrent<I, R = void>(
 
   do {
     while (next < items.length && executing.size < concurrency) {
-      const index = next++;
+      const index = next;
+      next += 1;
       const wrapped = fn(items[index])
         .then((r) => {
           results[index] = r;

@@ -30,9 +30,9 @@ variable "service_name" {
   type        = string
 }
 
-variable "sync_interval_ms" {
-  description = "Sync interval in milliseconds"
-  type        = number
+variable "sync_cron" {
+  description = "Sync cron expression"
+  type        = string
 }
 
 variable "database_config" {
@@ -67,17 +67,6 @@ variable "jellyfin_host" {
 
 variable "jellyfin_token" {
   description = "Jellyfin API token"
-  type        = string
-  sensitive   = true
-}
-
-variable "jellyfin_login" {
-  description = "Jellyfin login username"
-  type        = string
-}
-
-variable "jellyfin_password" {
-  description = "Jellyfin login password"
   type        = string
   sensitive   = true
 }

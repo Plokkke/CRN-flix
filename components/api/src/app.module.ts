@@ -1,5 +1,6 @@
 import { Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from '@plokkke/nest-health-registry';
 import { z } from 'zod';
 
@@ -21,6 +22,7 @@ import { jellyfinProvider } from '@/providers/jellyfin';
 import { adminMessagingProvider, clickupAdminMessagingProvider } from '@/providers/messaging/admin';
 import { allUserMessagingProvider } from '@/providers/messaging/all';
 import { userMessagingProviders } from '@/providers/messaging/user';
+import { statusCheckProvider } from '@/providers/status-checks';
 import { syncProvider } from '@/providers/sync';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
 import { traktProvider } from '@/providers/trakt';
@@ -48,7 +50,7 @@ export const configSchema = z.object({
     discordChannelId: z.string(),
     adminIds: z.array(z.string().min(1)).min(1),
   }),
-  syncInterval_ms: z.number().int().positive().min(1),
+  syncCron: z.string(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -56,7 +58,7 @@ export type Config = z.infer<typeof configSchema>;
 export function loadConfig(env: EnvironmentVariables): Config {
   return configSchema.parse({
     name: env.name,
-    syncInterval_ms: env.syncInterval_ms,
+    syncCron: env.syncCron,
     server: {
       url: env.server.url,
     },
@@ -84,7 +86,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
 
 export function configureAppModule(env: EnvironmentVariables): new () => NestModule {
   @Module({
-    imports: [ConfigModule.forRoot({ load: [() => loadConfig(env)] }), HealthModule],
+    imports: [ConfigModule.forRoot({ load: [() => loadConfig(env)] }), ScheduleModule.forRoot(), HealthModule],
     controllers: [UsersController, MailingController, UserGuideController, AssetsController],
     providers: [
       MemoryCacheService,
@@ -94,6 +96,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       syncDataSourceProvider,
       ...repositoryProviders,
       syncProvider,
+      statusCheckProvider,
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,

@@ -85,7 +85,9 @@ export class DarkiworldService {
     const results = await this.api.search(query);
     const expectedSeries = media.type === 'episode';
 
-    return results.filter((title) => !MEDIA_TYPES_FILTER.has(title.type) && title.is_series === expectedSeries);
+    return results.filter(
+      (title) => title.type && !MEDIA_TYPES_FILTER.has(title.type) && title.is_series === expectedSeries,
+    );
   }
 
   private matchById(candidates: DarkiworldTitle[], media: MediaInfos): DarkiworldTitle | null {

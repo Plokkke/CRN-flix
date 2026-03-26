@@ -2,7 +2,7 @@ import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
 import prettierPlugin from 'eslint-plugin-prettier';
 import prettierConfig from 'eslint-config-prettier';
-import eslintPluginImport from 'eslint-plugin-import';
+import eslintPluginImport from 'eslint-plugin-import-x';
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
@@ -17,7 +17,7 @@ export default [
     plugins: {
       "@typescript-eslint": tseslint,
       prettier: prettierPlugin,
-      import: eslintPluginImport,
+      'import-x': eslintPluginImport,
     },
 
     rules: {
@@ -36,7 +36,7 @@ export default [
       ],
       curly: ['error', 'all'],
       eqeqeq: ['error', 'always'],
-      'import/order': [
+      'import-x/order': [
         'error',
         {
           'newlines-between': 'always',
@@ -55,7 +55,7 @@ export default [
           alphabetize: { order: 'asc', caseInsensitive: true },
         },
       ],
-      'import/prefer-default-export': 'off',
+      'import-x/prefer-default-export': 'off',
       'lines-between-class-members': ['error', 'always', { exceptAfterSingleLine: true }],
       'new-cap': ['error', { capIsNew: false, properties: false }],
       'newline-per-chained-call': 'off',

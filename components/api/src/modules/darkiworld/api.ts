@@ -7,7 +7,7 @@ import { DarkiworldTitle, ListLinksOptions } from './types';
 
 export const configSchema = z.object({
   apiKey: z.string(),
-  host: z.string(),
+  host: z.string().min(1),
 });
 
 export type DarkiworldConfig = z.infer<typeof configSchema>;
@@ -19,6 +19,8 @@ export class DarkiworldApi {
 
   constructor(config: DarkiworldConfig) {
     const parsedConfig = configSchema.parse(config);
+
+    console.log(`Initializing Darkiworld API client with config: ${JSON.stringify(parsedConfig, null, 2)}`);
 
     this.client = axios.create({
       baseURL: `${parsedConfig.host}/api/v1`,
