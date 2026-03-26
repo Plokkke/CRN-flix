@@ -80,6 +80,12 @@ export class UsersRepository {
     return rows.length ? fromUserRecord(rows[0]) : null;
   }
 
+  async existsByName(name: string): Promise<boolean> {
+    const query = `SELECT 1 FROM users WHERE LOWER(name) = LOWER($1) LIMIT 1`;
+    const { rows } = await this.pool.query(query, [name]);
+    return rows.length > 0;
+  }
+
   async createFromMessagingInfos(messagingKey: string, messagingId: string, name: string): Promise<UserEntity> {
     const query = `
       INSERT INTO users (messaging_key, messaging_id, name)

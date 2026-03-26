@@ -174,7 +174,13 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       if (user.jellyfinId) {
         await this.jellyfin.resetUserPassword(user.jellyfinId, password);
       } else {
-        user.jellyfinId = await this.jellyfin.registerUser(user.name, password);
+        const existingJellyfinUser = await this.jellyfin.findUserByName(user.name);
+        if (existingJellyfinUser) {
+          user.jellyfinId = existingJellyfinUser.Id;
+          await this.jellyfin.resetUserPassword(user.jellyfinId, password);
+        } else {
+          user.jellyfinId = await this.jellyfin.registerUser(user.name, password);
+        }
         await this.usersRepository.setJellyfinId(user.id, user.jellyfinId);
       }
 

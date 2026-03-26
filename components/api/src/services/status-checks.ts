@@ -67,19 +67,24 @@ export class StatusCheckService {
   }
 
   async checkClickUpRejections(): Promise<void> {
-    StatusCheckService.logger.log('Checking ClickUp for rejected pending requests');
-    const requests = await this.requestsRepository.listByStatuses([RequestStatus.Pending]);
+    StatusCheckService.logger.log('Syncing ClickUp rejection status');
+    const requests = await this.requestsRepository.listByStatuses([RequestStatus.Pending, RequestStatus.Rejected]);
     const withTask = requests.filter((r) => r.taskId);
-    StatusCheckService.logger.log(`Found ${withTask.length} pending requests with ClickUp tasks`);
+    StatusCheckService.logger.log(`Found ${withTask.length} requests with ClickUp tasks to check`);
 
     let rejected = 0;
+    let unrejected = 0;
     for (const request of withTask) {
       try {
         const task = await this.clickupService.getTask(request.taskId!);
-        const status = task.status.status.toLowerCase();
-        if (status === 'rejected') {
+        const isRejectedInClickUp = task.status.status.toLowerCase() === 'rejected';
+
+        if (request.status === RequestStatus.Pending && isRejectedInClickUp) {
           await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Rejected);
           rejected += 1;
+        } else if (request.status === RequestStatus.Rejected && !isRejectedInClickUp) {
+          await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Pending);
+          unrejected += 1;
         }
       } catch (error) {
         StatusCheckService.logger.error(
@@ -88,7 +93,7 @@ export class StatusCheckService {
       }
     }
 
-    StatusCheckService.logger.log(`ClickUp rejection check completed: ${rejected} requests rejected`);
+    StatusCheckService.logger.log(`ClickUp sync completed: ${rejected} rejected, ${unrejected} unrejected`);
   }
 
   private async checkOneDarkiworld(request: RequestEntity): Promise<void> {

@@ -103,6 +103,11 @@ export class JellyfinMediaService {
     return this.config.url;
   }
 
+  async findUserByName(userName: string): Promise<JellyfinApiUser | null> {
+    const response = await this.api.get<JellyfinApiUser[]>('/Users');
+    return response.data.find((u) => u.Name.toLowerCase() === userName.toLowerCase()) ?? null;
+  }
+
   async registerUser(userName: string, password: string): Promise<string> {
     const response = await this.api
       .post('/Users/New', { Name: userName, Password: password })

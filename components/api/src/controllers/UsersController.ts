@@ -40,6 +40,10 @@ export class UsersController {
     try {
       const validatedData = registrationSchema.parse(body);
 
+      if (await this.usersRepository.existsByName(validatedData.username)) {
+        return { success: false, message: 'Ce pseudo est déjà utilisé' };
+      }
+
       const user = await this.usersRepository.createFromMessagingInfos(
         'email',
         validatedData.email,
