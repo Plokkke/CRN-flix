@@ -3,7 +3,6 @@ import { Logger } from '@nestjs/common';
 import { concurrent } from '@/helpers/concurrent';
 import { DarkiworldService } from '@/modules/darkiworld/service';
 import { JellyfinMedia, JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
-import { ClickUpService } from '@/services/clickup';
 import { MediaInfos } from '@/services/database/medias';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 
@@ -22,7 +21,6 @@ export class StatusCheckService {
     private readonly requestsRepository: RequestsRepository,
     private readonly jellyfin: JellyfinMediaService,
     private readonly darkiworldService: DarkiworldService,
-    private readonly clickupService: ClickUpService,
   ) {}
 
   async checkDarkiworldAvailability(): Promise<void> {
@@ -64,36 +62,6 @@ export class StatusCheckService {
     }
 
     StatusCheckService.logger.log(`Jellyfin check completed: ${fulfilled} requests fulfilled`);
-  }
-
-  async checkClickUpRejections(): Promise<void> {
-    StatusCheckService.logger.log('Syncing ClickUp rejection status');
-    const requests = await this.requestsRepository.listByStatuses([RequestStatus.Pending, RequestStatus.Rejected]);
-    const withTask = requests.filter((r) => r.taskId);
-    StatusCheckService.logger.log(`Found ${withTask.length} requests with ClickUp tasks to check`);
-
-    let rejected = 0;
-    let unrejected = 0;
-    for (const request of withTask) {
-      try {
-        const task = await this.clickupService.getTask(request.taskId!);
-        const isRejectedInClickUp = task.status.status.toLowerCase() === 'rejected';
-
-        if (request.status === RequestStatus.Pending && isRejectedInClickUp) {
-          await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Rejected);
-          rejected += 1;
-        } else if (request.status === RequestStatus.Rejected && !isRejectedInClickUp) {
-          await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Pending);
-          unrejected += 1;
-        }
-      } catch (error) {
-        StatusCheckService.logger.error(
-          `Failed to check ClickUp task ${request.taskId}: ${error instanceof Error ? error.message : error}`,
-        );
-      }
-    }
-
-    StatusCheckService.logger.log(`ClickUp sync completed: ${rejected} rejected, ${unrejected} unrejected`);
   }
 
   private async checkOneDarkiworld(request: RequestEntity): Promise<void> {

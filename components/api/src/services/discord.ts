@@ -174,4 +174,28 @@ export class DiscordService implements OnModuleDestroy {
       },
     );
   }
+
+  onReactionRemove(
+    callback: (userId: string, messageId: string, reaction: string) => Promise<void> | void,
+  ): () => void {
+    return registerListener(
+      this.client,
+      Events.MessageReactionRemove,
+      async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser): Promise<void> => {
+        DiscordService.logger.debug(
+          `Reaction ${reaction.emoji.name} removed by ${user.id} from message ${reaction.message.id}`,
+        );
+        if (user.bot) {
+          return;
+        }
+
+        const message = reaction.message;
+        if (!message.guild) {
+          return;
+        }
+
+        callback(user.id, message.id, reaction.emoji.name!);
+      },
+    );
+  }
 }

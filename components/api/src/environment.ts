@@ -22,9 +22,6 @@ export const environmentVariablesSchema = z
     DATABASE_NAME: z.string(),
     DATABASE_USERNAME: z.string(),
     DATABASE_PASSWORD: z.string(),
-    CLICKUP_API_TOKEN: z.string(),
-    CLICKUP_TEAM_ID: z.string(),
-    CLICKUP_LIST_ID: z.string(),
     DARKIWORLD_API_KEY: z.string(),
     DARKIWORLD_HOST: z.string().default('https://darkiworld.com'),
   })
@@ -61,11 +58,6 @@ export const environmentVariablesSchema = z
       name: env.DATABASE_NAME,
       username: env.DATABASE_USERNAME,
       password: env.DATABASE_PASSWORD,
-    },
-    clickup: {
-      apiToken: env.CLICKUP_API_TOKEN,
-      teamId: env.CLICKUP_TEAM_ID,
-      listId: env.CLICKUP_LIST_ID,
     },
     darkiworld: {
       apiKey: env.DARKIWORLD_API_KEY,

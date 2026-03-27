@@ -11,7 +11,6 @@ const JOBS = [
   { name: 'trakt-sync', schedule: 'Every 5 minutes' },
   { name: 'darkiworld-check', schedule: 'Every hour' },
   { name: 'jellyfin-check', schedule: 'Every 15 minutes' },
-  { name: 'clickup-rejection-check', schedule: 'Every 15 minutes' },
 ] as const;
 
 type JobName = (typeof JOBS)[number]['name'];
@@ -32,7 +31,6 @@ export class AdminController {
       'trakt-sync': () => this.sync.start(),
       'darkiworld-check': () => this.statusChecks.checkDarkiworldAvailability(),
       'jellyfin-check': () => this.statusChecks.checkJellyfinFulfillment(),
-      'clickup-rejection-check': () => this.statusChecks.checkClickUpRejections(),
     };
   }
 

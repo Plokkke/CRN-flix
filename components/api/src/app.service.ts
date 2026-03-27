@@ -27,8 +27,6 @@ import { AllUserMessaging } from '@/services/messaging/user/all';
 import { StatusCheckService } from '@/services/status-checks';
 import { SyncService } from '@/services/sync';
 
-import { ClickUpAdminMessaging } from './services/messaging/admin/clickup';
-
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
   private static readonly logger: Logger = new Logger(AppService.name);
@@ -46,8 +44,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly jellyfin: JellyfinMediaService,
     private readonly messaging: AllUserMessaging,
     private readonly adminsMessaging: DiscordAdminMessaging,
-    private readonly requestsTicketings: ClickUpAdminMessaging,
-    private readonly usersRepository: UsersRepository, // TODO get user in event instead of fetching from db
+    private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
     private readonly statusChecks: StatusCheckService,
   ) {}
@@ -59,7 +56,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('trakt-sync', '*/5 * * * *', () => this.runSync());
       this.registerCronJob('darkiworld-check', '0 * * * *', () => this.statusChecks.checkDarkiworldAvailability());
       this.registerCronJob('jellyfin-check', '*/15 * * * *', () => this.statusChecks.checkJellyfinFulfillment());
-      this.registerCronJob('clickup-rejection-check', '*/15 * * * *', () => this.statusChecks.checkClickUpRejections());
     }
   }
 
@@ -112,7 +108,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          await this.requestsTicketings.register(request);
+          await this.adminsMessaging.registerRequest(request);
         }),
       statusChange: (event: RequestStatusChangedEvent) =>
         this.trackEvent(async () => {
@@ -123,7 +119,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          await this.requestsTicketings.updateMediaStatus(request);
+          await this.adminsMessaging.updateRequestStatus(request);
 
           const userIds = request.userRequests?.map((user) => user.userId) ?? [];
           AppService.logger.log(`Notifying ${userIds.length} users for request ${event.requestId}`);
@@ -158,7 +154,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           }
 
           if (request.userRequests?.length === 0 && request.status !== RequestStatus.Rejected) {
-            await this.requestsTicketings.deleteTask(request);
+            await this.adminsMessaging.deleteRequestMessage(request);
             await this.requestsRepository.removeRequest(request.mediaId);
           }
         }),
@@ -190,6 +186,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
         await this.usersRepository.setJellyfinId(user.id, user.jellyfinId);
       }
 
+      await this.adminsMessaging.deleteApprovalMessage(user);
       this.messaging.registered(messagingContext, user, password);
     } catch (error) {
       if (error instanceof Error && error.message === 'User already exists') {
@@ -205,6 +202,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   private async onUserRejected(user: UserEntity): Promise<void> {
     const messagingContext = { key: user.messagingKey, id: user.messagingId };
     this.messaging.error(messagingContext, 'Votre inscription a été refusée');
+    await this.adminsMessaging.deleteApprovalMessage(user);
+    await this.usersRepository.remove(user.id);
   }
 
   private registerCronJob(name: string, cronExpression: string, handler: () => Promise<void>): void {

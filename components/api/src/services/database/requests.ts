@@ -278,6 +278,17 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows.map(fromRequestUserRecord);
   }
 
+  async getByTaskId(taskId: string): Promise<RequestEntity | null> {
+    const { rows } = await this.pool.query<{ media_id: string }>(
+      `SELECT media_id FROM media_requests WHERE thread_id = $1`,
+      [taskId],
+    );
+    if (!rows.length) {
+      return null;
+    }
+    return this.get(rows[0].media_id);
+  }
+
   async getByMediaId(mediaId: string): Promise<RequestEntity | null> {
     const query = `
       SELECT * FROM media_requests

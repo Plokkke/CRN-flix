@@ -14,13 +14,12 @@ import { EnvironmentVariables } from '@/environment';
 import { configSchema as darkiworldConfigSchema } from '@/modules/darkiworld/api';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
 import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
-import { clickupProvider } from '@/providers/clickup';
 import { contextProvider } from '@/providers/context';
 import { darkiworldProvider } from '@/providers/darkiworld';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
 import { jellyfinProvider } from '@/providers/jellyfin';
-import { adminMessagingProvider, clickupAdminMessagingProvider } from '@/providers/messaging/admin';
+import { adminMessagingProvider } from '@/providers/messaging/admin';
 import { allUserMessagingProvider } from '@/providers/messaging/all';
 import { userMessagingProviders } from '@/providers/messaging/user';
 import { statusCheckProvider } from '@/providers/status-checks';
@@ -29,7 +28,6 @@ import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/
 import { traktProvider } from '@/providers/trakt';
 import { traktPluginProvider } from '@/providers/traktPlugin';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
-import { clickupConfigSchema } from '@/services/clickup';
 import { discordConfigSchema } from '@/services/discord';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
 import { syncConfigSchema } from '@/services/sync';
@@ -45,7 +43,6 @@ export const configSchema = z.object({
   jellyfin: jellyfinConfigSchema,
   mailing: mailingConfigSchema,
   discord: discordConfigSchema,
-  clickup: clickupConfigSchema,
   darkiworld: darkiworldConfigSchema,
   administration: z.object({
     discordChannelId: z.string(),
@@ -73,7 +70,6 @@ export function loadConfig(env: EnvironmentVariables): Config {
     },
     jellyfin: env.jellyfin,
     discord: env.discord,
-    clickup: env.clickup,
     darkiworld: env.darkiworld,
     administration: {
       adminIds: env.server.adminIds,
@@ -99,12 +95,10 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
-      clickupProvider,
       darkiworldProvider,
       ...userMessagingProviders,
       allUserMessagingProvider,
       adminMessagingProvider,
-      clickupAdminMessagingProvider,
     ],
   })
   class App implements NestModule {

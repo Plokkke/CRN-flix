@@ -105,6 +105,10 @@ export class UsersRepository {
     await this.pool.query(query, [userId, approvalMessageId]);
   }
 
+  async remove(userId: string): Promise<void> {
+    await this.pool.query(`DELETE FROM users WHERE id = $1`, [userId]);
+  }
+
   async setJellyfinId(userId: string, jellyfinId: string): Promise<void> {
     const query = `
       UPDATE users
