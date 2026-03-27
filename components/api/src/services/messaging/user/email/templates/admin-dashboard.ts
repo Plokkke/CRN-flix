@@ -14,15 +14,7 @@ interface AdminDashboardParams {
   flashMessage?: string;
 }
 
-const formatDate = (date: Date): string => {
-  return new Date(date).toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
+const STATUSES = ['missing', 'pending', 'fulfilled', 'rejected'] as const;
 
 const getMediaLabel = (request: RequestEntity): string => {
   const media = request.media;
@@ -58,6 +50,21 @@ const getJobsSection = (jobs: JobDefinition[]): string => {
   `;
 };
 
+const getStatusFilters = (): string => {
+  const buttons = STATUSES.map(
+    (status) => `
+    <button
+      type="button"
+      class="status-filter status-${status} ${status === 'pending' ? 'active' : ''}"
+      data-status="${status}"
+      onclick="toggleStatus('${status}')"
+    >${status}</button>
+  `,
+  ).join('');
+
+  return `<div class="status-filters">${buttons}</div>`;
+};
+
 const getRequestsSection = (requests: RequestEntity[]): string => {
   if (requests.length === 0) {
     return `
@@ -66,22 +73,28 @@ const getRequestsSection = (requests: RequestEntity[]): string => {
     `;
   }
 
-  const rows = requests
+  const sorted = [...requests].sort((a, b) => {
+    const labelA = getMediaLabel(a).toLowerCase();
+    const labelB = getMediaLabel(b).toLowerCase();
+    return labelA.localeCompare(labelB);
+  });
+
+  const rows = sorted
     .map(
       (request) => `
-    <tr>
-      <td>${getMediaLabel(request)}</td>
+    <tr data-status="${request.status}">
+      <td>${request.darkiworldUrl ? `<a href="${request.darkiworldUrl}" target="_blank" rel="noopener">${getMediaLabel(request)}</a>` : getMediaLabel(request)}</td>
       <td>${request.media?.type ?? '-'}</td>
       <td><span style="${getStatusStyle(request.status)}">${request.status}</span></td>
       <td>${request.userRequests?.map((ur) => ur.user?.name ?? 'Unknown').join(', ') ?? '-'}</td>
-      <td>${formatDate(request.createdAt)}</td>
     </tr>
   `,
     )
     .join('');
 
   return `
-    <h2>Requests (${requests.length})</h2>
+    <h2>Requests (<span id="visible-count">0</span> / ${requests.length})</h2>
+    ${getStatusFilters()}
     <div class="table-wrapper">
       <table class="requests-table">
         <thead>
@@ -90,7 +103,6 @@ const getRequestsSection = (requests: RequestEntity[]): string => {
             <th>Type</th>
             <th>Status</th>
             <th>Users</th>
-            <th>Created</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -160,6 +172,35 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
       font-size: 14px;
     }
 
+    .status-filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .status-filter {
+      cursor: pointer;
+      transition: all 0.15s;
+      width: auto;
+      padding: 6px 16px;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 14px;
+      border: 2px solid transparent;
+    }
+
+    .status-filter:not(.active) {
+      background-color: ${COLORS.border} !important;
+      color: ${COLORS.textMuted} !important;
+      border-color: ${COLORS.border} !important;
+    }
+
+    .status-pending { background-color: ${COLORS.warning}; color: #000; }
+    .status-fulfilled { background-color: ${COLORS.success}; color: #fff; }
+    .status-missing { background-color: ${COLORS.orange}; color: #fff; }
+    .status-rejected { background-color: ${COLORS.error}; color: #fff; }
+
     .table-wrapper {
       overflow-x: auto;
     }
@@ -187,11 +228,46 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
       background-color: #f9f9f9;
     }
 
+    .requests-table tr.hidden-row {
+      display: none;
+    }
+
     .empty-state {
       color: ${COLORS.textMuted};
       font-style: italic;
     }
   `;
 
-  return getWebTemplate(`Admin - ${serviceName}`, serviceName, content, additionalCSS);
+  const additionalJS = `
+    var activeStatuses = new Set(['pending']);
+
+    function toggleStatus(status) {
+      if (activeStatuses.has(status)) {
+        activeStatuses.delete(status);
+      } else {
+        activeStatuses.add(status);
+      }
+      applyFilters();
+    }
+
+    function applyFilters() {
+      document.querySelectorAll('.status-filter').forEach(function(btn) {
+        btn.classList.toggle('active', activeStatuses.has(btn.dataset.status));
+      });
+
+      var visible = 0;
+      document.querySelectorAll('.requests-table tbody tr').forEach(function(row) {
+        var show = activeStatuses.size === 0 || activeStatuses.has(row.dataset.status);
+        row.classList.toggle('hidden-row', !show);
+        if (show) visible++;
+      });
+
+      var counter = document.getElementById('visible-count');
+      if (counter) counter.textContent = visible;
+    }
+
+    applyFilters();
+  `;
+
+  return getWebTemplate(`Admin - ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
 };

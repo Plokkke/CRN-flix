@@ -1,4 +1,4 @@
-import { InternalServerErrorException, Logger, OnModuleDestroy } from '@nestjs/common';
+import { InternalServerErrorException, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { z } from 'zod';
 
@@ -25,7 +25,7 @@ const ALLOWED_STATUS_UPDATE: RequestStatus[] = [
   RequestStatus.Rejected,
 ];
 
-export class EmailUserMessaging extends UserMessaging<string> implements OnModuleDestroy {
+export class EmailUserMessaging extends UserMessaging<string> implements OnModuleInit, OnModuleDestroy {
   private static logger = new Logger(EmailUserMessaging.name);
   private transporter: nodemailer.Transporter;
   private emailQueue: EmailQueue;
@@ -36,6 +36,7 @@ export class EmailUserMessaging extends UserMessaging<string> implements OnModul
   ) {
     super();
 
+    EmailUserMessaging.logger.log(`Configuring email transport (user: ${this.config.gmailUser})`);
     this.transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -45,6 +46,17 @@ export class EmailUserMessaging extends UserMessaging<string> implements OnModul
     });
 
     this.emailQueue = new EmailQueue(this.sendRequestUpdateEmail.bind(this));
+  }
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.transporter.verify();
+      EmailUserMessaging.logger.log('SMTP connection verified successfully');
+    } catch (error) {
+      EmailUserMessaging.logger.error(
+        `SMTP connection verification failed: ${error instanceof Error ? error.message : error}`,
+      );
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

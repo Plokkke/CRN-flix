@@ -36,10 +36,13 @@ export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
 
   async requestUpdated(ctxt: UserMessagingCtxt, request: RequestEntity): Promise<void> {
     try {
+      AllUserMessaging.logger.debug(`Dispatching requestUpdated via "${ctxt.key}" to ${ctxt.id}`);
       const messaging = this.getMessaging(ctxt.key);
       await messaging.requestUpdated(ctxt.id, request);
+      AllUserMessaging.logger.debug(`Notification dispatched successfully to ${ctxt.id}`);
     } catch (error) {
-      AllUserMessaging.logger.error(`Failed to send notification to user ${ctxt.id}`, error);
+      const message = error instanceof Error ? error.message : String(error);
+      AllUserMessaging.logger.error(`Failed to send notification via "${ctxt.key}" to ${ctxt.id}: ${message}`);
     }
   }
 }

@@ -5,6 +5,7 @@ import * as _ from 'lodash';
 import { DateTime } from 'luxon';
 import { z } from 'zod';
 
+import { logAxiosError, logAxiosRequest, logAxiosResponse } from '@/helpers/axios-logger';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { wait } from '@/utils';
 
@@ -111,12 +112,22 @@ export class TraktApi {
       },
     });
 
+    this.api.interceptors.request.use((request) => {
+      logAxiosRequest(TraktApi.logger, request);
+      return request;
+    });
+
     this.api.interceptors.response.use(
-      (r) => r,
+      (response) => {
+        logAxiosResponse(TraktApi.logger, response);
+        return response;
+      },
       async (error: AxiosError): Promise<unknown> => {
         if (error.response?.status === 429) {
+          TraktApi.logger.warn(`Rate limited by Trakt, retrying after backoff`);
           return await rateLimitHandler(error.response, error.config!);
         }
+        logAxiosError(TraktApi.logger, error);
         throw error;
       },
     );

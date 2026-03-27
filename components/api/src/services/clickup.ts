@@ -2,6 +2,8 @@ import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { z } from 'zod';
 
+import { logAxiosError, logAxiosRequest, logAxiosResponse } from '@/helpers/axios-logger';
+
 export const clickupConfigSchema = z.object({
   apiToken: z.string(),
   teamId: z.string(),
@@ -36,18 +38,24 @@ export class ClickUpService {
 
     this.api.interceptors.request.use(async (conf: InternalAxiosRequestConfig) => {
       await this.notRateLimited();
+      logAxiosRequest(ClickUpService.logger, conf);
       return conf;
     });
 
     this.api.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        logAxiosResponse(ClickUpService.logger, response);
+        return response;
+      },
       async (error: AxiosError) => {
         if (error.response?.status === 429) {
+          ClickUpService.logger.warn(`Rate limited by ClickUp, waiting for reset`);
           const resetTime = parseInt(error.response.headers['x-ratelimit-reset'] as string, 10);
           this.startRateLimitContext(resetTime);
 
           return this.api.request(error.config!);
         }
+        logAxiosError(ClickUpService.logger, error);
         throw error;
       },
     );

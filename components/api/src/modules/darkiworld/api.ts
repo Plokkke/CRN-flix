@@ -2,6 +2,8 @@ import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { z } from 'zod';
 
+import { logAxiosError, logAxiosRequest, logAxiosResponse } from '@/helpers/axios-logger';
+
 import { darkiworldSearchResponseSchema } from './schemas';
 import { DarkiworldTitle, ListLinksOptions } from './types';
 
@@ -20,14 +22,28 @@ export class DarkiworldApi {
   constructor(config: DarkiworldConfig) {
     const parsedConfig = configSchema.parse(config);
 
+    const baseHost = parsedConfig.host.replace(/\/+$/, '');
     this.client = axios.create({
-      baseURL: `${parsedConfig.host}/api/v1`,
+      baseURL: `${baseHost}/api/v1`,
+      headers: { Accept: 'application/json' },
     });
 
     this.client.interceptors.request.use((request) => {
       request.headers.Authorization = `Bearer ${parsedConfig.apiKey}`;
+      logAxiosRequest(DarkiworldApi.logger, request);
       return request;
     });
+
+    this.client.interceptors.response.use(
+      (response) => {
+        logAxiosResponse(DarkiworldApi.logger, response);
+        return response;
+      },
+      (error) => {
+        logAxiosError(DarkiworldApi.logger, error);
+        throw error;
+      },
+    );
   }
 
   async search(query: string, limit: number = 20): Promise<DarkiworldTitle[]> {
@@ -38,7 +54,8 @@ export class DarkiworldApi {
 
     const result = darkiworldSearchResponseSchema.safeParse(response.data);
     if (!result.success) {
-      DarkiworldApi.logger.debug(`Unexpected search response for "${query}": ${typeof response.data}`);
+      const preview = typeof response.data === 'string' ? response.data.slice(0, 200) : JSON.stringify(response.data);
+      DarkiworldApi.logger.warn(`Unexpected search response for "${query}": ${typeof response.data} — ${preview}`);
       return [];
     }
     return result.data.results;

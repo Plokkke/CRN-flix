@@ -2,6 +2,8 @@ import { Logger } from '@nestjs/common';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { z } from 'zod';
 
+import { logAxiosError, logAxiosRequest, logAxiosResponse } from '@/helpers/axios-logger';
+
 export type JellyfinUser = {
   id: string;
   name: string;
@@ -97,6 +99,22 @@ export class JellyfinMediaService {
         Authorization: `MediaBrowser Token="${token}"`,
       },
     });
+
+    this.api.interceptors.request.use((request) => {
+      logAxiosRequest(JellyfinMediaService.logger, request);
+      return request;
+    });
+
+    this.api.interceptors.response.use(
+      (response) => {
+        logAxiosResponse(JellyfinMediaService.logger, response);
+        return response;
+      },
+      (error) => {
+        logAxiosError(JellyfinMediaService.logger, error);
+        throw error;
+      },
+    );
   }
 
   get url(): string {

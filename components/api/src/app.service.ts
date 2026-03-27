@@ -116,19 +116,27 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
         }),
       statusChange: (event: RequestStatusChangedEvent) =>
         this.trackEvent(async () => {
+          AppService.logger.log(`Status change event: ${event.requestId} (${event.oldStatus} → ${event.newStatus})`);
           const request = await this.requestsRepository.get(event.requestId);
           if (!request) {
+            AppService.logger.warn(`Request ${event.requestId} not found for status change event`);
             return;
           }
 
           await this.requestsTicketings.updateMediaStatus(request);
 
-          // Send user notifications
-          for (const userId of request.userRequests?.map((user) => user.userId) ?? []) {
+          const userIds = request.userRequests?.map((user) => user.userId) ?? [];
+          AppService.logger.log(`Notifying ${userIds.length} users for request ${event.requestId}`);
+          for (const userId of userIds) {
             const user = await this.usersRepository.get(userId);
             if (user) {
+              AppService.logger.debug(
+                `Sending notification to user ${user.name} (${user.messagingKey}:${user.messagingId})`,
+              );
               const userCtxt = { key: user.messagingKey, id: user.messagingId };
               await this.messaging.requestUpdated(userCtxt, request);
+            } else {
+              AppService.logger.warn(`User ${userId} not found for notification`);
             }
           }
         }),

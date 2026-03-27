@@ -1,5 +1,5 @@
-import { Logger, OnModuleInit } from '@nestjs/common';
-import { Pool } from 'pg';
+import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 
 import { Emitter } from '@/helpers/events';
@@ -149,23 +149,33 @@ const LISTENING_MAP: {
   },
 ];
 
-export class RequestsRepository extends Emitter<RequestEvents> implements OnModuleInit {
+export class RequestsRepository extends Emitter<RequestEvents> implements OnModuleInit, OnModuleDestroy {
   static readonly logger = new Logger(RequestsRepository.name);
+
+  private listenClient: PoolClient | null = null;
 
   constructor(private readonly pool: Pool) {
     super();
   }
 
   async onModuleInit(): Promise<void> {
-    const client = await this.pool.connect();
+    // Keep a dedicated client for LISTEN — releasing it would drop subscriptions
+    this.listenClient = await this.pool.connect();
 
     for (const { channel, schema, event } of LISTENING_MAP) {
-      listen(client, channel, schema, (msg: z.infer<typeof schema>) => {
+      RequestsRepository.logger.log(`Subscribing to PostgreSQL channel: ${channel}`);
+      listen(this.listenClient, channel, schema, (msg: z.infer<typeof schema>) => {
+        RequestsRepository.logger.debug(`Received event "${String(event)}": ${JSON.stringify(msg)}`);
         this.emit(event, msg);
       });
     }
+  }
 
-    client.release();
+  async onModuleDestroy(): Promise<void> {
+    if (this.listenClient) {
+      this.listenClient.release();
+      this.listenClient = null;
+    }
   }
 
   async create(mediaId: string): Promise<RequestEntity> {
@@ -240,6 +250,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
   }
 
   async updateStatus(mediaId: string, status: RequestStatus): Promise<RequestEntity> {
+    RequestsRepository.logger.debug(`Updating request ${mediaId} status to ${status}`);
     const query = `
       UPDATE media_requests
       SET status = $2, updated_at = NOW()
@@ -247,6 +258,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       RETURNING *
     `;
     const { rows } = await this.pool.query<RequestRecord>(query, [mediaId, status]);
+    RequestsRepository.logger.debug(`Request ${mediaId} status updated, NOTIFY should fire`);
     return fromRequestRecord(rows[0]);
   }
 
