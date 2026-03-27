@@ -55,10 +55,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     this.listeners.push(this.listenDatabaseEvents(), this.listenAdminMessages());
 
-    this.registerCronJob('trakt-sync', '*/5 * * * *', () => this.runSync());
-    this.registerCronJob('darkiworld-check', '0 * * * *', () => this.statusChecks.checkDarkiworldAvailability());
-    this.registerCronJob('jellyfin-check', '*/15 * * * *', () => this.statusChecks.checkJellyfinFulfillment());
-    this.registerCronJob('clickup-rejection-check', '*/15 * * * *', () => this.statusChecks.checkClickUpRejections());
+    if (process.env.NODE_ENV === 'production') {
+      this.registerCronJob('trakt-sync', '*/5 * * * *', () => this.runSync());
+      this.registerCronJob('darkiworld-check', '0 * * * *', () => this.statusChecks.checkDarkiworldAvailability());
+      this.registerCronJob('jellyfin-check', '*/15 * * * *', () => this.statusChecks.checkJellyfinFulfillment());
+      this.registerCronJob('clickup-rejection-check', '*/15 * * * *', () => this.statusChecks.checkClickUpRejections());
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -93,10 +95,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       }
     } finally {
       this.isRunning = false;
-    }
-
-    if (process.argv.includes('--once')) {
-      process.emit('SIGINT');
     }
   }
 

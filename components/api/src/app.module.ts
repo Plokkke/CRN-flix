@@ -5,6 +5,7 @@ import { HealthModule } from '@plokkke/nest-health-registry';
 import { z } from 'zod';
 
 import { AppService } from '@/app.service';
+import { AdminController } from '@/controllers/AdminController';
 import { AssetsController } from '@/controllers/AssetsController';
 import { MailingController } from '@/controllers/MailingController';
 import { UserGuideController } from '@/controllers/UserGuideController';
@@ -85,7 +86,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
 export function configureAppModule(env: EnvironmentVariables): new () => NestModule {
   @Module({
     imports: [ConfigModule.forRoot({ load: [() => loadConfig(env)] }), ScheduleModule.forRoot(), HealthModule],
-    controllers: [UsersController, MailingController, UserGuideController, AssetsController],
+    controllers: [UsersController, MailingController, UserGuideController, AssetsController, AdminController],
     providers: [
       MemoryCacheService,
       AppService,

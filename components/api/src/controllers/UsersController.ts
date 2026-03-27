@@ -10,7 +10,7 @@ import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
 import { registrationFormTemplate } from '@/services/messaging/user/email/templates';
 
 const registrationSchema = z.object({
-  email: z.string().email('Email invalide'),
+  email: z.email('Email invalide'),
   username: z.string().min(3, 'Le pseudo doit contenir au moins 3 caractères'),
 });
 
