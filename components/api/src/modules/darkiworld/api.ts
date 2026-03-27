@@ -36,8 +36,12 @@ export class DarkiworldApi {
       params: { limit },
     });
 
-    const parsed = darkiworldSearchResponseSchema.parse(response.data);
-    return parsed.results;
+    const result = darkiworldSearchResponseSchema.safeParse(response.data);
+    if (!result.success) {
+      DarkiworldApi.logger.debug(`Unexpected search response for "${query}": ${typeof response.data}`);
+      return [];
+    }
+    return result.data.results;
   }
 
   async listLinks(titleId: number, options: ListLinksOptions = {}): Promise<boolean> {

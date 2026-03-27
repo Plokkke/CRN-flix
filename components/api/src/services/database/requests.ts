@@ -311,14 +311,15 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
 
   async removeUserRequestReason(mediaId: string, userId: string, reason: string): Promise<void> {
     await this.pool.query(
-      `UPDATE request_users SET reasons = array_remove(reasons, $3)
-       WHERE request_media_id = $1 AND user_id = $2`,
+      `DELETE FROM request_users
+       WHERE request_media_id = $1 AND user_id = $2
+         AND array_length(array_remove(reasons, $3), 1) IS NULL`,
       [mediaId, userId, reason],
     );
     await this.pool.query(
-      `DELETE FROM request_users
-       WHERE request_media_id = $1 AND user_id = $2 AND array_length(reasons, 1) IS NULL`,
-      [mediaId, userId],
+      `UPDATE request_users SET reasons = array_remove(reasons, $3)
+       WHERE request_media_id = $1 AND user_id = $2`,
+      [mediaId, userId, reason],
     );
   }
 

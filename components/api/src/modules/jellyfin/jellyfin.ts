@@ -121,13 +121,20 @@ export class JellyfinMediaService {
   }
 
   async resetUserPassword(userId: string, password: string): Promise<void> {
-    await this.api.post(`/Users/${userId}/Password`, {
-      resetPassword: true,
-    });
-    await this.api.post(`/Users/${userId}/Password`, {
-      CurrentPw: '',
-      NewPw: password,
-    });
+    await this.api.post(
+      '/Users/Password',
+      { ResetPassword: true },
+      {
+        params: { userId },
+      },
+    );
+    await this.api.post(
+      '/Users/Password',
+      { CurrentPw: '', NewPw: password },
+      {
+        params: { userId },
+      },
+    );
   }
 
   async listAssets(): Promise<JellyfinMedia[]> {

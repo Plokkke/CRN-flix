@@ -26,6 +26,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build-stage /app/dist ./dist
+COPY src/assets ./assets
 
 RUN chown -R runner:appgroup /app
 
