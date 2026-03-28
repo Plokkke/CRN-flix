@@ -66,10 +66,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('update-darkiworld-availability', '0 * * * *', () =>
         this.mediaAvailability.checkDarkiworldAvailability(),
       );
-      this.registerCronJob('update-jellyfin-fulfillment', '*/15 * * * *', () =>
-        this.mediaAvailability.checkJellyfinFulfillment(),
-      );
-      this.registerCronJob('pull-completed-downloads', '*/2 * * * *', () => this.postDownload.pullCompletedDownloads());
+      // this.registerCronJob('update-jellyfin-fulfillment', '*/15 * * * *', () =>
+      //   this.mediaAvailability.checkJellyfinFulfillment(),
+      // );
+      this.registerCronJob('pull-completed-downloads', '* * * * *', () => this.postDownload.pullCompletedDownloads());
     }
   }
 

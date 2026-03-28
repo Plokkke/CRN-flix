@@ -8,6 +8,7 @@ import { IdentificationResult } from './media-identifier';
 
 export const mediaPathsConfigSchema = z.object({
   downloads: z.string(),
+  jdownloaderOutput: z.string(),
   movies: z.string(),
   series: z.string(),
 });
@@ -68,21 +69,27 @@ export class MediaLabelizerService {
     const ext = path.extname(sourcePath);
     const destinationPath = path.join(folderName, `${fileName + ext}`);
 
+    MediaLabelizerService.logger.log(`Moving "${path.basename(sourcePath)}" → "${destinationPath}"`);
     await fs.mkdir(folderName, { recursive: true });
 
     try {
       await fs.rename(sourcePath, destinationPath);
+      MediaLabelizerService.logger.log(`Renamed successfully`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EXDEV') {
+        MediaLabelizerService.logger.log(
+          `Cross-device move, copying ${sourcePath} (this may take a while for large files)`,
+        );
         await fs.copyFile(sourcePath, destinationPath);
+        MediaLabelizerService.logger.log(`Copy complete, removing source`);
         await fs.unlink(sourcePath);
       } else {
+        MediaLabelizerService.logger.error(`Move failed: ${(error as Error).message}`);
         throw error;
       }
     }
 
     await this.cleanupEmptyParents(path.dirname(sourcePath), this.config.downloads);
-
     MediaLabelizerService.logger.log(`Placed: ${path.basename(sourcePath)} → ${destinationPath}`);
   }
 

@@ -1,7 +1,6 @@
 import * as crypto from 'crypto';
 
 import { Logger } from '@nestjs/common';
-import axios from 'axios';
 import { z } from 'zod';
 
 export const jdownloaderConfigSchema = z.object({
@@ -55,19 +54,19 @@ function deriveKey(email: string, password: string, domain: string): Buffer {
   return crypto.createHash('sha256').update(combined).digest();
 }
 
-function encrypt(data: string, key: Buffer): string {
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+function encrypt(data: string, ivKey: Buffer): string {
+  const iv = ivKey.subarray(0, 16);
+  const key = ivKey.subarray(16);
+  const cipher = crypto.createCipheriv('aes-128-cbc', key, iv);
   const encrypted = Buffer.concat([cipher.update(data, 'utf8'), cipher.final()]);
-  return Buffer.concat([iv, encrypted]).toString('base64');
+  return Buffer.from(encrypted).toString('base64');
 }
 
-function decrypt(data: string, key: Buffer): string {
-  const raw = Buffer.from(data, 'base64');
-  const iv = raw.subarray(0, 16);
-  const encrypted = raw.subarray(16);
-  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+function decrypt(data: string, ivKey: Buffer): string {
+  const iv = ivKey.subarray(0, 16);
+  const key = ivKey.subarray(16);
+  const decipher = crypto.createDecipheriv('aes-128-cbc', key, iv);
+  return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8');
 }
 
 function hmacSign(key: Buffer, data: string): string {
@@ -100,13 +99,9 @@ export class JDownloaderApiService {
 
   private async connect(): Promise<void> {
     const query = `/my/connect?email=${encodeURIComponent(this.config.email)}&appkey=crn-flix`;
-    const signature = hmacSign(this.loginSecret, query);
-    const url = `${JDownloaderApiService.BASE_URL}${query}&signature=${signature}`;
+    const response = await this.callServer<{ sessiontoken: string; regaintoken: string }>(query, this.loginSecret);
 
-    const response = await axios.get(url);
-    const decrypted = JSON.parse(decrypt(response.data, this.loginSecret));
-
-    this.sessionToken = decrypted.sessiontoken;
+    this.sessionToken = response.sessiontoken;
     this.serverEncryptionToken = updateKey(this.loginSecret, this.sessionToken!);
     this.deviceEncryptionToken = updateKey(this.deviceSecret, this.sessionToken!);
 
@@ -114,7 +109,9 @@ export class JDownloaderApiService {
   }
 
   private async resolveDevice(): Promise<void> {
-    const devices = await this.callServer<JDDevice[]>('/my/listdevices');
+    const devices = await this.callServer<JDDevice[]>(
+      `/my/listdevices?sessiontoken=${encodeURIComponent(this.sessionToken!)}`,
+    );
     const device = devices.find((d) => d.name === this.config.deviceName);
     if (!device) {
       throw new Error(
@@ -133,19 +130,31 @@ export class JDownloaderApiService {
   }
 
   private nextRid(): number {
-    const rid = this.requestId;
-    this.requestId += 1;
-    return rid;
+    this.requestId = Date.now();
+    return this.requestId;
   }
 
-  private async callServer<T>(path: string): Promise<T> {
+  private async callServer<T>(path: string, key?: Buffer): Promise<T> {
     const rid = this.nextRid();
-    const query = `${path}${path.includes('?') ? '&' : '?'}signature=${hmacSign(this.serverEncryptionToken!, `${path}&rid=${rid}`)}&rid=${rid}`;
-    const url = `${JDownloaderApiService.BASE_URL}${query}`;
+    const encryptionKey = key ?? this.serverEncryptionToken!;
+    const separator = path.includes('?') ? '&' : '?';
+    const queryWithRid = `${path}${separator}rid=${rid}`;
+    const signature = hmacSign(encryptionKey, queryWithRid);
+    const url = `${JDownloaderApiService.BASE_URL}${queryWithRid}&signature=${signature}`;
 
-    const response = await axios.get(url);
-    const result = JSON.parse(decrypt(response.data, this.serverEncryptionToken!));
-    return result.list ?? result.data;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/aesjson-jd; charset=utf-8' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.text();
+    const decrypted = decrypt(data, encryptionKey);
+    const result = JSON.parse(decrypted.replace(/[^\x20-\x7E]/g, ''));
+    return result.list ?? result.data ?? result;
   }
 
   private async callDevice<T>(action: string, params?: unknown[]): Promise<T> {
@@ -160,22 +169,35 @@ export class JDownloaderApiService {
     });
 
     const encrypted = encrypt(postData, this.deviceEncryptionToken!);
-    const query = `/t_${this.sessionToken}_${this.deviceId}${action}`;
-    const signature = hmacSign(this.deviceEncryptionToken!, query);
+    const query = `/t_${encodeURIComponent(this.sessionToken!)}_${encodeURIComponent(this.deviceId!)}${action}`;
 
-    const url = `${JDownloaderApiService.BASE_URL}${query}?signature=${signature}&rid=${rid}`;
-    const response = await axios.post(url, encrypted, {
+    const response = await fetch(`${JDownloaderApiService.BASE_URL}${query}`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/aesjson-jd; charset=utf-8' },
+      body: encrypted,
     });
 
-    const result = JSON.parse(decrypt(response.data, this.deviceEncryptionToken!));
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      let errorDetail = `HTTP ${response.status}`;
+      try {
+        errorDetail += `: ${decrypt(responseText, this.deviceEncryptionToken!)}`;
+      } catch {
+        errorDetail += `: ${responseText}`;
+      }
+      throw new Error(errorDetail);
+    }
+
+    const decrypted = decrypt(responseText, this.deviceEncryptionToken!);
+    const result = JSON.parse(decrypted.replace(/[^\x20-\x7E]/g, ''));
     return result.data;
   }
 
   async disconnect(): Promise<void> {
     if (this.sessionToken) {
       try {
-        await this.callServer('/my/disconnect');
+        await this.callServer(`/my/disconnect?sessiontoken=${encodeURIComponent(this.sessionToken)}`);
       } catch {
         // ignore disconnect errors
       }
@@ -187,51 +209,45 @@ export class JDownloaderApiService {
 
   async reconnect(): Promise<void> {
     this.sessionToken = null;
+    this.serverEncryptionToken = null;
+    this.deviceEncryptionToken = null;
+    this.requestId = 0;
     await this.ensureConnected();
   }
 
   async queryPackages(): Promise<JDPackage[]> {
+    const params = JSON.stringify({
+      bytesLoaded: true,
+      bytesTotal: true,
+      finished: true,
+      status: true,
+      saveTo: true,
+    });
     try {
-      return await this.callDevice<JDPackage[]>('/downloadsV2/queryPackages', [
-        {
-          bytesLoaded: true,
-          bytesTotal: true,
-          finished: true,
-          status: true,
-          saveTo: true,
-        },
-      ]);
+      return await this.callDevice<JDPackage[]>('/downloadsV2/queryPackages', [params]);
     } catch (error) {
       JDownloaderApiService.logger.warn(
         `queryPackages failed, reconnecting: ${error instanceof Error ? error.message : error}`,
       );
       await this.reconnect();
-      return this.callDevice<JDPackage[]>('/downloadsV2/queryPackages', [
-        {
-          bytesLoaded: true,
-          bytesTotal: true,
-          finished: true,
-          status: true,
-          saveTo: true,
-        },
-      ]);
+      return this.callDevice<JDPackage[]>('/downloadsV2/queryPackages', [params]);
     }
   }
 
   async queryLinks(packageIds: number[]): Promise<JDLink[]> {
-    return this.callDevice<JDLink[]>('/downloadsV2/queryLinks', [
-      {
-        bytesLoaded: true,
-        bytesTotal: true,
-        finished: true,
-        status: true,
-        extractionStatus: true,
-        packageUUIDs: packageIds,
-      },
-    ]);
+    const params = JSON.stringify({
+      bytesLoaded: true,
+      bytesTotal: true,
+      finished: true,
+      status: true,
+      extractionStatus: true,
+      packageUUIDs: packageIds,
+    });
+    return this.callDevice<JDLink[]>('/downloadsV2/queryLinks', [params]);
   }
 
   async cleanupPackages(packageIds: number[]): Promise<void> {
-    await this.callDevice('/downloadsV2/removeLinks', [[], packageIds]);
+    const params = JSON.stringify({ packageIds });
+    await this.callDevice('/downloadsV2/removePackages', [params]);
   }
 }

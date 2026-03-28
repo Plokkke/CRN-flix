@@ -33,17 +33,32 @@ export class PostDownloadService {
     private readonly identification: MediaIdentifierService,
     private readonly placement: MediaLabelizerService,
     private readonly downloadsPath: string,
+    private readonly jdownloaderOutputPath: string,
   ) {}
+
+  private toLocalPath(jdownloaderPath: string): string {
+    if (jdownloaderPath.startsWith(this.jdownloaderOutputPath)) {
+      return jdownloaderPath.replace(this.jdownloaderOutputPath, this.downloadsPath);
+    }
+    return jdownloaderPath;
+  }
 
   async pullCompletedDownloads(): Promise<void> {
     const packages = await this.jdownloader.queryPackages();
+    PostDownloadService.logger.debug(`JDownloader packages: ${JSON.stringify(packages)}`);
+
     const finishedPackages = packages.filter((p) => p.finished);
+    PostDownloadService.logger.log(`Found ${finishedPackages.length}/${packages.length} finished packages`);
 
     for (const pkg of finishedPackages) {
+      const localPath = this.toLocalPath(pkg.saveTo ?? this.jdownloaderOutputPath);
+      PostDownloadService.logger.log(
+        `Package "${pkg.name}" — saveTo: "${pkg.saveTo}" → local: "${localPath}" (jdOutput: "${this.jdownloaderOutputPath}", downloads: "${this.downloadsPath}")`,
+      );
       await this.downloadJobs.create({
         jdownloaderPackageId: pkg.uuid,
         packageName: pkg.name,
-        saveTo: pkg.saveTo ?? this.downloadsPath,
+        saveTo: localPath,
       });
     }
   }
@@ -61,7 +76,9 @@ export class PostDownloadService {
 
     while (true) {
       links = await this.jdownloader.queryLinks([job.jdownloaderPackageId]);
+      PostDownloadService.logger.debug(`Job ${job.id} links: ${JSON.stringify(links)}`);
       state = this.resolveExtractionState(links);
+      PostDownloadService.logger.log(`Job ${job.id} extraction state: ${state}`);
       if (state !== JDExtractionState.Running) {
         break;
       }
@@ -130,7 +147,9 @@ export class PostDownloadService {
   }
 
   private resolveExtractionState(links: JDLink[]): JDExtractionState {
-    const statuses = links.map((l) => l.extractionStatus).filter((s): s is JDExtractionStatus => s !== null);
+    const statuses = links
+      .map((l) => l.extractionStatus)
+      .filter((s): s is JDExtractionStatus => s !== null && s !== undefined);
 
     if (statuses.length === 0) {
       return JDExtractionState.None;

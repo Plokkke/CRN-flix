@@ -44,7 +44,14 @@ export const postDownloadProvider: Provider = {
     configService: ConfigService<Config, true>,
   ): PostDownloadService => {
     const mediaPaths = configService.get('mediaPaths');
-    return new PostDownloadService(jdownloader, downloadJobs, identification, placement, mediaPaths.downloads);
+    return new PostDownloadService(
+      jdownloader,
+      downloadJobs,
+      identification,
+      placement,
+      mediaPaths.downloads,
+      mediaPaths.jdownloaderOutput,
+    );
   },
 };
 

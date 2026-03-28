@@ -29,6 +29,7 @@ export const environmentVariablesSchema = z
     MYJDOWNLOADER_DEVICE_NAME: z.string(),
     TMDB_API_KEY: z.string(),
     DOWNLOADS_PATH: z.string(),
+    JDOWNLOADER_OUTPUT_PATH: z.string(),
     MOVIES_PATH: z.string(),
     SERIES_PATH: z.string(),
   })
@@ -80,6 +81,7 @@ export const environmentVariablesSchema = z
     },
     mediaPaths: {
       downloads: env.DOWNLOADS_PATH,
+      jdownloaderOutput: env.JDOWNLOADER_OUTPUT_PATH,
       movies: env.MOVIES_PATH,
       series: env.SERIES_PATH,
     },
