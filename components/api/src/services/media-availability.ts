@@ -14,8 +14,8 @@ function compositeKey(media: Pick<MediaInfos, 'imdbId' | 'seasonNumber' | 'episo
 
 const DARKIWORLD_CONCURRENCY = 5;
 
-export class StatusCheckService {
-  private static readonly logger = new Logger(StatusCheckService.name);
+export class MediaAvailabilityService {
+  private static readonly logger = new Logger(MediaAvailabilityService.name);
 
   constructor(
     private readonly requestsRepository: RequestsRepository,
@@ -24,19 +24,19 @@ export class StatusCheckService {
   ) {}
 
   async checkDarkiworldAvailability(): Promise<void> {
-    StatusCheckService.logger.log('Checking Darkiworld availability for missing requests');
+    MediaAvailabilityService.logger.log('Checking Darkiworld availability for missing requests');
     const requests = await this.requestsRepository.listByStatuses([RequestStatus.Missing]);
-    StatusCheckService.logger.log(`Found ${requests.length} missing requests to check`);
+    MediaAvailabilityService.logger.log(`Found ${requests.length} missing requests to check`);
 
     await concurrent(requests, DARKIWORLD_CONCURRENCY, (request) => this.checkOneDarkiworld(request));
 
-    StatusCheckService.logger.log('Darkiworld availability check completed');
+    MediaAvailabilityService.logger.log('Darkiworld availability check completed');
   }
 
   async checkJellyfinFulfillment(): Promise<void> {
-    StatusCheckService.logger.log('Checking Jellyfin fulfillment for missing/pending requests');
+    MediaAvailabilityService.logger.log('Checking Jellyfin fulfillment for missing/pending requests');
     const requests = await this.requestsRepository.listByStatuses([RequestStatus.Missing, RequestStatus.Pending]);
-    StatusCheckService.logger.log(`Found ${requests.length} requests to check against Jellyfin`);
+    MediaAvailabilityService.logger.log(`Found ${requests.length} requests to check against Jellyfin`);
 
     const jellyfinMedias = await this.jellyfin.listAssets();
     const jellyfinKeys = new Set(
@@ -61,7 +61,7 @@ export class StatusCheckService {
       }
     }
 
-    StatusCheckService.logger.log(`Jellyfin check completed: ${fulfilled} requests fulfilled`);
+    MediaAvailabilityService.logger.log(`Jellyfin check completed: ${fulfilled} requests fulfilled`);
   }
 
   private async checkOneDarkiworld(request: RequestEntity): Promise<void> {
@@ -80,9 +80,11 @@ export class StatusCheckService {
         await this.requestsRepository.setDarkiworldInfo(request.mediaId, darkiworldTitleId, result.downloadUrl);
       }
       await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Pending);
-      StatusCheckService.logger.log(`"${request.media.title}" (${request.media.imdbId}) now available on Darkiworld`);
+      MediaAvailabilityService.logger.log(
+        `"${request.media.title}" (${request.media.imdbId}) now available on Darkiworld`,
+      );
     } catch (error) {
-      StatusCheckService.logger.error(
+      MediaAvailabilityService.logger.error(
         `Darkiworld check failed for "${request.media.title}" (${request.media.imdbId}): ${error instanceof Error ? error.message : error}`,
       );
     }

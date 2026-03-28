@@ -60,10 +60,12 @@ model MediaRequest {
   threadId           String?             @map("thread_id") @db.VarChar(50)
   darkiworldTitleId  Int?                @map("darkiworld_title_id")
   darkiworldUrl      String?             @map("darkiworld_url")
+  downloadJobId      String?             @map("download_job_id") @db.Uuid
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   media         Media           @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  downloadJob   DownloadJob?    @relation(fields: [downloadJobId], references: [id], onDelete: SetNull)
   requestUsers  RequestUser[]
 
   @@map("media_requests")
@@ -108,4 +110,27 @@ enum RequestReason {
   LISTED
   HIGH_RATED
   PROGRESS
+}
+
+enum DownloadJobStatus {
+  detected
+  identifying
+  completed
+  failed
+}
+
+model DownloadJob {
+  id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jdownloaderPackageId BigInt            @unique @map("jdownloader_package_id") @db.BigInt
+  packageName          String            @map("package_name")
+  saveTo               String            @map("save_to")
+  status               DownloadJobStatus @default(detected)
+  sourcePaths          String[]          @map("source_paths")
+  errorMessage         String?           @map("error_message")
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  mediaRequests        MediaRequest[]
+
+  @@map("download_jobs")
 }

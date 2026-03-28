@@ -12,25 +12,31 @@ import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
 import { configSchema as darkiworldConfigSchema } from '@/modules/darkiworld/api';
+import { discordConfigSchema } from '@/modules/discord/discord';
+import { jdownloaderConfigSchema } from '@/modules/jdownloader/jdownloader-api.service';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
+import { tmdbConfigSchema } from '@/modules/tmdb/tmdb';
 import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
 import { contextProvider } from '@/providers/context';
 import { darkiworldProvider } from '@/providers/darkiworld';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
+import { jdownloaderProvider } from '@/providers/jdownloader';
 import { jellyfinProvider } from '@/providers/jellyfin';
+import { mediaAvailabilityProvider } from '@/providers/media-availability';
 import { adminMessagingProvider } from '@/providers/messaging/admin';
 import { allUserMessagingProvider } from '@/providers/messaging/all';
 import { userMessagingProviders } from '@/providers/messaging/user';
-import { statusCheckProvider } from '@/providers/status-checks';
-import { syncProvider } from '@/providers/sync';
+import { postDownloadProviders } from '@/providers/post-download';
+import { syncProvider } from '@/providers/request-synchronizer';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
+import { tmdbProvider } from '@/providers/tmdb';
 import { traktProvider } from '@/providers/trakt';
 import { traktPluginProvider } from '@/providers/traktPlugin';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
-import { discordConfigSchema } from '@/services/discord';
+import { mediaPathsConfigSchema } from '@/services/media-labelizer';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
-import { syncConfigSchema } from '@/services/sync';
+import { syncConfigSchema } from '@/services/request-synchronizer';
 
 export const configSchema = z.object({
   name: z.string(),
@@ -44,6 +50,9 @@ export const configSchema = z.object({
   mailing: mailingConfigSchema,
   discord: discordConfigSchema,
   darkiworld: darkiworldConfigSchema,
+  jdownloader: jdownloaderConfigSchema,
+  tmdb: tmdbConfigSchema,
+  mediaPaths: mediaPathsConfigSchema,
   administration: z.object({
     discordChannelId: z.string(),
     adminIds: z.array(z.string().min(1)).min(1),
@@ -71,6 +80,9 @@ export function loadConfig(env: EnvironmentVariables): Config {
     jellyfin: env.jellyfin,
     discord: env.discord,
     darkiworld: env.darkiworld,
+    jdownloader: env.jdownloader,
+    tmdb: env.tmdb,
+    mediaPaths: env.mediaPaths,
     administration: {
       adminIds: env.server.adminIds,
       discordChannelId: env.discord.channelId,
@@ -91,7 +103,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       syncDataSourceProvider,
       ...repositoryProviders,
       syncProvider,
-      statusCheckProvider,
+      mediaAvailabilityProvider,
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
@@ -99,6 +111,9 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       ...userMessagingProviders,
       allUserMessagingProvider,
       adminMessagingProvider,
+      jdownloaderProvider,
+      tmdbProvider,
+      ...postDownloadProviders,
     ],
   })
   class App implements NestModule {

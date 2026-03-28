@@ -1,9 +1,9 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { ColorResolvable, EmbedBuilder } from 'discord.js';
 
+import { DiscordService } from '@/modules/discord/discord';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
-import { DiscordService } from '@/services/discord';
 import { UserMessaging } from '@/services/messaging/user';
 
 const COLOR_BY_STATUS: Record<RequestStatus, ColorResolvable> = {

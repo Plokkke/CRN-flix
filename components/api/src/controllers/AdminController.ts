@@ -3,9 +3,9 @@ import { Response } from 'express';
 
 import { ContextService } from '@/services/context';
 import { RequestsRepository } from '@/services/database/requests';
+import { MediaAvailabilityService } from '@/services/media-availability';
 import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
-import { StatusCheckService } from '@/services/status-checks';
-import { SyncService } from '@/services/sync';
+import { RequestSynchronizerService } from '@/services/request-synchronizer';
 
 const JOBS = [
   { name: 'trakt-sync', schedule: 'Every 5 minutes' },
@@ -23,8 +23,8 @@ export class AdminController {
 
   constructor(
     private readonly contextService: ContextService,
-    private readonly sync: SyncService,
-    private readonly statusChecks: StatusCheckService,
+    private readonly sync: RequestSynchronizerService,
+    private readonly statusChecks: MediaAvailabilityService,
     private readonly requestsRepository: RequestsRepository,
   ) {
     this.jobHandlers = {

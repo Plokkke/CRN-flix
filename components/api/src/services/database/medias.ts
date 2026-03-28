@@ -93,7 +93,7 @@ export class MediasRepository {
     return rows.length > 0 ? fromMediaRecord(rows[0]) : null;
   }
 
-  async create(infos: MediaInfos): Promise<MediaEntity> {
+  async upsert(infos: MediaInfos): Promise<MediaEntity> {
     const query = `
       INSERT INTO medias (imdb_id, type, title, year, season_number, episode_number)
       VALUES ($1, $2, $3, $4, $5, $6)

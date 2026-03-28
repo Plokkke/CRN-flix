@@ -87,8 +87,8 @@ type UserWithAuthContext = UserEntity & {
   accessToken: string;
 };
 
-export class SyncService {
-  private static readonly logger = new Logger(SyncService.name);
+export class RequestSynchronizerService {
+  private static readonly logger = new Logger(RequestSynchronizerService.name);
 
   private readonly requestHandlerByKind: Record<RequestKind, (user: UserAuthCtxt) => Promise<MediaInfos[]>> = {
     WATCHLISTED: async (user) => {
@@ -122,7 +122,7 @@ export class SyncService {
   ) {}
 
   async start(): Promise<void> {
-    SyncService.logger.log('Starting batch synchronization');
+    RequestSynchronizerService.logger.log('Starting batch synchronization');
 
     const gathered = await this.gather();
     const mediaRequestByKey = _.keyBy(gathered.mediaRequests, (r) => compositeKey(r));
@@ -135,7 +135,9 @@ export class SyncService {
 
     // New requests: compute + apply concurrently (Darkiworld calls)
     const newMediaRequests = Object.entries(gathered.desiredMediaByKey).filter(([key]) => !mediaRequestByKey[key]);
-    SyncService.logger.log(`Processing ${newMediaRequests.length} new medias (concurrency: ${DARKIWORLD_CONCURRENCY})`);
+    RequestSynchronizerService.logger.log(
+      `Processing ${newMediaRequests.length} new medias (concurrency: ${DARKIWORLD_CONCURRENCY})`,
+    );
 
     await concurrent(newMediaRequests, DARKIWORLD_CONCURRENCY, ([key, desired]) =>
       this.processNewRequest(key, desired, gathered.jellyfinAssets),
@@ -148,7 +150,7 @@ export class SyncService {
       }
     }
 
-    SyncService.logger.log('Batch synchronization completed');
+    RequestSynchronizerService.logger.log('Batch synchronization completed');
   }
 
   // --- Phase 1: GATHER ---
@@ -156,17 +158,19 @@ export class SyncService {
   private async gather(): Promise<GatheredData> {
     const users = await this.listUsers();
 
-    SyncService.logger.log('Gathering Trakt activities');
+    RequestSynchronizerService.logger.log('Gathering Trakt activities');
     const desiredMediaByKey: Record<MediaCompositeKey, DesiredMedia> = {};
     const syncedKindsByUserId: GatheredData['syncedKindsByUserId'] = {};
 
     for (const user of users) {
       syncedKindsByUserId[user.id] = await this.getKindsToSync(user);
-      SyncService.logger.log(`User ${user.name}: syncing kinds ${Array.from(syncedKindsByUserId[user.id]).join(', ')}`);
+      RequestSynchronizerService.logger.log(
+        `User ${user.name}: syncing kinds ${Array.from(syncedKindsByUserId[user.id]).join(', ')}`,
+      );
 
       for (const kind of syncedKindsByUserId[user.id]) {
         const medias = await this.requestHandlerByKind[kind](user);
-        SyncService.logger.log(`User ${user.name} kind ${kind}: ${medias.length} medias`);
+        RequestSynchronizerService.logger.log(`User ${user.name} kind ${kind}: ${medias.length} medias`);
 
         for (const media of medias) {
           const key = compositeKey(media);
@@ -178,11 +182,11 @@ export class SyncService {
       }
     }
 
-    SyncService.logger.log(
+    RequestSynchronizerService.logger.log(
       `Gathered ${Object.keys(desiredMediaByKey).length} unique desired medias across ${users.length} users`,
     );
 
-    SyncService.logger.log('Gathering Jellyfin assets');
+    RequestSynchronizerService.logger.log('Gathering Jellyfin assets');
     const jellyfinMedias = await this.jellyfin.listAssets();
     const jellyfinAssets = new Set(
       jellyfinMedias.map((m: JellyfinMedia) =>
@@ -193,12 +197,12 @@ export class SyncService {
         }),
       ),
     );
-    SyncService.logger.log(`Jellyfin: ${jellyfinAssets.size} assets`);
+    RequestSynchronizerService.logger.log(`Jellyfin: ${jellyfinAssets.size} assets`);
 
-    SyncService.logger.log('Snapshotting current DB state');
+    RequestSynchronizerService.logger.log('Snapshotting current DB state');
     const desiredKeys = Object.values(desiredMediaByKey).map((d) => d.mediaInfos);
     const mediaRequests = await this.requestsRepository.listSyncSnapshot(desiredKeys, Object.keys(syncedKindsByUserId));
-    SyncService.logger.log(`Current requests: ${mediaRequests.length}`);
+    RequestSynchronizerService.logger.log(`Current requests: ${mediaRequests.length}`);
 
     return { jellyfinAssets, desiredMediaByKey, syncedKindsByUserId, mediaRequests };
   }
@@ -248,21 +252,21 @@ export class SyncService {
           finalStatus = RequestStatus.Pending;
         }
       } catch (error) {
-        SyncService.logger.error(
+        RequestSynchronizerService.logger.error(
           `Darkiworld check failed for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
         );
       }
     }
 
     try {
-      const media = await this.mediasRepository.create(desiredMedia.mediaInfos);
-      await this.requestsRepository.createWithStatus(media.id, finalStatus, darkiworldTitleId, darkiworldUrl);
+      const media = await this.mediasRepository.upsert(desiredMedia.mediaInfos);
+      await this.requestsRepository.upsert(media.id, finalStatus, darkiworldTitleId, darkiworldUrl);
 
       for (const [userId, reasons] of Object.entries(desiredMedia.requestKindsByUserId)) {
         await this.requestsRepository.setUserRequestReasons(media.id, userId, reasons);
       }
     } catch (error) {
-      SyncService.logger.error(
+      RequestSynchronizerService.logger.error(
         `Failed to create request for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
       );
     }
@@ -272,10 +276,10 @@ export class SyncService {
 
   private async listUsers(): Promise<UserWithAuthContext[]> {
     const users = await this.usersRepository.list();
-    SyncService.logger.log(`Found ${users.length} users in database`);
+    RequestSynchronizerService.logger.log(`Found ${users.length} users in database`);
 
     const authContexts = await this.traktPlugin.getUsersAuthContext();
-    SyncService.logger.log(`Found ${authContexts.length} users with Trakt auth context`);
+    RequestSynchronizerService.logger.log(`Found ${authContexts.length} users with Trakt auth context`);
 
     const matchedUsers = authContexts
       .map(
@@ -286,7 +290,7 @@ export class SyncService {
       )
       .filter((user) => user.id);
 
-    SyncService.logger.log(`Matched ${matchedUsers.length} users for sync`);
+    RequestSynchronizerService.logger.log(`Matched ${matchedUsers.length} users for sync`);
     return matchedUsers;
   }
 

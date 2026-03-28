@@ -2,8 +2,8 @@ import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { Config } from '@/app.module';
+import { DiscordService } from '@/modules/discord/discord';
 import { ContextService } from '@/services/context';
-import { DiscordService } from '@/services/discord';
 import { DiscordUserMessaging } from '@/services/messaging/user/discord';
 import { EmailUserMessaging } from '@/services/messaging/user/email';
 

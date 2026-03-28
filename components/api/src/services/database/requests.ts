@@ -7,7 +7,7 @@ import { listen } from '@/helpers/sql';
 import { MediaEntity } from '@/services/database/medias';
 import { UserEntity } from '@/services/database/users';
 
-import { RequestKind } from '../sync';
+import { RequestKind } from '../request-synchronizer';
 
 export enum RequestStatus {
   Pending = 'pending',
@@ -22,7 +22,7 @@ export type RequestEntity = {
   status: RequestStatus;
   createdAt: Date;
   updatedAt: Date;
-  taskId: string | null;
+  threadId: string | null;
   darkiworldTitleId: number | null;
   darkiworldUrl: string | null;
   media?: MediaEntity;
@@ -68,7 +68,7 @@ function fromRequestRecord(record: RequestRecord): RequestEntity {
   return {
     mediaId: record.media_id,
     status: record.status,
-    taskId: record.thread_id,
+    threadId: record.thread_id,
     darkiworldTitleId: record.darkiworld_title_id,
     darkiworldUrl: record.darkiworld_url,
     createdAt: record.created_at,
@@ -178,18 +178,44 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     }
   }
 
-  async create(mediaId: string): Promise<RequestEntity> {
+  async upsert(
+    mediaId: string,
+    status: RequestStatus = RequestStatus.Pending,
+    darkiworldTitleId: number | null = null,
+    darkiworldUrl: string | null = null,
+    downloadJobId: string | null = null,
+  ): Promise<RequestEntity> {
     const query = `
-      INSERT INTO media_requests (media_id)
-      VALUES ($1)
+      INSERT INTO media_requests (media_id, status, darkiworld_title_id, darkiworld_url, download_job_id)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (media_id) DO NOTHING
       RETURNING *
     `;
-    const { rows } = await this.pool.query<RequestRecord>(query, [mediaId]);
+    const { rows } = await this.pool.query<RequestRecord>(query, [
+      mediaId,
+      status,
+      darkiworldTitleId,
+      darkiworldUrl,
+      downloadJobId,
+    ]);
     if (!rows.length) {
       return (await this.get(mediaId))!;
     }
     return fromRequestRecord(rows[0]);
+  }
+
+  async linkDownloadJob(mediaId: string, downloadJobId: string): Promise<void> {
+    await this.pool.query(`UPDATE media_requests SET download_job_id = $2, updated_at = NOW() WHERE media_id = $1`, [
+      mediaId,
+      downloadJobId,
+    ]);
+  }
+
+  async fulfillByJobId(downloadJobId: string): Promise<void> {
+    await this.pool.query(`UPDATE media_requests SET status = $2, updated_at = NOW() WHERE download_job_id = $1`, [
+      downloadJobId,
+      RequestStatus.Fulfilled,
+    ]);
   }
 
   async get(id: string): Promise<RequestEntity | null> {
@@ -198,7 +224,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                 json_build_object(
                     'mediaId', request.media_id,
                     'status', request.status,
-                    'taskId', request.thread_id,
+                    'threadId', request.thread_id,
                     'darkiworldTitleId', request.darkiworld_title_id,
                     'darkiworldUrl', request.darkiworld_url,
                     'createdAt', request.created_at,
@@ -278,10 +304,10 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows.map(fromRequestUserRecord);
   }
 
-  async getByTaskId(taskId: string): Promise<RequestEntity | null> {
+  async getByThreadId(threadId: string): Promise<RequestEntity | null> {
     const { rows } = await this.pool.query<{ media_id: string }>(
       `SELECT media_id FROM media_requests WHERE thread_id = $1`,
-      [taskId],
+      [threadId],
     );
     if (!rows.length) {
       return null;
@@ -346,32 +372,13 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     );
   }
 
-  async createWithStatus(
-    mediaId: string,
-    status: RequestStatus,
-    darkiworldTitleId: number | null,
-    darkiworldUrl: string | null,
-  ): Promise<RequestEntity> {
-    const query = `
-      INSERT INTO media_requests (media_id, status, darkiworld_title_id, darkiworld_url)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (media_id) DO NOTHING
-      RETURNING *
-    `;
-    const { rows } = await this.pool.query<RequestRecord>(query, [mediaId, status, darkiworldTitleId, darkiworldUrl]);
-    if (!rows.length) {
-      return (await this.get(mediaId))!;
-    }
-    return fromRequestRecord(rows[0]);
-  }
-
   async listAllWithDetails(): Promise<RequestEntity[]> {
     const query = `
       SELECT
         json_build_object(
           'mediaId', request.media_id,
           'status', request.status,
-          'taskId', request.thread_id,
+          'threadId', request.thread_id,
           'darkiworldTitleId', request.darkiworld_title_id,
           'darkiworldUrl', request.darkiworld_url,
           'createdAt', request.created_at,
@@ -460,16 +467,16 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows;
   }
 
-  async attachTask(mediaId: string, taskId: string): Promise<void> {
+  async attachThread(mediaId: string, threadId: string): Promise<void> {
     const query = `
       UPDATE media_requests
       SET thread_id = $2
       WHERE media_id = $1
     `;
-    await this.pool.query(query, [mediaId, taskId]);
+    await this.pool.query(query, [mediaId, threadId]);
   }
 
-  async findRequestsWithoutTasks(): Promise<RequestEntity[]> {
+  async findRequestsWithoutThread(): Promise<RequestEntity[]> {
     const query = `
       SELECT 
         mr.media_id,
@@ -522,7 +529,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows.map((row) => ({
       mediaId: row.media_id,
       status: row.status,
-      taskId: row.thread_id,
+      threadId: row.thread_id,
       darkiworldTitleId: row.darkiworld_title_id,
       darkiworldUrl: row.darkiworld_url,
       createdAt: row.created_at,
@@ -557,7 +564,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         json_build_object(
           'mediaId', request.media_id,
           'status', request.status,
-          'taskId', request.thread_id,
+          'threadId', request.thread_id,
           'darkiworldTitleId', request.darkiworld_title_id,
           'darkiworldUrl', request.darkiworld_url,
           'createdAt', request.created_at,

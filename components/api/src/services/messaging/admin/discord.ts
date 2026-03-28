@@ -3,10 +3,10 @@ import { ChannelType, EmbedBuilder, TextChannel } from 'discord.js';
 import * as _ from 'lodash';
 
 import { Emitter } from '@/helpers/events';
+import { DiscordService } from '@/modules/discord/discord';
 import { MediaEntity } from '@/services/database/medias';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
-import { DiscordService } from '@/services/discord';
 import { truthy } from '@/utils';
 
 export type Config = {
@@ -115,7 +115,7 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
       }
 
       if (reaction === '❌') {
-        const request = await this.requestsRepository.getByTaskId(messageId);
+        const request = await this.requestsRepository.getByThreadId(messageId);
         if (request && request.status !== RequestStatus.Rejected) {
           DiscordAdminMessaging.logger.log(`Rejecting request ${request.mediaId} via Discord reaction`);
           await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Rejected);
@@ -129,7 +129,7 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
       }
 
       if (reaction === '❌') {
-        const request = await this.requestsRepository.getByTaskId(messageId);
+        const request = await this.requestsRepository.getByThreadId(messageId);
         if (request && request.status === RequestStatus.Rejected) {
           DiscordAdminMessaging.logger.log(`Un-rejecting request ${request.mediaId} via Discord reaction removal`);
           await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Pending);
@@ -182,7 +182,7 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
 
     try {
       const message = await this.channel.send({ embeds: [embed] });
-      await this.requestsRepository.attachTask(request.mediaId, message.id);
+      await this.requestsRepository.attachThread(request.mediaId, message.id);
       DiscordAdminMessaging.logger.log(`Discord message created for "${media.title}" (${message.id})`);
     } catch (error) {
       DiscordAdminMessaging.logger.error(
@@ -192,59 +192,90 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
   }
 
   async updateRequestStatus(request: RequestEntity): Promise<void> {
-    if (!request.taskId) {
+    if (!request.threadId) {
       return;
     }
 
     try {
       if (request.status === RequestStatus.Fulfilled) {
-        const message = await DiscordService.getMessage(this.channel, request.taskId);
+        const message = await DiscordService.getMessage(this.channel, request.threadId);
         await message.delete();
-        DiscordAdminMessaging.logger.log(`Deleted Discord message ${request.taskId} (fulfilled)`);
+        DiscordAdminMessaging.logger.log(`Deleted Discord message ${request.threadId} (fulfilled)`);
         return;
       }
 
       const color = request.status === RequestStatus.Rejected ? EMBED_COLORS.rejected : EMBED_COLORS.pending;
       const embed = buildRequestEmbed(request, color);
-      const message = await DiscordService.getMessage(this.channel, request.taskId);
+      const message = await DiscordService.getMessage(this.channel, request.threadId);
       await message.edit({ embeds: [embed] });
-      DiscordAdminMessaging.logger.log(`Updated Discord message ${request.taskId} (${request.status})`);
+      DiscordAdminMessaging.logger.log(`Updated Discord message ${request.threadId} (${request.status})`);
     } catch (error) {
       DiscordAdminMessaging.logger.error(
-        `Failed to update Discord message ${request.taskId}: ${error instanceof Error ? error.message : error}`,
+        `Failed to update Discord message ${request.threadId}: ${error instanceof Error ? error.message : error}`,
       );
     }
   }
 
   async deleteRequestMessage(request: RequestEntity): Promise<void> {
-    if (!request.taskId) {
+    if (!request.threadId) {
       return;
     }
 
     try {
-      const message = await DiscordService.getMessage(this.channel, request.taskId);
+      const message = await DiscordService.getMessage(this.channel, request.threadId);
       await message.delete();
-      DiscordAdminMessaging.logger.log(`Deleted Discord message ${request.taskId}`);
+      DiscordAdminMessaging.logger.log(`Deleted Discord message ${request.threadId}`);
     } catch (error) {
       DiscordAdminMessaging.logger.error(
-        `Failed to delete Discord message ${request.taskId}: ${error instanceof Error ? error.message : error}`,
+        `Failed to delete Discord message ${request.threadId}: ${error instanceof Error ? error.message : error}`,
       );
     }
   }
 
+  async notifyPipelineFailure(
+    fileNames: string,
+    failedStep: string,
+    errorMessage: string,
+    mediaRequestId: string | null,
+  ): Promise<void> {
+    const embed = new EmbedBuilder()
+      .setColor(0xe74c3c)
+      .setTitle('Pipeline Error')
+      .addFields(
+        { name: 'Files', value: fileNames.slice(0, 1024) },
+        { name: 'Step', value: failedStep, inline: true },
+        { name: 'Error', value: errorMessage.slice(0, 1024) },
+      );
+
+    if (mediaRequestId) {
+      const request = await this.requestsRepository.get(mediaRequestId);
+      if (request?.threadId) {
+        try {
+          const message = await DiscordService.getMessage(this.channel, request.threadId);
+          await message.reply({ embeds: [embed] });
+          return;
+        } catch {
+          // fall through to channel post
+        }
+      }
+    }
+
+    await this.channel.send({ embeds: [embed] });
+  }
+
   async updateRequestUsers(request: RequestEntity): Promise<void> {
-    if (!request.taskId) {
+    if (!request.threadId) {
       return;
     }
 
     try {
       const color = request.status === RequestStatus.Rejected ? EMBED_COLORS.rejected : EMBED_COLORS.pending;
       const embed = buildRequestEmbed(request, color);
-      const message = await DiscordService.getMessage(this.channel, request.taskId);
+      const message = await DiscordService.getMessage(this.channel, request.threadId);
       await message.edit({ embeds: [embed] });
     } catch (error) {
       DiscordAdminMessaging.logger.error(
-        `Failed to update users on Discord message ${request.taskId}: ${error instanceof Error ? error.message : error}`,
+        `Failed to update users on Discord message ${request.threadId}: ${error instanceof Error ? error.message : error}`,
       );
     }
   }

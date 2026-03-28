@@ -1,9 +1,9 @@
 import { ConfigService } from '@nestjs/config';
 
 import { Config } from '@/app.module';
+import { DiscordService } from '@/modules/discord/discord';
 import { RequestsRepository } from '@/services/database/requests';
 import { UsersRepository } from '@/services/database/users';
-import { DiscordService } from '@/services/discord';
 import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
 
 export const adminMessagingProvider = {

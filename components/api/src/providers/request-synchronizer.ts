@@ -9,10 +9,10 @@ import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { UsersRepository } from '@/services/database/users';
-import { SyncService } from '@/services/sync';
+import { RequestSynchronizerService } from '@/services/request-synchronizer';
 
 export const syncProvider = {
-  provide: SyncService,
+  provide: RequestSynchronizerService,
   inject: [
     ConfigService,
     JellyfinMediaService,
@@ -34,8 +34,8 @@ export const syncProvider = {
     mediasRepository: MediasRepository,
     requestsRepository: RequestsRepository,
     darkiworldService: DarkiworldService,
-  ): SyncService => {
-    return new SyncService(
+  ): RequestSynchronizerService => {
+    return new RequestSynchronizerService(
       configService.get('sync'),
       jellyfinMediaService,
       traktPlugin,

@@ -155,6 +155,11 @@ export class JellyfinMediaService {
     );
   }
 
+  async refreshLibrary(): Promise<void> {
+    JellyfinMediaService.logger.log('Triggering Jellyfin library refresh');
+    await this.api.post('/Library/Refresh');
+  }
+
   async listAssets(): Promise<JellyfinMedia[]> {
     try {
       const itemsResponse = await this.api.get<{ Items: JellyfinMedia[] }>(`/Items`, {

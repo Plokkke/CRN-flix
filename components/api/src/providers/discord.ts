@@ -2,7 +2,7 @@ import { FactoryProvider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { Config } from '@/app.module';
-import { DiscordService } from '@/services/discord';
+import { DiscordService } from '@/modules/discord/discord';
 
 export const discordProvider: FactoryProvider<DiscordService> = {
   provide: DiscordService,

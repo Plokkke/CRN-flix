@@ -8,6 +8,12 @@ import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
 import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import {
+  DownloadJobEvents,
+  DownloadJobsRepository,
+  DownloadJobStatus,
+  DownloadJobStatusChangedEvent,
+} from '@/services/database/download-jobs';
+import {
   RequestCreatedEvent,
   RequestEvents,
   RequestsRepository,
@@ -17,6 +23,7 @@ import {
   UserLeftRequestEvent,
 } from '@/services/database/requests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
+import { MediaAvailabilityService } from '@/services/media-availability';
 import {
   AdminEvents,
   AdminUserAcceptedEvent,
@@ -24,8 +31,8 @@ import {
   DiscordAdminMessaging,
 } from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
-import { StatusCheckService } from '@/services/status-checks';
-import { SyncService } from '@/services/sync';
+import { PostDownloadService } from '@/services/post-download';
+import { RequestSynchronizerService } from '@/services/request-synchronizer';
 
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
@@ -40,22 +47,29 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   constructor(
     readonly config: ConfigService<Config, true>,
     private readonly schedulerRegistry: SchedulerRegistry,
-    private readonly sync: SyncService,
+    private readonly requestSynchronizer: RequestSynchronizerService,
     private readonly jellyfin: JellyfinMediaService,
     private readonly messaging: AllUserMessaging,
     private readonly adminsMessaging: DiscordAdminMessaging,
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
-    private readonly statusChecks: StatusCheckService,
+    private readonly mediaAvailability: MediaAvailabilityService,
+    private readonly postDownload: PostDownloadService,
+    private readonly downloadJobs: DownloadJobsRepository,
   ) {}
 
   onModuleInit(): void {
-    this.listeners.push(this.listenDatabaseEvents(), this.listenAdminMessages());
+    this.listeners.push(this.listenRequestsEvents(), this.listenAdminMessages(), this.listenDownloadJobEvents());
 
     if (process.env.NODE_ENV === 'production') {
-      this.registerCronJob('trakt-sync', '*/5 * * * *', () => this.runSync());
-      this.registerCronJob('darkiworld-check', '0 * * * *', () => this.statusChecks.checkDarkiworldAvailability());
-      this.registerCronJob('jellyfin-check', '*/15 * * * *', () => this.statusChecks.checkJellyfinFulfillment());
+      this.registerCronJob('synchronize-requests', '*/5 * * * *', () => this.runSync());
+      this.registerCronJob('update-darkiworld-availability', '0 * * * *', () =>
+        this.mediaAvailability.checkDarkiworldAvailability(),
+      );
+      this.registerCronJob('update-jellyfin-fulfillment', '*/15 * * * *', () =>
+        this.mediaAvailability.checkJellyfinFulfillment(),
+      );
+      this.registerCronJob('pull-completed-downloads', '*/2 * * * *', () => this.postDownload.pullCompletedDownloads());
     }
   }
 
@@ -83,7 +97,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
     this.isRunning = true;
     try {
-      await this.sync.start();
+      await this.requestSynchronizer.start();
     } catch (error) {
       AppService.logger.error(`Sync failed: ${error instanceof Error ? error.message : error}`);
       if (error instanceof Error && error.stack) {
@@ -94,14 +108,14 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private listenDatabaseEvents(): Listener<RequestEvents> {
+  private listenRequestsEvents(): Listener<RequestEvents> {
     return this.requestsRepository.listen({
       created: (event: RequestCreatedEvent) =>
         this.trackEvent(async () => {
           const request = await this.requestsRepository.get(event.requestId);
           if (
             !request ||
-            request.taskId ||
+            request.threadId ||
             request.status === RequestStatus.Fulfilled ||
             request.status === RequestStatus.Missing
           ) {
@@ -156,6 +170,39 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           if (request.userRequests?.length === 0 && request.status !== RequestStatus.Rejected) {
             await this.adminsMessaging.deleteRequestMessage(request);
             await this.requestsRepository.removeRequest(request.mediaId);
+          }
+        }),
+    });
+  }
+
+  private listenDownloadJobEvents(): Listener<DownloadJobEvents> {
+    return this.downloadJobs.listen({
+      created: ({ jobId }) =>
+        this.trackEvent(async () => {
+          AppService.logger.log(`New download job created: ${jobId}`);
+          await this.postDownload.processJob(jobId);
+        }),
+      statusChange: (event: DownloadJobStatusChangedEvent) =>
+        this.trackEvent(async () => {
+          const job = await this.downloadJobs.get(event.jobId);
+          if (!job) {
+            return;
+          }
+
+          if (event.newStatus === DownloadJobStatus.Failed) {
+            AppService.logger.warn(`Download job ${event.jobId} failed: ${event.oldStatus} → ${event.newStatus}`);
+            const fileNames = job.sourcePaths.map((p) => p.split('/').pop()).join(', ') || job.packageName || 'unknown';
+            await this.adminsMessaging.notifyPipelineFailure(
+              fileNames,
+              job.status.replace('_', ' '),
+              job.errorMessage ?? 'Unknown error',
+              null,
+            );
+          } else if (event.newStatus === DownloadJobStatus.Completed) {
+            AppService.logger.log(`Download job ${event.jobId} completed`);
+            await this.jellyfin.refreshLibrary();
+            await this.requestsRepository.fulfillByJobId(event.jobId);
+            await this.postDownload.cleanupPackage(job.jdownloaderPackageId);
           }
         }),
     });
