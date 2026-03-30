@@ -19,24 +19,25 @@ import { tmdbConfigSchema } from '@/modules/tmdb/tmdb';
 import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
 import { contextProvider } from '@/providers/context';
 import { darkiworldProvider } from '@/providers/darkiworld';
+import { darkiworldSyncProvider } from '@/providers/darkiworld-sync';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
 import { jdownloaderProvider } from '@/providers/jdownloader';
+import { jdownloaderSyncProviders } from '@/providers/jdownloader-sync';
 import { jellyfinProvider } from '@/providers/jellyfin';
-import { mediaAvailabilityProvider } from '@/providers/media-availability';
+import { jellyfinSyncProvider } from '@/providers/jellyfin-sync';
 import { adminMessagingProvider } from '@/providers/messaging/admin';
 import { allUserMessagingProvider } from '@/providers/messaging/all';
 import { userMessagingProviders } from '@/providers/messaging/user';
-import { postDownloadProviders } from '@/providers/post-download';
-import { syncProvider } from '@/providers/request-synchronizer';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
 import { tmdbProvider } from '@/providers/tmdb';
 import { traktProvider } from '@/providers/trakt';
+import { traktSyncProvider } from '@/providers/trakt-sync';
 import { traktPluginProvider } from '@/providers/traktPlugin';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
-import { syncConfigSchema } from '@/services/request-synchronizer';
+import { syncConfigSchema } from '@/services/trakt-sync';
 
 export const configSchema = z.object({
   name: z.string(),
@@ -102,8 +103,9 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       traktProvider,
       syncDataSourceProvider,
       ...repositoryProviders,
-      syncProvider,
-      mediaAvailabilityProvider,
+      traktSyncProvider,
+      jellyfinSyncProvider,
+      darkiworldSyncProvider,
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
@@ -113,7 +115,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       adminMessagingProvider,
       jdownloaderProvider,
       tmdbProvider,
-      ...postDownloadProviders,
+      ...jdownloaderSyncProviders,
     ],
   })
   class App implements NestModule {

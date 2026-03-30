@@ -7,7 +7,7 @@ import { listen } from '@/helpers/sql';
 import { MediaEntity } from '@/services/database/medias';
 import { UserEntity } from '@/services/database/users';
 
-import { RequestKind } from '../request-synchronizer';
+import { RequestKind } from '../trakt-sync';
 
 export enum RequestStatus {
   Pending = 'pending',
@@ -202,6 +202,16 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       return (await this.get(mediaId))!;
     }
     return fromRequestRecord(rows[0]);
+  }
+
+  async upsertFulfilled(mediaId: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO media_requests (media_id, status)
+       VALUES ($1, $2)
+       ON CONFLICT (media_id) DO UPDATE SET status = $2, updated_at = NOW()
+       WHERE media_requests.status != $2`,
+      [mediaId, RequestStatus.Fulfilled],
+    );
   }
 
   async linkDownloadJob(mediaId: string, downloadJobId: string): Promise<void> {

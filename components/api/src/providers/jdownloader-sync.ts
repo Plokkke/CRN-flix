@@ -9,9 +9,9 @@ import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
+import { JdownloaderSyncService } from '@/services/jdownloader-sync';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { MediaLabelizerService } from '@/services/media-labelizer';
-import { PostDownloadService } from '@/services/post-download';
 
 export const identificationProvider: Provider = {
   provide: MediaIdentifierService,
@@ -33,8 +33,8 @@ export const placementProvider: Provider = {
   },
 };
 
-export const postDownloadProvider: Provider = {
-  provide: PostDownloadService,
+export const jdownloaderSyncProvider: Provider = {
+  provide: JdownloaderSyncService,
   inject: [JDownloaderApiService, DownloadJobsRepository, MediaIdentifierService, MediaLabelizerService, ConfigService],
   useFactory: (
     jdownloader: JDownloaderApiService,
@@ -42,9 +42,9 @@ export const postDownloadProvider: Provider = {
     identification: MediaIdentifierService,
     placement: MediaLabelizerService,
     configService: ConfigService<Config, true>,
-  ): PostDownloadService => {
+  ): JdownloaderSyncService => {
     const mediaPaths = configService.get('mediaPaths');
-    return new PostDownloadService(
+    return new JdownloaderSyncService(
       jdownloader,
       downloadJobs,
       identification,
@@ -55,4 +55,8 @@ export const postDownloadProvider: Provider = {
   },
 };
 
-export const postDownloadProviders: Provider[] = [identificationProvider, placementProvider, postDownloadProvider];
+export const jdownloaderSyncProviders: Provider[] = [
+  identificationProvider,
+  placementProvider,
+  jdownloaderSyncProvider,
+];

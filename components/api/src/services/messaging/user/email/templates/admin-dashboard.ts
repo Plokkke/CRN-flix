@@ -1,6 +1,6 @@
 import { RequestEntity } from '@/services/database/requests';
 
-import { COLORS, getStatusStyle, getWebTemplate } from './email-styles';
+import { COLORS, getWebTemplate } from './email-styles';
 
 interface JobDefinition {
   name: string;
@@ -50,19 +50,32 @@ const getJobsSection = (jobs: JobDefinition[]): string => {
   `;
 };
 
-const getStatusFilters = (): string => {
+const getStatusFilters = (requests: RequestEntity[]): string => {
   const buttons = STATUSES.map(
     (status) => `
     <button
       type="button"
       class="status-filter status-${status} ${status === 'pending' ? 'active' : ''}"
       data-status="${status}"
-      onclick="toggleStatus('${status}')"
+      onclick="selectStatus('${status}')"
     >${status}</button>
   `,
   ).join('');
 
-  return `<div class="status-filters">${buttons}</div>`;
+  const users = [
+    ...new Set(requests.flatMap((r) => r.userRequests?.map((ur) => ur.user?.name ?? 'Unknown') ?? [])),
+  ].sort();
+  const userOptions = users.map((u) => `<option value="${u}">${u}</option>`).join('');
+
+  return `
+    <div class="filters-row">
+      <div class="status-filters">${buttons}</div>
+      <select id="user-filter" onchange="applyFilters()">
+        <option value="">All users</option>
+        ${userOptions}
+      </select>
+    </div>
+  `;
 };
 
 const getRequestsSection = (requests: RequestEntity[]): string => {
@@ -80,28 +93,29 @@ const getRequestsSection = (requests: RequestEntity[]): string => {
   });
 
   const rows = sorted
-    .map(
-      (request) => `
-    <tr data-status="${request.status}">
+    .map((request) => {
+      const users = request.userRequests?.map((ur) => ur.user?.name ?? 'Unknown').join(', ') ?? '-';
+      return `
+    <tr data-status="${request.status}" data-users="${users}">
       <td>${request.darkiworldUrl ? `<a href="${request.darkiworldUrl}" target="_blank" rel="noopener">${getMediaLabel(request)}</a>` : getMediaLabel(request)}</td>
       <td>${request.media?.type ?? '-'}</td>
-      <td><span style="${getStatusStyle(request.status)}">${request.status}</span></td>
-      <td>${request.userRequests?.map((ur) => ur.user?.name ?? 'Unknown').join(', ') ?? '-'}</td>
+      <td><code>${request.media?.imdbId ?? '-'}</code></td>
+      <td>${users}</td>
     </tr>
-  `,
-    )
+  `;
+    })
     .join('');
 
   return `
-    <h2>Requests (<span id="visible-count">0</span> / ${requests.length})</h2>
-    ${getStatusFilters()}
+    <h2>Requests (<span id="visible-count">0</span>)</h2>
+    ${getStatusFilters(requests)}
     <div class="table-wrapper">
       <table class="requests-table">
         <thead>
           <tr>
             <th>Media</th>
             <th>Type</th>
-            <th>Status</th>
+            <th>IMDB</th>
             <th>Users</th>
           </tr>
         </thead>
@@ -123,20 +137,25 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
   `;
 
   const additionalCSS = `
-    .container { max-width: 900px; }
+    .container { max-width: 900px; background-color: #1a1a2e; color: #e0e0e0; }
+
+    body { background-color: #0f0f1a; color: #e0e0e0; }
+
+    .header { background-color: #16162a; }
 
     h2 {
-      color: ${COLORS.primary};
+      color: #e0e0e0;
       margin: 30px 0 15px 0;
       font-size: 20px;
     }
 
     .flash-message {
-      background-color: #f0f7ff;
+      background-color: #1e2a3a;
       padding: 12px 16px;
       border-left: 4px solid ${COLORS.info};
       border-radius: 4px;
       margin-bottom: 20px;
+      color: #e0e0e0;
     }
 
     .jobs-grid {
@@ -146,22 +165,22 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
     }
 
     .job-card {
-      border: 1px solid ${COLORS.border};
+      border: 1px solid #2a2a3e;
       border-radius: 8px;
       padding: 16px;
-      background: ${COLORS.white};
+      background: #22223a;
     }
 
     .job-name {
       font-weight: bold;
       font-size: 14px;
-      color: ${COLORS.primary};
+      color: #e0e0e0;
       margin-bottom: 4px;
     }
 
     .job-schedule {
       font-size: 13px;
-      color: ${COLORS.textMuted};
+      color: #888;
       margin-bottom: 12px;
     }
 
@@ -172,11 +191,28 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
       font-size: 14px;
     }
 
+    .filters-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
     .status-filters {
       display: flex;
       gap: 8px;
-      margin-bottom: 16px;
       flex-wrap: wrap;
+    }
+
+    #user-filter {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid #2a2a3e;
+      background-color: #22223a;
+      color: #e0e0e0;
+      font-size: 14px;
+      cursor: pointer;
     }
 
     .status-filter {
@@ -191,9 +227,9 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
     }
 
     .status-filter:not(.active) {
-      background-color: ${COLORS.border} !important;
-      color: ${COLORS.textMuted} !important;
-      border-color: ${COLORS.border} !important;
+      background-color: #2a2a3e !important;
+      color: #666 !important;
+      border-color: #2a2a3e !important;
     }
 
     .status-pending { background-color: ${COLORS.warning}; color: #000; }
@@ -212,8 +248,8 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
     }
 
     .requests-table th {
-      background-color: ${COLORS.primary};
-      color: white;
+      background-color: #16162a;
+      color: #ccc;
       padding: 10px 12px;
       text-align: left;
       white-space: nowrap;
@@ -221,11 +257,24 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
 
     .requests-table td {
       padding: 10px 12px;
-      border-bottom: 1px solid ${COLORS.borderLight};
+      border-bottom: 1px solid #2a2a3e;
+      color: #e0e0e0;
+    }
+
+    .requests-table a {
+      color: ${COLORS.info};
+    }
+
+    .requests-table code {
+      background-color: #2a2a3e;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 12px;
+      color: #ccc;
     }
 
     .requests-table tr:hover {
-      background-color: #f9f9f9;
+      background-color: #22223a;
     }
 
     .requests-table tr.hidden-row {
@@ -233,31 +282,36 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
     }
 
     .empty-state {
-      color: ${COLORS.textMuted};
+      color: #666;
       font-style: italic;
     }
+
+    label { color: #e0e0e0; }
+    input { background-color: #22223a; border-color: #2a2a3e; color: #e0e0e0; }
+    input:focus { border-color: ${COLORS.info}; }
+    button { background-color: ${COLORS.info}; }
+    button:hover { background-color: #1c7ed6; }
   `;
 
   const additionalJS = `
-    var activeStatuses = new Set(['pending']);
+    var activeStatus = 'pending';
 
-    function toggleStatus(status) {
-      if (activeStatuses.has(status)) {
-        activeStatuses.delete(status);
-      } else {
-        activeStatuses.add(status);
-      }
+    function selectStatus(status) {
+      activeStatus = activeStatus === status ? null : status;
       applyFilters();
     }
 
     function applyFilters() {
       document.querySelectorAll('.status-filter').forEach(function(btn) {
-        btn.classList.toggle('active', activeStatuses.has(btn.dataset.status));
+        btn.classList.toggle('active', btn.dataset.status === activeStatus);
       });
 
+      var userFilter = document.getElementById('user-filter').value;
       var visible = 0;
       document.querySelectorAll('.requests-table tbody tr').forEach(function(row) {
-        var show = activeStatuses.size === 0 || activeStatuses.has(row.dataset.status);
+        var statusMatch = !activeStatus || row.dataset.status === activeStatus;
+        var userMatch = !userFilter || row.dataset.users.split(', ').indexOf(userFilter) !== -1;
+        var show = statusMatch && userMatch;
         row.classList.toggle('hidden-row', !show);
         if (show) visible++;
       });

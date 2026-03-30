@@ -24,8 +24,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export class PostDownloadService {
-  private static readonly logger = new Logger(PostDownloadService.name);
+export class JdownloaderSyncService {
+  private static readonly logger = new Logger(JdownloaderSyncService.name);
 
   constructor(
     private readonly jdownloader: JDownloaderApiService,
@@ -43,16 +43,16 @@ export class PostDownloadService {
     return jdownloaderPath;
   }
 
-  async pullCompletedDownloads(): Promise<void> {
+  async sync(): Promise<void> {
     const packages = await this.jdownloader.queryPackages();
-    PostDownloadService.logger.debug(`JDownloader packages: ${JSON.stringify(packages)}`);
+    JdownloaderSyncService.logger.debug(`JDownloader packages: ${JSON.stringify(packages)}`);
 
     const finishedPackages = packages.filter((p) => p.finished);
-    PostDownloadService.logger.log(`Found ${finishedPackages.length}/${packages.length} finished packages`);
+    JdownloaderSyncService.logger.log(`Found ${finishedPackages.length}/${packages.length} finished packages`);
 
     for (const pkg of finishedPackages) {
       const localPath = this.toLocalPath(pkg.saveTo ?? this.jdownloaderOutputPath);
-      PostDownloadService.logger.log(
+      JdownloaderSyncService.logger.log(
         `Package "${pkg.name}" — saveTo: "${pkg.saveTo}" → local: "${localPath}" (jdOutput: "${this.jdownloaderOutputPath}", downloads: "${this.downloadsPath}")`,
       );
       await this.downloadJobs.create({
@@ -69,16 +69,16 @@ export class PostDownloadService {
       return;
     }
 
-    PostDownloadService.logger.log(`Processing job ${job.id} — "${job.packageName}"`);
+    JdownloaderSyncService.logger.log(`Processing job ${job.id} — "${job.packageName}"`);
 
     let links: JDLink[];
     let state: JDExtractionState;
 
     while (true) {
       links = await this.jdownloader.queryLinks([job.jdownloaderPackageId]);
-      PostDownloadService.logger.debug(`Job ${job.id} links: ${JSON.stringify(links)}`);
+      JdownloaderSyncService.logger.debug(`Job ${job.id} links: ${JSON.stringify(links)}`);
       state = this.resolveExtractionState(links);
-      PostDownloadService.logger.log(`Job ${job.id} extraction state: ${state}`);
+      JdownloaderSyncService.logger.log(`Job ${job.id} extraction state: ${state}`);
       if (state !== JDExtractionState.Running) {
         break;
       }
@@ -95,16 +95,16 @@ export class PostDownloadService {
   async cleanupPackage(packageId: number): Promise<void> {
     try {
       await this.jdownloader.cleanupPackages([packageId]);
-      PostDownloadService.logger.debug(`Cleaned up JDownloader package ${packageId}`);
+      JdownloaderSyncService.logger.debug(`Cleaned up JDownloader package ${packageId}`);
     } catch (error) {
-      PostDownloadService.logger.warn(`Failed to cleanup JDownloader package: ${(error as Error).message}`);
+      JdownloaderSyncService.logger.warn(`Failed to cleanup JDownloader package: ${(error as Error).message}`);
     }
   }
 
   private async onExtractionError(job: DownloadJobEntity, links: JDLink[]): Promise<void> {
     const errorLinks = links.filter((l) => l.extractionStatus?.startsWith('ERROR'));
     const errors = errorLinks.map((l) => `${l.name}: ${l.extractionStatus}`).join(', ');
-    PostDownloadService.logger.error(`Job ${job.id} extraction failed: ${errors}`);
+    JdownloaderSyncService.logger.error(`Job ${job.id} extraction failed: ${errors}`);
 
     await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Failed, `JDownloader extraction failed: ${errors}`);
   }
@@ -113,13 +113,13 @@ export class PostDownloadService {
     job.sourcePaths = await this.resolveVideoFiles(job.saveTo);
 
     if (job.sourcePaths.length === 0) {
-      PostDownloadService.logger.warn(`Job ${job.id} — no video files found in ${job.saveTo}`);
+      JdownloaderSyncService.logger.warn(`Job ${job.id} — no video files found in ${job.saveTo}`);
       await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Failed, `No video files found in ${job.saveTo}`);
       return;
     }
 
     await this.downloadJobs.updateSourcePaths(job.id, job.sourcePaths);
-    PostDownloadService.logger.log(`Job ${job.id} — ${job.sourcePaths.length} video files found`);
+    JdownloaderSyncService.logger.log(`Job ${job.id} — ${job.sourcePaths.length} video files found`);
 
     await this.handleFiles(job);
   }
@@ -138,10 +138,10 @@ export class PostDownloadService {
       }
 
       await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Completed);
-      PostDownloadService.logger.log(`Job ${job.id} completed successfully`);
+      JdownloaderSyncService.logger.log(`Job ${job.id} completed successfully`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      PostDownloadService.logger.error(`Job ${job.id} failed: ${message}`);
+      JdownloaderSyncService.logger.error(`Job ${job.id} failed: ${message}`);
       await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Failed, message);
     }
   }
@@ -177,7 +177,7 @@ export class PostDownloadService {
         }
       }
     } catch {
-      PostDownloadService.logger.warn(`Could not read directory: ${directory}`);
+      JdownloaderSyncService.logger.warn(`Could not read directory: ${directory}`);
     }
 
     return videoFiles;

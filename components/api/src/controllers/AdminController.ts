@@ -2,15 +2,16 @@ import { Controller, Get, Header, Logger, Param, Post, Query, Res } from '@nestj
 import { Response } from 'express';
 
 import { ContextService } from '@/services/context';
+import { DarkiworldSyncService } from '@/services/darkiworld-sync';
 import { RequestsRepository } from '@/services/database/requests';
-import { MediaAvailabilityService } from '@/services/media-availability';
+import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
-import { RequestSynchronizerService } from '@/services/request-synchronizer';
+import { TraktSyncService } from '@/services/trakt-sync';
 
 const JOBS = [
   { name: 'trakt-sync', schedule: 'Every 5 minutes' },
-  { name: 'darkiworld-check', schedule: 'Every hour' },
-  { name: 'jellyfin-check', schedule: 'Every 15 minutes' },
+  { name: 'darkiworld-sync', schedule: 'Every hour' },
+  { name: 'jellyfin-sync', schedule: 'Every 15 minutes' },
 ] as const;
 
 type JobName = (typeof JOBS)[number]['name'];
@@ -23,14 +24,15 @@ export class AdminController {
 
   constructor(
     private readonly contextService: ContextService,
-    private readonly sync: RequestSynchronizerService,
-    private readonly statusChecks: MediaAvailabilityService,
+    private readonly traktSync: TraktSyncService,
+    private readonly jellyfinSync: JellyfinSyncService,
+    private readonly darkiworldSync: DarkiworldSyncService,
     private readonly requestsRepository: RequestsRepository,
   ) {
     this.jobHandlers = {
-      'trakt-sync': () => this.sync.start(),
-      'darkiworld-check': () => this.statusChecks.checkDarkiworldAvailability(),
-      'jellyfin-check': () => this.statusChecks.checkJellyfinFulfillment(),
+      'trakt-sync': () => this.traktSync.sync(),
+      'darkiworld-sync': () => this.darkiworldSync.sync(),
+      'jellyfin-sync': () => this.jellyfinSync.sync(),
     };
   }
 

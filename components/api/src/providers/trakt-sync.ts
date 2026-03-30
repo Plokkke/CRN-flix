@@ -2,20 +2,18 @@ import { ConfigService } from '@nestjs/config';
 
 import { Config } from '@/app.module';
 import { DarkiworldService } from '@/modules/darkiworld/service';
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { UsersRepository } from '@/services/database/users';
-import { RequestSynchronizerService } from '@/services/request-synchronizer';
+import { TraktSyncService } from '@/services/trakt-sync';
 
-export const syncProvider = {
-  provide: RequestSynchronizerService,
+export const traktSyncProvider = {
+  provide: TraktSyncService,
   inject: [
     ConfigService,
-    JellyfinMediaService,
     TraktPlugin,
     TraktApi,
     UsersRepository,
@@ -26,7 +24,6 @@ export const syncProvider = {
   ],
   useFactory: (
     configService: ConfigService<Config, true>,
-    jellyfinMediaService: JellyfinMediaService,
     traktPlugin: TraktPlugin,
     traktApi: TraktApi,
     usersRepository: UsersRepository,
@@ -34,10 +31,9 @@ export const syncProvider = {
     mediasRepository: MediasRepository,
     requestsRepository: RequestsRepository,
     darkiworldService: DarkiworldService,
-  ): RequestSynchronizerService => {
-    return new RequestSynchronizerService(
+  ): TraktSyncService => {
+    return new TraktSyncService(
       configService.get('sync'),
-      jellyfinMediaService,
       traktPlugin,
       traktApi,
       usersRepository,

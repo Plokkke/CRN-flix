@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import { Pool } from 'pg';
 
-import { RequestKind } from '@/services/request-synchronizer';
+import { RequestKind } from '@/services/trakt-sync';
 
 export type UserActivity = Record<RequestKind, DateTime<true> | null>;
 

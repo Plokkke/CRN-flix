@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 import { concurrent } from '@/helpers/concurrent';
 import { DarkiworldService } from '@/modules/darkiworld/service';
-import { JellyfinMedia, JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
 import { Episode, Media, ProgressShow, Show, UserAuthCtxt } from '@/modules/trakt/types';
@@ -56,7 +55,6 @@ type DesiredMedia = {
 };
 
 type GatheredData = {
-  jellyfinAssets: Set<MediaCompositeKey>;
   desiredMediaByKey: Record<MediaCompositeKey, DesiredMedia>;
   syncedKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>;
   mediaRequests: SyncRequestSnapshot[];
@@ -87,8 +85,8 @@ type UserWithAuthContext = UserEntity & {
   accessToken: string;
 };
 
-export class RequestSynchronizerService {
-  private static readonly logger = new Logger(RequestSynchronizerService.name);
+export class TraktSyncService {
+  private static readonly logger = new Logger(TraktSyncService.name);
 
   private readonly requestHandlerByKind: Record<RequestKind, (user: UserAuthCtxt) => Promise<MediaInfos[]>> = {
     WATCHLISTED: async (user) => {
@@ -111,7 +109,6 @@ export class RequestSynchronizerService {
 
   constructor(
     private readonly config: SyncConfig,
-    private readonly jellyfin: JellyfinMediaService,
     private readonly traktPlugin: TraktPlugin,
     private readonly traktClient: TraktApi,
     private readonly usersRepository: UsersRepository,
@@ -121,8 +118,8 @@ export class RequestSynchronizerService {
     private readonly darkiworldService: DarkiworldService,
   ) {}
 
-  async start(): Promise<void> {
-    RequestSynchronizerService.logger.log('Starting batch synchronization');
+  async sync(): Promise<void> {
+    TraktSyncService.logger.log('Starting Trakt sync');
 
     const gathered = await this.gather();
     const mediaRequestByKey = _.keyBy(gathered.mediaRequests, (r) => compositeKey(r));
@@ -135,13 +132,11 @@ export class RequestSynchronizerService {
 
     // New requests: compute + apply concurrently (Darkiworld calls)
     const newMediaRequests = Object.entries(gathered.desiredMediaByKey).filter(([key]) => !mediaRequestByKey[key]);
-    RequestSynchronizerService.logger.log(
+    TraktSyncService.logger.log(
       `Processing ${newMediaRequests.length} new medias (concurrency: ${DARKIWORLD_CONCURRENCY})`,
     );
 
-    await concurrent(newMediaRequests, DARKIWORLD_CONCURRENCY, ([key, desired]) =>
-      this.processNewRequest(key, desired, gathered.jellyfinAssets),
-    );
+    await concurrent(newMediaRequests, DARKIWORLD_CONCURRENCY, ([, desired]) => this.processNewRequest(desired));
 
     // Update activity timestamps
     for (const [userId, kinds] of Object.entries(gathered.syncedKindsByUserId)) {
@@ -150,7 +145,7 @@ export class RequestSynchronizerService {
       }
     }
 
-    RequestSynchronizerService.logger.log('Batch synchronization completed');
+    TraktSyncService.logger.log('Trakt sync completed');
   }
 
   // --- Phase 1: GATHER ---
@@ -158,19 +153,19 @@ export class RequestSynchronizerService {
   private async gather(): Promise<GatheredData> {
     const users = await this.listUsers();
 
-    RequestSynchronizerService.logger.log('Gathering Trakt activities');
+    TraktSyncService.logger.log('Gathering Trakt activities');
     const desiredMediaByKey: Record<MediaCompositeKey, DesiredMedia> = {};
     const syncedKindsByUserId: GatheredData['syncedKindsByUserId'] = {};
 
     for (const user of users) {
       syncedKindsByUserId[user.id] = await this.getKindsToSync(user);
-      RequestSynchronizerService.logger.log(
+      TraktSyncService.logger.log(
         `User ${user.name}: syncing kinds ${Array.from(syncedKindsByUserId[user.id]).join(', ')}`,
       );
 
       for (const kind of syncedKindsByUserId[user.id]) {
         const medias = await this.requestHandlerByKind[kind](user);
-        RequestSynchronizerService.logger.log(`User ${user.name} kind ${kind}: ${medias.length} medias`);
+        TraktSyncService.logger.log(`User ${user.name} kind ${kind}: ${medias.length} medias`);
 
         for (const media of medias) {
           const key = compositeKey(media);
@@ -182,29 +177,16 @@ export class RequestSynchronizerService {
       }
     }
 
-    RequestSynchronizerService.logger.log(
+    TraktSyncService.logger.log(
       `Gathered ${Object.keys(desiredMediaByKey).length} unique desired medias across ${users.length} users`,
     );
 
-    RequestSynchronizerService.logger.log('Gathering Jellyfin assets');
-    const jellyfinMedias = await this.jellyfin.listAssets();
-    const jellyfinAssets = new Set(
-      jellyfinMedias.map((m: JellyfinMedia) =>
-        compositeKey({
-          imdbId: m.ProviderIds.Imdb,
-          seasonNumber: m.ParentIndexNumber ?? null,
-          episodeNumber: m.IndexNumber ?? null,
-        }),
-      ),
-    );
-    RequestSynchronizerService.logger.log(`Jellyfin: ${jellyfinAssets.size} assets`);
-
-    RequestSynchronizerService.logger.log('Snapshotting current DB state');
+    TraktSyncService.logger.log('Snapshotting current DB state');
     const desiredKeys = Object.values(desiredMediaByKey).map((d) => d.mediaInfos);
     const mediaRequests = await this.requestsRepository.listSyncSnapshot(desiredKeys, Object.keys(syncedKindsByUserId));
-    RequestSynchronizerService.logger.log(`Current requests: ${mediaRequests.length}`);
+    TraktSyncService.logger.log(`Current requests: ${mediaRequests.length}`);
 
-    return { jellyfinAssets, desiredMediaByKey, syncedKindsByUserId, mediaRequests };
+    return { desiredMediaByKey, syncedKindsByUserId, mediaRequests };
   }
 
   // --- Per-media sync ---
@@ -232,30 +214,22 @@ export class RequestSynchronizerService {
     }
   }
 
-  private async processNewRequest(
-    mediaKey: MediaCompositeKey,
-    desiredMedia: DesiredMedia,
-    jellyfinAssets: Set<MediaCompositeKey>,
-  ): Promise<void> {
+  private async processNewRequest(desiredMedia: DesiredMedia): Promise<void> {
     let finalStatus: RequestStatus = RequestStatus.Missing;
     let darkiworldTitleId: number | null = null;
     let darkiworldUrl: string | null = null;
 
-    if (jellyfinAssets.has(mediaKey)) {
-      finalStatus = RequestStatus.Fulfilled;
-    } else {
-      try {
-        const result = await this.darkiworldService.find(desiredMedia.mediaInfos);
-        darkiworldTitleId = result.title?.id ?? null;
-        darkiworldUrl = result.available ? result.downloadUrl : null;
-        if (darkiworldUrl) {
-          finalStatus = RequestStatus.Pending;
-        }
-      } catch (error) {
-        RequestSynchronizerService.logger.error(
-          `Darkiworld check failed for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
-        );
+    try {
+      const result = await this.darkiworldService.find(desiredMedia.mediaInfos);
+      darkiworldTitleId = result.title?.id ?? null;
+      darkiworldUrl = result.available ? result.downloadUrl : null;
+      if (darkiworldUrl) {
+        finalStatus = RequestStatus.Pending;
       }
+    } catch (error) {
+      TraktSyncService.logger.error(
+        `Darkiworld check failed for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
+      );
     }
 
     try {
@@ -266,7 +240,7 @@ export class RequestSynchronizerService {
         await this.requestsRepository.setUserRequestReasons(media.id, userId, reasons);
       }
     } catch (error) {
-      RequestSynchronizerService.logger.error(
+      TraktSyncService.logger.error(
         `Failed to create request for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
       );
     }
@@ -276,10 +250,10 @@ export class RequestSynchronizerService {
 
   private async listUsers(): Promise<UserWithAuthContext[]> {
     const users = await this.usersRepository.list();
-    RequestSynchronizerService.logger.log(`Found ${users.length} users in database`);
+    TraktSyncService.logger.log(`Found ${users.length} users in database`);
 
     const authContexts = await this.traktPlugin.getUsersAuthContext();
-    RequestSynchronizerService.logger.log(`Found ${authContexts.length} users with Trakt auth context`);
+    TraktSyncService.logger.log(`Found ${authContexts.length} users with Trakt auth context`);
 
     const matchedUsers = authContexts
       .map(
@@ -290,7 +264,7 @@ export class RequestSynchronizerService {
       )
       .filter((user) => user.id);
 
-    RequestSynchronizerService.logger.log(`Matched ${matchedUsers.length} users for sync`);
+    TraktSyncService.logger.log(`Matched ${matchedUsers.length} users for sync`);
     return matchedUsers;
   }
 
