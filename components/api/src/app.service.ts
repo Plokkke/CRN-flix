@@ -26,7 +26,6 @@ import {
 import { UserEntity, UsersRepository } from '@/services/database/users';
 import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
-import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import {
   AdminEvents,
   AdminUserAcceptedEvent,
@@ -34,7 +33,10 @@ import {
   DiscordAdminMessaging,
 } from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
+import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { TraktSyncService } from '@/services/trakt-sync';
+
+import { DiscordSyncService } from './services/discord-sync';
 
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
@@ -52,6 +54,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly traktSync: TraktSyncService,
     private readonly jellyfinSync: JellyfinSyncService,
     private readonly darkiworldSync: DarkiworldSyncService,
+    private readonly discordSync: DiscordSyncService,
     private readonly jellyfin: JellyfinMediaService,
     private readonly messaging: AllUserMessaging,
     private readonly adminsMessaging: DiscordAdminMessaging,
@@ -69,6 +72,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('trakt-sync-job', '*/5 * * * *', () => this.runSync());
       this.registerCronJob('darkiworld-sync-job', '0 * * * *', () => this.darkiworldSync.sync());
       this.registerCronJob('jellyfin-sync-job', '*/15 * * * *', () => this.jellyfinSync.sync());
+      this.registerCronJob('discord-sync-job', '*/5 * * * *', () => this.discordSync.sync());
     }
   }
 

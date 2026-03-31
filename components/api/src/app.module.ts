@@ -21,6 +21,7 @@ import { darkiworldProvider } from '@/providers/darkiworld';
 import { darkiworldSyncProvider } from '@/providers/darkiworld-sync';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
+import { discordSyncProvider } from '@/providers/discord-sync';
 import { fetchrSyncProvider } from '@/providers/fetchr-sync';
 import { postDownloadProviders } from '@/providers/post-download';
 import { jellyfinProvider } from '@/providers/jellyfin';
@@ -111,6 +112,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
+      discordSyncProvider,
       darkiworldProvider,
       ...userMessagingProviders,
       allUserMessagingProvider,

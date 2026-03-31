@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import WebSocket from 'ws';
+import * as WebSocket from 'ws';
 
 import { DownloadJobsRepository } from './database/download-jobs';
 

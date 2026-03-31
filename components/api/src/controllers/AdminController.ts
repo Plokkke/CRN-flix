@@ -4,6 +4,7 @@ import { Response } from 'express';
 import { ContextService } from '@/services/context';
 import { DarkiworldSyncService } from '@/services/darkiworld-sync';
 import { RequestsRepository } from '@/services/database/requests';
+import { DiscordSyncService } from '@/services/discord-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
 import { TraktSyncService } from '@/services/trakt-sync';
@@ -12,6 +13,7 @@ const JOBS = [
   { name: 'trakt-sync', schedule: 'Every 5 minutes' },
   { name: 'darkiworld-sync', schedule: 'Every hour' },
   { name: 'jellyfin-sync', schedule: 'Every 15 minutes' },
+  { name: 'discord-sync', schedule: 'Every 5 minutes' },
 ] as const;
 
 type JobName = (typeof JOBS)[number]['name'];
@@ -27,12 +29,14 @@ export class AdminController {
     private readonly traktSync: TraktSyncService,
     private readonly jellyfinSync: JellyfinSyncService,
     private readonly darkiworldSync: DarkiworldSyncService,
+    private readonly discordSync: DiscordSyncService,
     private readonly requestsRepository: RequestsRepository,
   ) {
     this.jobHandlers = {
       'trakt-sync': () => this.traktSync.sync(),
       'darkiworld-sync': () => this.darkiworldSync.sync(),
       'jellyfin-sync': () => this.jellyfinSync.sync(),
+      'discord-sync': () => this.discordSync.sync(),
     };
   }
 
