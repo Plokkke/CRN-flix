@@ -3,15 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { Pool } from 'pg';
 
 import { Config } from '@/app.module';
-import { JDownloaderApiService } from '@/modules/jdownloader/jdownloader-api.service';
 import { TmdbApiService } from '@/modules/tmdb/tmdb';
 import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
-import { JdownloaderSyncService } from '@/services/jdownloader-sync';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { MediaLabelizerService } from '@/services/media-labelizer';
+import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 
 export const identificationProvider: Provider = {
   provide: MediaIdentifierService,
@@ -33,30 +32,18 @@ export const placementProvider: Provider = {
   },
 };
 
-export const jdownloaderSyncProvider: Provider = {
-  provide: JdownloaderSyncService,
-  inject: [JDownloaderApiService, DownloadJobsRepository, MediaIdentifierService, MediaLabelizerService, ConfigService],
+export const postDownloadPipelineProvider: Provider = {
+  provide: PostDownloadPipeline,
+  inject: [DownloadJobsRepository, MediaIdentifierService, MediaLabelizerService],
   useFactory: (
-    jdownloader: JDownloaderApiService,
     downloadJobs: DownloadJobsRepository,
     identification: MediaIdentifierService,
     placement: MediaLabelizerService,
-    configService: ConfigService<Config, true>,
-  ): JdownloaderSyncService => {
-    const mediaPaths = configService.get('mediaPaths');
-    return new JdownloaderSyncService(
-      jdownloader,
-      downloadJobs,
-      identification,
-      placement,
-      mediaPaths.downloads,
-      mediaPaths.jdownloaderOutput,
-    );
-  },
+  ): PostDownloadPipeline => new PostDownloadPipeline(downloadJobs, identification, placement),
 };
 
-export const jdownloaderSyncProviders: Provider[] = [
+export const postDownloadProviders: Provider[] = [
   identificationProvider,
   placementProvider,
-  jdownloaderSyncProvider,
+  postDownloadPipelineProvider,
 ];

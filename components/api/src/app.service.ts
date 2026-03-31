@@ -24,8 +24,9 @@ import {
   UserLeftRequestEvent,
 } from '@/services/database/requests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
-import { JdownloaderSyncService } from '@/services/jdownloader-sync';
+import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
+import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import {
   AdminEvents,
   AdminUserAcceptedEvent,
@@ -56,7 +57,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly adminsMessaging: DiscordAdminMessaging,
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
-    private readonly jdownloaderSync: JdownloaderSyncService,
+    private readonly fetchrSync: FetchrSyncService,
+    private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
   ) {}
 
@@ -67,7 +69,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('trakt-sync-job', '*/5 * * * *', () => this.runSync());
       this.registerCronJob('darkiworld-sync-job', '0 * * * *', () => this.darkiworldSync.sync());
       this.registerCronJob('jellyfin-sync-job', '*/15 * * * *', () => this.jellyfinSync.sync());
-      this.registerCronJob('jdownloader-sync-job', '* * * * *', () => this.jdownloaderSync.sync());
     }
   }
 
@@ -179,7 +180,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       created: ({ jobId }) =>
         this.trackEvent(async () => {
           AppService.logger.log(`New download job created: ${jobId}`);
-          await this.jdownloaderSync.processJob(jobId);
+          await this.postDownloadPipeline.processJob(jobId);
         }),
       statusChange: (event: DownloadJobStatusChangedEvent) =>
         this.trackEvent(async () => {
@@ -201,7 +202,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             AppService.logger.log(`Download job ${event.jobId} completed`);
             await this.jellyfin.refreshLibrary();
             await this.requestsRepository.fulfillByJobId(event.jobId);
-            await this.jdownloaderSync.cleanupPackage(job.jdownloaderPackageId);
+            this.fetchrSync.remove(job.sourceId);
           }
         }),
     });

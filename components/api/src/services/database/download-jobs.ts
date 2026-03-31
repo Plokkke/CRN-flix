@@ -14,7 +14,7 @@ export enum DownloadJobStatus {
 
 export type DownloadJobEntity = {
   id: string;
-  jdownloaderPackageId: number;
+  sourceId: string;
   packageName: string;
   saveTo: string;
   status: DownloadJobStatus;
@@ -26,7 +26,7 @@ export type DownloadJobEntity = {
 
 type DownloadJobRecord = {
   id: string;
-  jdownloader_package_id: string;
+  source_id: string;
   package_name: string;
   save_to: string;
   status: string;
@@ -39,7 +39,7 @@ type DownloadJobRecord = {
 function mapRecord(record: DownloadJobRecord): DownloadJobEntity {
   return {
     id: record.id,
-    jdownloaderPackageId: Number(record.jdownloader_package_id),
+    sourceId: record.source_id,
     packageName: record.package_name,
     saveTo: record.save_to,
     status: record.status as DownloadJobStatus,
@@ -117,16 +117,17 @@ export class DownloadJobsRepository extends Emitter<DownloadJobEvents> implement
   }
 
   async create(data: {
-    jdownloaderPackageId: number;
+    sourceId: string;
     packageName: string;
     saveTo: string;
+    sourcePaths?: string[];
   }): Promise<DownloadJobEntity | null> {
     const result = await this.pool.query<DownloadJobRecord>(
-      `INSERT INTO download_jobs (jdownloader_package_id, package_name, save_to, status)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (jdownloader_package_id) DO NOTHING
+      `INSERT INTO download_jobs (source_id, package_name, save_to, source_paths, status)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (source_id) DO NOTHING
        RETURNING *`,
-      [data.jdownloaderPackageId, data.packageName, data.saveTo, DownloadJobStatus.Detected],
+      [data.sourceId, data.packageName, data.saveTo, data.sourcePaths ?? [], DownloadJobStatus.Detected],
     );
     if (result.rows.length === 0) {
       return null;

@@ -13,7 +13,6 @@ import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
 import { configSchema as darkiworldConfigSchema } from '@/modules/darkiworld/api';
 import { discordConfigSchema } from '@/modules/discord/discord';
-import { jdownloaderConfigSchema } from '@/modules/jdownloader/jdownloader-api.service';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
 import { tmdbConfigSchema } from '@/modules/tmdb/tmdb';
 import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
@@ -22,8 +21,8 @@ import { darkiworldProvider } from '@/providers/darkiworld';
 import { darkiworldSyncProvider } from '@/providers/darkiworld-sync';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
-import { jdownloaderProvider } from '@/providers/jdownloader';
-import { jdownloaderSyncProviders } from '@/providers/jdownloader-sync';
+import { fetchrSyncProvider } from '@/providers/fetchr-sync';
+import { postDownloadProviders } from '@/providers/post-download';
 import { jellyfinProvider } from '@/providers/jellyfin';
 import { jellyfinSyncProvider } from '@/providers/jellyfin-sync';
 import { adminMessagingProvider } from '@/providers/messaging/admin';
@@ -51,7 +50,10 @@ export const configSchema = z.object({
   mailing: mailingConfigSchema,
   discord: discordConfigSchema,
   darkiworld: darkiworldConfigSchema,
-  jdownloader: jdownloaderConfigSchema,
+  fetchr: z.object({
+    url: z.string(),
+    downloadsPrefix: z.string(),
+  }),
   tmdb: tmdbConfigSchema,
   mediaPaths: mediaPathsConfigSchema,
   administration: z.object({
@@ -81,7 +83,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
     jellyfin: env.jellyfin,
     discord: env.discord,
     darkiworld: env.darkiworld,
-    jdownloader: env.jdownloader,
+    fetchr: env.fetchr,
     tmdb: env.tmdb,
     mediaPaths: env.mediaPaths,
     administration: {
@@ -113,9 +115,9 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       ...userMessagingProviders,
       allUserMessagingProvider,
       adminMessagingProvider,
-      jdownloaderProvider,
+      fetchrSyncProvider,
       tmdbProvider,
-      ...jdownloaderSyncProviders,
+      ...postDownloadProviders,
     ],
   })
   class App implements NestModule {

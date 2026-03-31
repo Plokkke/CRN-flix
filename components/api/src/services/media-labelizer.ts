@@ -8,7 +8,6 @@ import { IdentificationResult } from './media-identifier';
 
 export const mediaPathsConfigSchema = z.object({
   downloads: z.string(),
-  jdownloaderOutput: z.string(),
   movies: z.string(),
   series: z.string(),
 });

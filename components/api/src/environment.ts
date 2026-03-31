@@ -24,12 +24,10 @@ export const environmentVariablesSchema = z
     DATABASE_PASSWORD: z.string(),
     DARKIWORLD_API_KEY: z.string(),
     DARKIWORLD_HOST: z.string().default('https://darkiworld.com'),
-    MYJDOWNLOADER_EMAIL: z.string(),
-    MYJDOWNLOADER_PASSWORD: z.string(),
-    MYJDOWNLOADER_DEVICE_NAME: z.string(),
+    FETCHR_URL: z.string(),
+    FETCHR_DOWNLOADS_PREFIX: z.string().default('/downloads'),
     TMDB_API_KEY: z.string(),
     DOWNLOADS_PATH: z.string(),
-    JDOWNLOADER_OUTPUT_PATH: z.string(),
     MOVIES_PATH: z.string(),
     SERIES_PATH: z.string(),
   })
@@ -71,17 +69,15 @@ export const environmentVariablesSchema = z
       apiKey: env.DARKIWORLD_API_KEY,
       host: env.DARKIWORLD_HOST,
     },
-    jdownloader: {
-      email: env.MYJDOWNLOADER_EMAIL,
-      password: env.MYJDOWNLOADER_PASSWORD,
-      deviceName: env.MYJDOWNLOADER_DEVICE_NAME,
+    fetchr: {
+      url: env.FETCHR_URL,
+      downloadsPrefix: env.FETCHR_DOWNLOADS_PREFIX,
     },
     tmdb: {
       apiKey: env.TMDB_API_KEY,
     },
     mediaPaths: {
       downloads: env.DOWNLOADS_PATH,
-      jdownloaderOutput: env.JDOWNLOADER_OUTPUT_PATH,
       movies: env.MOVIES_PATH,
       series: env.SERIES_PATH,
     },
