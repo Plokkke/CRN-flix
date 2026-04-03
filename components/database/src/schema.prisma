@@ -42,6 +42,7 @@ model Media {
   imdbId        String   @map("imdb_id") @db.VarChar(32)
   type          MediaType
   title         String   @db.VarChar(255)
+  originalTitle String?  @map("original_title") @db.VarChar(255)
   year          Int?
   seasonNumber  Int?     @map("season_number")
   episodeNumber Int?     @map("episode_number")
@@ -125,9 +126,10 @@ model DownloadJob {
   packageName          String            @map("package_name")
   saveTo               String            @map("save_to")
   status               DownloadJobStatus @default(detected)
-  sourcePaths          String[]          @map("source_paths")
-  errorMessage         String?           @map("error_message")
-  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  sourcePaths              String[]          @map("source_paths")
+  errorMessage             String?           @map("error_message")
+  discordErrorMessageId    String?           @map("discord_error_message_id")
+  createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   mediaRequests        MediaRequest[]

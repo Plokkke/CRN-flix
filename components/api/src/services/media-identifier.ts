@@ -84,6 +84,78 @@ export class MediaIdentifierService {
     };
   }
 
+  async identifyWithImdbId(
+    filePath: string,
+    imdbId: string,
+    downloadJobId: string,
+  ): Promise<IdentificationResult | null> {
+    const parsed = this.parseFilename(filePath);
+    MediaIdentifierService.logger.log(`Manual identification for "${path.basename(filePath)}" with IMDb ID ${imdbId}`);
+
+    const { movies, tvShows } = await this.tmdb.findByImdbId(imdbId);
+
+    let identification: TmdbIdentification | null = null;
+
+    if (parsed.isEpisode && tvShows.length > 0) {
+      const show = tvShows[0];
+      const year = show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null;
+      identification = {
+        tmdbId: show.id,
+        imdbId,
+        title: show.name,
+        originalTitle: show.original_name,
+        year,
+        mediaType: 'episode',
+      };
+    } else if (movies.length > 0) {
+      const movie = movies[0];
+      const year = movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null;
+      identification = {
+        tmdbId: movie.id,
+        imdbId,
+        title: movie.title,
+        originalTitle: movie.original_title,
+        year,
+        mediaType: 'movie',
+      };
+    } else if (tvShows.length > 0) {
+      const show = tvShows[0];
+      const year = show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null;
+      identification = {
+        tmdbId: show.id,
+        imdbId,
+        title: show.name,
+        originalTitle: show.original_name,
+        year,
+        mediaType: 'episode',
+      };
+    }
+
+    if (!identification) {
+      MediaIdentifierService.logger.warn(`No TMDB results for IMDb ID: ${imdbId}`);
+      return null;
+    }
+
+    MediaIdentifierService.logger.log(
+      `Resolved IMDb ${imdbId} → "${identification.title}" (${identification.year}) [${identification.mediaType}]`,
+    );
+
+    const mediaRequestId = await this.ensureMediaRequest(
+      identification,
+      parsed.season ?? null,
+      parsed.episode ?? null,
+      downloadJobId,
+    );
+
+    return {
+      ...identification,
+      imdbId,
+      seasonNumber: parsed.season ?? null,
+      episodeNumber: parsed.episode ?? null,
+      mediaRequestId,
+    };
+  }
+
   private async ensureMediaRequest(
     identification: TmdbIdentification,
     seasonNumber: number | null,
@@ -102,6 +174,7 @@ export class MediaIdentifierService {
       imdbId: identification.imdbId!,
       type: identification.mediaType as MediaType,
       title: identification.title,
+      originalTitle: identification.originalTitle,
       year: identification.year,
       seasonNumber,
       episodeNumber,
@@ -134,30 +207,32 @@ export class MediaIdentifierService {
           return y !== null && parsed.year !== undefined && Math.abs(parsed.year - y) <= 1;
         });
         if (altMatch) {
-          return this.resolveMovieIdentification(altMatch.id, altMatch.title, altMatch.release_date);
+          return this.resolveMovieIdentification(altMatch);
         }
       }
     }
 
-    return this.resolveMovieIdentification(best.id, best.title, best.release_date);
+    return this.resolveMovieIdentification(best);
   }
 
-  private async resolveMovieIdentification(
-    tmdbId: number,
-    title: string,
-    releaseDate: string,
-  ): Promise<TmdbIdentification> {
-    const externalIds = await this.tmdb.getMovieExternalIds(tmdbId);
-    const year = releaseDate ? parseInt(releaseDate.substring(0, 4), 10) : null;
+  private async resolveMovieIdentification(movie: {
+    id: number;
+    title: string;
+    original_title: string;
+    release_date: string;
+  }): Promise<TmdbIdentification> {
+    const externalIds = await this.tmdb.getMovieExternalIds(movie.id);
+    const year = movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null;
 
     MediaIdentifierService.logger.log(
-      `Identified movie: "${title}" (${year}) — TMDb: ${tmdbId}, IMDb: ${externalIds.imdb_id}`,
+      `Identified movie: "${movie.title}" (${year}) — TMDb: ${movie.id}, IMDb: ${externalIds.imdb_id}`,
     );
 
     return {
-      tmdbId,
+      tmdbId: movie.id,
       imdbId: externalIds.imdb_id,
-      title,
+      title: movie.title,
+      originalTitle: movie.original_title,
       year,
       mediaType: 'movie',
     };
@@ -182,6 +257,7 @@ export class MediaIdentifierService {
       tmdbId: best.id,
       imdbId: externalIds.imdb_id,
       title: best.name,
+      originalTitle: best.original_name,
       year,
       mediaType: 'episode',
     };

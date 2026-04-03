@@ -244,6 +244,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                         'imdbId', media.imdb_id,
                         'type', media.type,
                         'title', media.title,
+                        'originalTitle', media.original_title,
                         'year', media.year,
                         'seasonNumber', media.season_number,
                         'episodeNumber', media.episode_number,
@@ -398,6 +399,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'imdbId', media.imdb_id,
             'type', media.type,
             'title', media.title,
+            'originalTitle', media.original_title,
             'year', media.year,
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,
@@ -498,6 +500,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         m.imdb_id,
         m.type,
         m.title,
+        m.original_title,
         m.year,
         m.season_number,
         m.episode_number,
@@ -530,7 +533,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       LEFT JOIN users u ON ru.user_id = u.id
       WHERE mr.thread_id IS NULL AND mr.status = 'pending'
       GROUP BY mr.media_id, mr.status, mr.thread_id, mr.darkiworld_title_id, mr.darkiworld_url, mr.created_at, mr.updated_at,
-               m.id, m.imdb_id, m.type, m.title, m.year, m.season_number, m.episode_number, m.created_at, m.updated_at
+               m.id, m.imdb_id, m.type, m.title, m.original_title, m.year, m.season_number, m.episode_number, m.created_at, m.updated_at
       ORDER BY mr.created_at DESC
     `;
 
@@ -549,6 +552,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         imdbId: row.imdb_id,
         type: row.type,
         title: row.title,
+        originalTitle: row.original_title,
         year: row.year,
         seasonNumber: row.season_number,
         episodeNumber: row.episode_number,
@@ -584,6 +588,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'imdbId', media.imdb_id,
             'type', media.type,
             'title', media.title,
+            'originalTitle', media.original_title,
             'year', media.year,
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,

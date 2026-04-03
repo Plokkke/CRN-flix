@@ -66,6 +66,7 @@ function mapEpisodeToRequest(episode: Episode, show: Show): MediaInfos {
   return {
     type: MediaType.Episode,
     title: show.title,
+    originalTitle: show.title,
     year: show.year,
     imdbId: episode.ids.imdb ?? '',
     seasonNumber: episode.season,
@@ -219,17 +220,19 @@ export class TraktSyncService {
     let darkiworldTitleId: number | null = null;
     let darkiworldUrl: string | null = null;
 
-    try {
-      const result = await this.darkiworldService.find(desiredMedia.mediaInfos);
-      darkiworldTitleId = result.title?.id ?? null;
-      darkiworldUrl = result.available ? result.downloadUrl : null;
-      if (darkiworldUrl) {
-        finalStatus = RequestStatus.Pending;
+    if (desiredMedia.mediaInfos.imdbId) {
+      try {
+        const result = await this.darkiworldService.find(desiredMedia.mediaInfos);
+        darkiworldTitleId = result.title?.id ?? null;
+        darkiworldUrl = result.available ? result.downloadUrl : null;
+        if (darkiworldUrl) {
+          finalStatus = RequestStatus.Pending;
+        }
+      } catch (error) {
+        TraktSyncService.logger.error(
+          `Darkiworld check failed for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
+        );
       }
-    } catch (error) {
-      TraktSyncService.logger.error(
-        `Darkiworld check failed for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
-      );
     }
 
     try {
@@ -320,6 +323,7 @@ export class TraktSyncService {
         type: MediaType.Movie,
         imdbId: m.movie.ids.imdb ?? '',
         title: m.movie.title,
+        originalTitle: m.movie.title,
         year: m.movie.year,
         seasonNumber: null,
         episodeNumber: null,
@@ -330,6 +334,7 @@ export class TraktSyncService {
         type: MediaType.Episode,
         imdbId: m.episode.ids.imdb ?? '',
         title: m.show.title,
+        originalTitle: m.show.title,
         year: m.show.year,
         seasonNumber: m.episode.season,
         episodeNumber: m.episode.number,

@@ -64,6 +64,34 @@ export class PostDownloadPipeline {
     }
   }
 
+  async retryWithImdbId(jobId: string, imdbId: string): Promise<void> {
+    const job = await this.downloadJobs.get(jobId);
+    if (!job || job.status !== DownloadJobStatus.Failed) {
+      return;
+    }
+
+    PostDownloadPipeline.logger.log(`Retrying job ${job.id} with IMDb ID ${imdbId}`);
+    await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Identifying);
+
+    try {
+      for (const videoFile of job.sourcePaths) {
+        const identity = await this.identification.identifyWithImdbId(videoFile, imdbId, job.id);
+        if (!identity) {
+          throw new Error(`Cannot identify ${path.basename(videoFile)} with IMDb ID ${imdbId}`);
+        }
+
+        await this.placement.move(videoFile, identity);
+      }
+
+      await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Completed);
+      PostDownloadPipeline.logger.log(`Job ${job.id} retry completed successfully`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      PostDownloadPipeline.logger.error(`Job ${job.id} retry failed: ${message}`);
+      await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Failed, message);
+    }
+  }
+
   private async resolveVideoFiles(directory: string): Promise<string[]> {
     const videoFiles: string[] = [];
 

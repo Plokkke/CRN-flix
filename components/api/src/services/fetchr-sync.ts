@@ -43,7 +43,9 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   private connect(): void {
-    if (this.ws) return;
+    if (this.ws) {
+      return;
+    }
 
     FetchrSyncService.logger.log(`Connecting to Fetchr at ${this.fetchrUrl}`);
     this.ws = new WebSocket(this.fetchrUrl);
@@ -86,7 +88,9 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimer) return;
+    if (this.reconnectTimer) {
+      return;
+    }
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
@@ -115,7 +119,9 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleMessage(msg: FetchrMessage): Promise<void> {
-    if (msg.event !== 'download.completed') return;
+    if (msg.event !== 'download.completed') {
+      return;
+    }
 
     const data = msg.data;
     FetchrSyncService.logger.log(`Fetchr download completed: ${data.fileName} (${data.filePaths.length} files)`);

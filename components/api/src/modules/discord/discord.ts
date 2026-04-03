@@ -153,6 +153,14 @@ export class DiscordService implements OnModuleDestroy {
     });
   }
 
+  onGuildMessage(callback: (message: Message) => Promise<void> | void): () => void {
+    return registerListener(this.client, Events.MessageCreate, (message: Message): void => {
+      if (message.guild && !message.author.bot) {
+        return callback(message) as void;
+      }
+    });
+  }
+
   onReaction(callback: (userId: string, messageId: string, reaction: string) => Promise<void> | void): () => void {
     return registerListener(
       this.client,

@@ -45,6 +45,7 @@ export type TmdbIdentification = {
   tmdbId: number;
   imdbId: string | null;
   title: string;
+  originalTitle: string | null;
   year: number | null;
   mediaType: 'movie' | 'episode';
 };
@@ -58,7 +59,7 @@ export class TmdbApiService {
     this.client = axios.create({
       baseURL: 'https://api.themoviedb.org/3',
       headers: { Accept: 'application/json' },
-      params: { api_key: config.apiKey },
+      params: { api_key: config.apiKey, language: 'fr-FR' },
     });
 
     this.client.interceptors.request.use((request) => {
@@ -100,6 +101,16 @@ export class TmdbApiService {
   async getTvExternalIds(tmdbId: number): Promise<TmdbExternalIds> {
     const response = await this.client.get<TmdbExternalIds>(`/tv/${tmdbId}/external_ids`);
     return response.data;
+  }
+
+  async findByImdbId(imdbId: string): Promise<{ movies: TmdbMovie[]; tvShows: TmdbTvShow[] }> {
+    const response = await this.client.get(`/find/${imdbId}`, {
+      params: { external_source: 'imdb_database' },
+    });
+    return {
+      movies: response.data.movie_results ?? [],
+      tvShows: response.data.tv_results ?? [],
+    };
   }
 
   async getTvEpisode(tvId: number, season: number, episode: number): Promise<TmdbEpisode | null> {

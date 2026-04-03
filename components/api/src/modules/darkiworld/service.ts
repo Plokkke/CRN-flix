@@ -10,12 +10,13 @@ const QUALITY_IDS = [86, 83, 50];
 const LANG_TRUEFRENCH = 8;
 const HOST_1FICHIER = 5;
 
-function normalize(str: string): string {
+function sanitizeForSearch(str: string): string {
   return str
-    .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]/g, '');
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function buildFiltersBase64(quality: number): string {
@@ -36,6 +37,10 @@ export class DarkiworldService {
   ) {}
 
   async find(media: MediaInfos): Promise<DarkiworldAvailability> {
+    if (!media.imdbId) {
+      return { available: false, title: null, downloadUrl: null };
+    }
+
     const title = await this.findTitle(media);
 
     if (!title) {
@@ -52,46 +57,10 @@ export class DarkiworldService {
   }
 
   private async findTitle(media: MediaInfos): Promise<DarkiworldTitle | null> {
-    const candidates = await this.searchAndFilter(media.title, media);
+    const queries = this.buildSearchQueries(media);
 
-    const byId = this.matchById(candidates, media);
-    if (byId) {
-      return byId;
-    }
-
-    const byName = this.matchByNameYear(candidates, media);
-    if (byName) {
-      return byName;
-    }
-
-    const firstResult = candidates[0];
-    if (firstResult?.original_title && firstResult.original_title !== media.title) {
-      const altCandidates = await this.searchAndFilter(firstResult.original_title, media);
-      const altById = this.matchById(altCandidates, media);
-      if (altById) {
-        return altById;
-      }
-
-      const altByName = this.matchByNameYear(altCandidates, media);
-      if (altByName) {
-        return altByName;
-      }
-    }
-
-    return null;
-  }
-
-  private async searchAndFilter(query: string, media: MediaInfos): Promise<DarkiworldTitle[]> {
-    const results = await this.api.search(query);
-    const expectedSeries = media.type === 'episode';
-
-    return results.filter(
-      (title) => title.type && !MEDIA_TYPES_FILTER.has(title.type) && title.is_series === expectedSeries,
-    );
-  }
-
-  private matchById(candidates: DarkiworldTitle[], media: MediaInfos): DarkiworldTitle | null {
-    if (media.imdbId) {
+    for (const query of queries) {
+      const candidates = await this.searchAndFilter(query, media);
       const match = candidates.find((c) => c.imdb_id === media.imdbId);
       if (match) {
         return match;
@@ -101,16 +70,40 @@ export class DarkiworldService {
     return null;
   }
 
-  private matchByNameYear(candidates: DarkiworldTitle[], media: MediaInfos): DarkiworldTitle | null {
-    const normalizedTitle = normalize(media.title);
+  private buildSearchQueries(media: MediaInfos): string[] {
+    const seen = new Set<string>();
+    const queries: string[] = [];
 
-    return (
-      candidates.find((c) => {
-        const nameMatch =
-          normalize(c.name) === normalizedTitle || normalize(c.original_title ?? '') === normalizedTitle;
-        const yearMatch = !media.year || !c.year || media.year === c.year;
-        return nameMatch && yearMatch;
-      }) ?? null
+    const addQuery = (raw: string | null | undefined): void => {
+      if (!raw) {
+        return;
+      }
+      const sanitized = sanitizeForSearch(raw);
+      if (sanitized && !seen.has(sanitized)) {
+        seen.add(sanitized);
+        queries.push(sanitized);
+      }
+    };
+
+    addQuery(media.title);
+    addQuery(media.originalTitle);
+
+    if (media.year) {
+      addQuery(`${media.title} ${media.year}`);
+      if (media.originalTitle) {
+        addQuery(`${media.originalTitle} ${media.year}`);
+      }
+    }
+
+    return queries;
+  }
+
+  private async searchAndFilter(query: string, media: MediaInfos): Promise<DarkiworldTitle[]> {
+    const results = await this.api.search(query);
+    const expectedSeries = media.type === 'episode';
+
+    return results.filter(
+      (title) => title.type && !MEDIA_TYPES_FILTER.has(title.type) && title.is_series === expectedSeries,
     );
   }
 

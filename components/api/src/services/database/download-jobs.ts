@@ -20,6 +20,7 @@ export type DownloadJobEntity = {
   status: DownloadJobStatus;
   sourcePaths: string[];
   errorMessage: string | null;
+  discordErrorMessageId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -32,6 +33,7 @@ type DownloadJobRecord = {
   status: string;
   source_paths: string[];
   error_message: string | null;
+  discord_error_message_id: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -45,6 +47,7 @@ function mapRecord(record: DownloadJobRecord): DownloadJobEntity {
     status: record.status as DownloadJobStatus,
     sourcePaths: record.source_paths,
     errorMessage: record.error_message,
+    discordErrorMessageId: record.discord_error_message_id,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -151,6 +154,21 @@ export class DownloadJobsRepository extends Emitter<DownloadJobEvents> implement
 
   async get(id: string): Promise<DownloadJobEntity | null> {
     const result = await this.pool.query<DownloadJobRecord>('SELECT * FROM download_jobs WHERE id = $1', [id]);
+    return result.rows[0] ? mapRecord(result.rows[0]) : null;
+  }
+
+  async updateDiscordErrorMessageId(id: string, messageId: string): Promise<void> {
+    await this.pool.query(`UPDATE download_jobs SET discord_error_message_id = $2, updated_at = NOW() WHERE id = $1`, [
+      id,
+      messageId,
+    ]);
+  }
+
+  async getByDiscordErrorMessageId(messageId: string): Promise<DownloadJobEntity | null> {
+    const result = await this.pool.query<DownloadJobRecord>(
+      'SELECT * FROM download_jobs WHERE discord_error_message_id = $1',
+      [messageId],
+    );
     return result.rows[0] ? mapRecord(result.rows[0]) : null;
   }
 }

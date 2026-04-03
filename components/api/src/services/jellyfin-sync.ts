@@ -9,6 +9,7 @@ function jellyfinMediaToInfos(m: JellyfinMedia): MediaInfos {
     imdbId: m.ProviderIds.Imdb,
     type: m.Type === 'Movie' ? MediaType.Movie : MediaType.Episode,
     title: m.SeriesName ?? m.Name,
+    originalTitle: null,
     year: m.ProductionYear,
     seasonNumber: m.ParentIndexNumber ?? null,
     episodeNumber: m.IndexNumber ?? null,

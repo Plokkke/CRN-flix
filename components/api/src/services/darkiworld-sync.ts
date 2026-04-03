@@ -25,7 +25,7 @@ export class DarkiworldSyncService {
   }
 
   private async checkOne(request: RequestEntity): Promise<void> {
-    if (!request.media) {
+    if (!request.media || !request.media.imdbId) {
       return;
     }
 

@@ -14,6 +14,7 @@ import {
   DownloadJobStatus,
   DownloadJobStatusChangedEvent,
 } from '@/services/database/download-jobs';
+import { MediasRepository } from '@/services/database/medias';
 import {
   RequestCreatedEvent,
   RequestEvents,
@@ -27,9 +28,10 @@ import { UserEntity, UsersRepository } from '@/services/database/users';
 import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import {
-  AdminEvents,
-  AdminUserAcceptedEvent,
-  AdminUserRejectedEvent,
+  AdminEventMap,
+  AdminEventType,
+  AdminIdentificationRetryEvent,
+  AdminImdbResolveEvent,
   DiscordAdminMessaging,
 } from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
@@ -60,6 +62,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly adminsMessaging: DiscordAdminMessaging,
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
+    private readonly mediasRepository: MediasRepository,
     private readonly fetchrSync: FetchrSyncService,
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
@@ -122,6 +125,11 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             request.status === RequestStatus.Fulfilled ||
             request.status === RequestStatus.Missing
           ) {
+            return;
+          }
+
+          if (request.media && !request.media.imdbId) {
+            await this.adminsMessaging.notifyMissingImdbId(request);
             return;
           }
 
@@ -195,13 +203,24 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
           if (event.newStatus === DownloadJobStatus.Failed) {
             AppService.logger.warn(`Download job ${event.jobId} failed: ${event.oldStatus} → ${event.newStatus}`);
-            const fileNames = job.sourcePaths.map((p) => p.split('/').pop()).join(', ') || job.packageName || 'unknown';
-            await this.adminsMessaging.notifyPipelineFailure(
-              fileNames,
-              job.status.replace('_', ' '),
-              job.errorMessage ?? 'Unknown error',
-              null,
-            );
+            const failedFiles = job.sourcePaths.map((p) => p.split('/').pop()).filter(Boolean) as string[];
+            const errorMessage = job.errorMessage ?? 'Unknown error';
+
+            if (errorMessage.includes('Identification failed') || errorMessage.includes('Cannot identify')) {
+              const messageId = await this.adminsMessaging.notifyIdentificationFailure(
+                job.packageName || 'unknown',
+                failedFiles.length > 0 ? failedFiles : [job.packageName || 'unknown'],
+                errorMessage,
+              );
+              await this.downloadJobs.updateDiscordErrorMessageId(event.jobId, messageId);
+            } else {
+              await this.adminsMessaging.notifyPipelineFailure(
+                failedFiles.join(', ') || job.packageName || 'unknown',
+                job.status.replace('_', ' '),
+                errorMessage,
+                null,
+              );
+            }
           } else if (event.newStatus === DownloadJobStatus.Completed) {
             AppService.logger.log(`Download job ${event.jobId} completed`);
             await this.jellyfin.refreshLibrary();
@@ -212,10 +231,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private listenAdminMessages(): Listener<AdminEvents> {
+  private listenAdminMessages(): Listener<AdminEventMap> {
     return this.adminsMessaging.listen({
-      userAccepted: ({ user }: AdminUserAcceptedEvent) => this.trackEvent(() => this.onUserAccepted(user)),
-      userRejected: ({ user }: AdminUserRejectedEvent) => this.trackEvent(() => this.onUserRejected(user)),
+      [AdminEventType.UserAccepted]: ({ user }) => this.trackEvent(() => this.onUserAccepted(user)),
+      [AdminEventType.UserRejected]: ({ user }) => this.trackEvent(() => this.onUserRejected(user)),
+      [AdminEventType.IdentificationRetry]: (event) => this.trackEvent(() => this.onIdentificationRetry(event)),
+      [AdminEventType.ImdbResolve]: (event) => this.trackEvent(() => this.onImdbResolve(event)),
     });
   }
 
@@ -255,6 +276,26 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     this.messaging.error(messagingContext, 'Votre inscription a été refusée');
     await this.adminsMessaging.deleteApprovalMessage(user);
     await this.usersRepository.remove(user.id);
+  }
+
+  private async onIdentificationRetry({ job, imdbId, replyMessageId }: AdminIdentificationRetryEvent): Promise<void> {
+    AppService.logger.log(`Retrying identification for job ${job.id} with IMDb ID ${imdbId}`);
+    await this.postDownloadPipeline.retryWithImdbId(job.id, imdbId);
+
+    const updatedJob = await this.downloadJobs.get(job.id);
+    const emoji = updatedJob?.status === DownloadJobStatus.Completed ? '✅' : '❌';
+    await this.adminsMessaging.reactToMessage(replyMessageId, emoji);
+  }
+
+  private async onImdbResolve({ request, imdbId, replyMessageId }: AdminImdbResolveEvent): Promise<void> {
+    if (!request.media) {
+      AppService.logger.warn(`Request ${request.mediaId} has no media attached`);
+      return;
+    }
+
+    AppService.logger.log(`Resolving IMDb ID for media "${request.media.title}" → ${imdbId}`);
+    await this.mediasRepository.updateImdbId(request.media.id, imdbId);
+    await this.adminsMessaging.reactToMessage(replyMessageId, '✅');
   }
 
   private registerCronJob(name: string, cronExpression: string, handler: () => Promise<void>): void {

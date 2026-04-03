@@ -1,9 +1,10 @@
 import { Logger, OnModuleInit } from '@nestjs/common';
-import { ChannelType, EmbedBuilder, TextChannel } from 'discord.js';
+import { ChannelType, EmbedBuilder, Message, TextChannel } from 'discord.js';
 import * as _ from 'lodash';
 
 import { Emitter } from '@/helpers/events';
 import { DiscordService } from '@/modules/discord/discord';
+import { DownloadJobEntity, DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediaEntity } from '@/services/database/medias';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
@@ -14,10 +15,17 @@ export type Config = {
   adminIds: string[];
 };
 
-const USER_EVENT_BY_REACTION = {
-  '✅': 'userAccepted',
-  '❌': 'userRejected',
-} as const;
+export enum AdminEventType {
+  UserAccepted = 'userAccepted',
+  UserRejected = 'userRejected',
+  IdentificationRetry = 'identificationRetry',
+  ImdbResolve = 'imdbResolve',
+}
+
+const USER_EVENT_BY_REACTION: Record<string, AdminEventType> = {
+  '✅': AdminEventType.UserAccepted,
+  '❌': AdminEventType.UserRejected,
+};
 
 const EMBED_COLORS = {
   pending: 0xe67e22,
@@ -25,17 +33,16 @@ const EMBED_COLORS = {
   missing: 0x95a5a6,
 } as const;
 
-export type AdminUserRejectedEvent = {
-  user: UserEntity;
-};
+export type AdminUserAcceptedEvent = { user: UserEntity };
+export type AdminUserRejectedEvent = { user: UserEntity };
+export type AdminIdentificationRetryEvent = { job: DownloadJobEntity; imdbId: string; replyMessageId: string };
+export type AdminImdbResolveEvent = { request: RequestEntity; imdbId: string; replyMessageId: string };
 
-export type AdminUserAcceptedEvent = {
-  user: UserEntity;
-};
-
-export type AdminEvents = {
-  userAccepted: AdminUserAcceptedEvent;
-  userRejected: AdminUserRejectedEvent;
+export type AdminEventMap = {
+  [AdminEventType.UserAccepted]: AdminUserAcceptedEvent;
+  [AdminEventType.UserRejected]: AdminUserRejectedEvent;
+  [AdminEventType.IdentificationRetry]: AdminIdentificationRetryEvent;
+  [AdminEventType.ImdbResolve]: AdminImdbResolveEvent;
 };
 
 function mediaName(media: MediaEntity): string {
@@ -60,17 +67,17 @@ function buildRequestEmbed(request: RequestEntity, color: number): EmbedBuilder 
   }
 
   if (media.imdbId) {
-    embed.addFields({ name: 'IMDb', value: `https://www.imdb.com/title/${media.imdbId}`, inline: true });
+    embed.addFields({ name: 'IMDb', value: media.imdbId, inline: true });
   }
 
   if (request.darkiworldUrl) {
-    embed.addFields({ name: 'Darkiworld', value: request.darkiworldUrl });
+    embed.addFields({ name: 'Darkiworld', value: `[Telecharger](${request.darkiworldUrl})`, inline: true });
   }
 
   return embed;
 }
 
-export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnModuleInit {
+export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnModuleInit {
   private static readonly logger = new Logger(DiscordAdminMessaging.name);
 
   static async create(
@@ -78,6 +85,7 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
     discordService: DiscordService,
     usersRepository: UsersRepository,
     requestsRepository: RequestsRepository,
+    downloadJobsRepository: DownloadJobsRepository,
   ): Promise<DiscordAdminMessaging> {
     const channel = await discordService.getChannel(config.channelId);
     if (channel.type !== ChannelType.GuildText) {
@@ -89,6 +97,7 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
       channel as TextChannel,
       usersRepository,
       requestsRepository,
+      downloadJobsRepository,
     );
   }
 
@@ -98,6 +107,7 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
     private readonly channel: TextChannel,
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
+    private readonly downloadJobsRepository: DownloadJobsRepository,
   ) {
     super();
   }
@@ -123,6 +133,37 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
       }
     });
 
+    this.discordService.onGuildMessage(async (message: Message) => {
+      if (message.channelId !== this.config.channelId) {
+        return;
+      }
+      if (!this.config.adminIds.includes(message.author.id)) {
+        return;
+      }
+      if (!message.reference?.messageId) {
+        return;
+      }
+
+      const imdbMatch = message.content.match(/tt\d{7,}/);
+      if (!imdbMatch) {
+        return;
+      }
+
+      const imdbId = imdbMatch[0];
+      const referencedMessageId = message.reference.messageId;
+
+      const job = await this.downloadJobsRepository.getByDiscordErrorMessageId(referencedMessageId);
+      if (job) {
+        this.emit(AdminEventType.IdentificationRetry, { job, imdbId, replyMessageId: message.id });
+        return;
+      }
+
+      const request = await this.requestsRepository.getByThreadId(referencedMessageId);
+      if (request) {
+        this.emit(AdminEventType.ImdbResolve, { request, imdbId, replyMessageId: message.id });
+      }
+    });
+
     this.discordService.onReactionRemove(async (adminId, messageId, reaction) => {
       if (!this.config.adminIds.includes(adminId)) {
         return;
@@ -141,12 +182,12 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
   // --- User registration ---
 
   private async onUserRequestReact(user: UserEntity, reaction: string): Promise<void> {
-    const event = USER_EVENT_BY_REACTION[reaction as keyof typeof USER_EVENT_BY_REACTION];
-    if (!event) {
+    const eventType = USER_EVENT_BY_REACTION[reaction];
+    if (!eventType) {
       return;
     }
 
-    this.emit(event, { user });
+    this.emit(eventType, { user });
   }
 
   async newRegistrationRequest(user: UserEntity): Promise<void> {
@@ -261,6 +302,49 @@ export class DiscordAdminMessaging extends Emitter<AdminEvents> implements OnMod
     }
 
     await this.channel.send({ embeds: [embed] });
+  }
+
+  async notifyIdentificationFailure(packageName: string, failedFiles: string[], errorMessage: string): Promise<string> {
+    const embed = new EmbedBuilder()
+      .setColor(0xe74c3c)
+      .setTitle('Identification Error')
+      .addFields(
+        { name: 'Package', value: packageName.slice(0, 1024) },
+        { name: 'Fichiers', value: failedFiles.join('\n').slice(0, 1024) },
+        { name: 'Erreur', value: errorMessage.slice(0, 1024) },
+      )
+      .setFooter({ text: 'Repondre avec un IMDb ID (ex: tt1234567) pour relancer' });
+
+    const message = await this.channel.send({ embeds: [embed] });
+    return message.id;
+  }
+
+  async notifyMissingImdbId(request: RequestEntity): Promise<void> {
+    const media = request.media!;
+    const embed = new EmbedBuilder()
+      .setColor(0xe67e22)
+      .setTitle(`IMDb ID manquant: ${mediaName(media)}`)
+      .addFields({ name: 'Type', value: media.type, inline: true }, { name: 'Titre', value: media.title, inline: true })
+      .setFooter({ text: 'Repondre avec un IMDb ID (ex: tt1234567) pour associer' });
+
+    if (media.year) {
+      embed.addFields({ name: 'Annee', value: String(media.year), inline: true });
+    }
+
+    const message = await this.channel.send({ embeds: [embed] });
+    await this.requestsRepository.attachThread(request.mediaId, message.id);
+    DiscordAdminMessaging.logger.log(`Missing IMDb notification for "${media.title}" (${message.id})`);
+  }
+
+  async reactToMessage(messageId: string, emoji: string): Promise<void> {
+    try {
+      const message = await DiscordService.getMessage(this.channel, messageId);
+      await message.react(emoji);
+    } catch (error) {
+      DiscordAdminMessaging.logger.error(
+        `Failed to react to message ${messageId}: ${error instanceof Error ? error.message : error}`,
+      );
+    }
   }
 
   async updateRequestUsers(request: RequestEntity): Promise<void> {

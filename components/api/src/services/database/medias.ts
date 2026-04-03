@@ -11,6 +11,7 @@ export type MediaEntity = {
   imdbId: string;
   type: MediaType;
   title: string;
+  originalTitle: string | null;
   year: number | null;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -25,6 +26,7 @@ type MediaRecord = {
   imdb_id: string;
   type: MediaType;
   title: string;
+  original_title: string | null;
   year: number | null;
   season_number: number | null;
   episode_number: number | null;
@@ -38,6 +40,7 @@ function fromMediaRecord(record: MediaRecord): MediaEntity {
     imdbId: record.imdb_id,
     type: record.type,
     title: record.title,
+    originalTitle: record.original_title,
     year: record.year,
     seasonNumber: record.season_number,
     episodeNumber: record.episode_number,
@@ -95,16 +98,17 @@ export class MediasRepository {
 
   async upsert(infos: MediaInfos): Promise<MediaEntity> {
     const query = `
-      INSERT INTO medias (imdb_id, type, title, year, season_number, episode_number)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO medias (imdb_id, type, title, original_title, year, season_number, episode_number)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (imdb_id, COALESCE(season_number, -1), COALESCE(episode_number, -1))
-      DO UPDATE SET title = $3, year = $4
+      DO UPDATE SET title = $3, original_title = COALESCE($4, medias.original_title), year = $5
       RETURNING *
     `;
     const { rows } = await this.pool.query<MediaRecord>(query, [
       infos.imdbId,
       infos.type,
       infos.title,
+      infos.originalTitle,
       infos.year,
       infos.seasonNumber,
       infos.episodeNumber,
@@ -115,5 +119,9 @@ export class MediasRepository {
     }
 
     return (await this.findByInfos(infos))!;
+  }
+
+  async updateImdbId(mediaId: string, imdbId: string): Promise<void> {
+    await this.pool.query(`UPDATE medias SET imdb_id = $2, updated_at = NOW() WHERE id = $1`, [mediaId, imdbId]);
   }
 }
