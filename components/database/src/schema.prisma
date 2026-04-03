@@ -14,7 +14,7 @@ model User {
   jellyfinId          String?  @unique @map("jellyfin_id") @db.VarChar(255)
   messagingKey        String   @map("messaging_key") @db.VarChar(255)
   messagingId         String   @map("messaging_id") @db.VarChar(255)
-  approvalMessageId   String?  @unique @map("approval_message_id") @db.VarChar(255)
+  discordMessageId    String?  @unique @map("discord_message_id") @db.VarChar(255)
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -58,7 +58,7 @@ model Media {
 model MediaRequest {
   mediaId            String              @id @map("media_id") @db.Uuid
   status             MediaRequestStatus  @default(missing)
-  threadId           String?             @map("thread_id") @db.VarChar(50)
+  discordMessageId   String?             @map("discord_message_id") @db.VarChar(50)
   darkiworldTitleId  Int?                @map("darkiworld_title_id")
   darkiworldUrl      String?             @map("darkiworld_url")
   downloadJobId      String?             @map("download_job_id") @db.Uuid
@@ -128,7 +128,7 @@ model DownloadJob {
   status               DownloadJobStatus @default(detected)
   sourcePaths              String[]          @map("source_paths")
   errorMessage             String?           @map("error_message")
-  discordErrorMessageId    String?           @map("discord_error_message_id")
+  discordMessageId         String?           @map("discord_message_id")
   createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

@@ -1,9 +1,19 @@
 import { Logger, OnModuleInit } from '@nestjs/common';
-import { ChannelType, EmbedBuilder, Message, TextChannel } from 'discord.js';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonInteraction,
+  ButtonStyle,
+  ChannelType,
+  EmbedBuilder,
+  Message,
+  TextChannel,
+} from 'discord.js';
 import * as _ from 'lodash';
 
 import { Emitter } from '@/helpers/events';
 import { DiscordService } from '@/modules/discord/discord';
+import { DiscordWired } from '@/services/database/discord-wired';
 import { DownloadJobEntity, DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediaEntity } from '@/services/database/medias';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
@@ -15,6 +25,24 @@ export type Config = {
   adminIds: string[];
 };
 
+export enum DiscordEntityType {
+  User = 'user',
+  Request = 'request',
+  DownloadJob = 'downloadJob',
+}
+
+export type DiscordEntityMap = {
+  [DiscordEntityType.User]: UserEntity;
+  [DiscordEntityType.Request]: RequestEntity;
+  [DiscordEntityType.DownloadJob]: DownloadJobEntity;
+};
+
+type EntityRepositoryMap = { [T in DiscordEntityType]: DiscordWired<DiscordEntityMap[T]> };
+
+export type DiscordEntityResult = {
+  [T in DiscordEntityType]: { type: T; entity: DiscordEntityMap[T] };
+}[DiscordEntityType];
+
 export enum AdminEventType {
   UserAccepted = 'userAccepted',
   UserRejected = 'userRejected',
@@ -22,10 +50,31 @@ export enum AdminEventType {
   ImdbResolve = 'imdbResolve',
 }
 
-const USER_EVENT_BY_REACTION: Record<string, AdminEventType> = {
-  '✅': AdminEventType.UserAccepted,
-  '❌': AdminEventType.UserRejected,
-};
+enum ButtonId {
+  UserAccept = 'user-accept',
+  UserReject = 'user-reject',
+  RequestReject = 'request-reject',
+  RequestUnreject = 'request-unreject',
+}
+
+function buildUserApprovalButtons(): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(ButtonId.UserAccept).setLabel('Accepter').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(ButtonId.UserReject).setLabel('Refuser').setStyle(ButtonStyle.Danger),
+  );
+}
+
+function buildRequestRejectButton(): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(ButtonId.RequestReject).setLabel('Rejeter').setStyle(ButtonStyle.Danger),
+  );
+}
+
+function buildRequestUnrejectButton(): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(ButtonId.RequestUnreject).setLabel('Restaurer').setStyle(ButtonStyle.Secondary),
+  );
+}
 
 const EMBED_COLORS = {
   pending: 0xe67e22,
@@ -112,25 +161,34 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
     super();
   }
 
+  private get wiredRepositories(): EntityRepositoryMap {
+    return {
+      [DiscordEntityType.User]: this.usersRepository,
+      [DiscordEntityType.Request]: this.requestsRepository,
+      [DiscordEntityType.DownloadJob]: this.downloadJobsRepository,
+    };
+  }
+
+  async getEntityByDiscordMessageId(messageId: string): Promise<DiscordEntityResult | null> {
+    for (const [type, repo] of Object.entries(this.wiredRepositories)) {
+      const entity = await repo.getByDiscordMessageId(messageId);
+      if (entity) {
+        return <DiscordEntityResult>{ type, entity };
+      }
+    }
+    return null;
+  }
+
   async onModuleInit(): Promise<void> {
-    this.discordService.onReaction(async (adminId, messageId, reaction) => {
-      if (!this.config.adminIds.includes(adminId)) {
+    this.discordService.onButtonInteraction(async (interaction: ButtonInteraction) => {
+      if (interaction.channelId !== this.config.channelId) {
+        return;
+      }
+      if (!this.config.adminIds.includes(interaction.user.id)) {
         return;
       }
 
-      const user = await this.usersRepository.getByApprovalMessageId(messageId);
-      if (user) {
-        this.onUserRequestReact(user, reaction);
-        return;
-      }
-
-      if (reaction === '❌') {
-        const request = await this.requestsRepository.getByThreadId(messageId);
-        if (request && request.status !== RequestStatus.Rejected) {
-          DiscordAdminMessaging.logger.log(`Rejecting request ${request.mediaId} via Discord reaction`);
-          await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Rejected);
-        }
-      }
+      await this.handleButtonInteraction(interaction);
     });
 
     this.discordService.onGuildMessage(async (message: Message) => {
@@ -144,50 +202,104 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
         return;
       }
 
+      await this.handleMessageInteraction(message);
+    });
+  }
+
+  // --- Reply handlers by entity type ---
+
+  private readonly replyHandlers: {
+    [T in DiscordEntityType]?: (result: Extract<DiscordEntityResult, { type: T }>, message: Message) => Promise<void>;
+  } = {
+    [DiscordEntityType.DownloadJob]: async (result, message) => {
       const imdbMatch = message.content.match(/tt\d{7,}/);
       if (!imdbMatch) {
         return;
       }
-
-      const imdbId = imdbMatch[0];
-      const referencedMessageId = message.reference.messageId;
-
-      const job = await this.downloadJobsRepository.getByDiscordErrorMessageId(referencedMessageId);
-      if (job) {
-        this.emit(AdminEventType.IdentificationRetry, { job, imdbId, replyMessageId: message.id });
+      this.emit(AdminEventType.IdentificationRetry, {
+        job: result.entity,
+        imdbId: imdbMatch[0],
+        replyMessageId: message.id,
+      });
+    },
+    [DiscordEntityType.Request]: async (result, message) => {
+      const imdbMatch = message.content.match(/tt\d{7,}/);
+      if (!imdbMatch) {
         return;
       }
+      this.emit(AdminEventType.ImdbResolve, {
+        request: result.entity,
+        imdbId: imdbMatch[0],
+        replyMessageId: message.id,
+      });
+    },
+  };
 
-      const request = await this.requestsRepository.getByThreadId(referencedMessageId);
-      if (request) {
-        this.emit(AdminEventType.ImdbResolve, { request, imdbId, replyMessageId: message.id });
+  // --- Button handlers by entity type ---
+
+  private readonly buttonHandlers: {
+    [T in DiscordEntityType]?: (
+      result: Extract<DiscordEntityResult, { type: T }>,
+      interaction: ButtonInteraction,
+    ) => Promise<void>;
+  } = {
+    [DiscordEntityType.User]: async (result, interaction) => {
+      switch (interaction.customId) {
+        case ButtonId.UserAccept:
+          this.emit(AdminEventType.UserAccepted, { user: result.entity });
+          await interaction.update({ components: [] });
+          break;
+        case ButtonId.UserReject:
+          this.emit(AdminEventType.UserRejected, { user: result.entity });
+          await interaction.update({ components: [] });
+          break;
       }
-    });
-
-    this.discordService.onReactionRemove(async (adminId, messageId, reaction) => {
-      if (!this.config.adminIds.includes(adminId)) {
-        return;
+    },
+    [DiscordEntityType.Request]: async (result, interaction) => {
+      switch (interaction.customId) {
+        case ButtonId.RequestReject:
+          DiscordAdminMessaging.logger.log(`Rejecting request ${result.entity.mediaId} via button`);
+          await this.requestsRepository.updateStatus(result.entity.mediaId, RequestStatus.Rejected);
+          await interaction.update({ components: [buildRequestUnrejectButton()] });
+          break;
+        case ButtonId.RequestUnreject:
+          DiscordAdminMessaging.logger.log(`Un-rejecting request ${result.entity.mediaId} via button`);
+          await this.requestsRepository.updateStatus(result.entity.mediaId, RequestStatus.Pending);
+          await interaction.update({ components: [buildRequestRejectButton()] });
+          break;
       }
+    },
+  };
 
-      if (reaction === '❌') {
-        const request = await this.requestsRepository.getByThreadId(messageId);
-        if (request && request.status === RequestStatus.Rejected) {
-          DiscordAdminMessaging.logger.log(`Un-rejecting request ${request.mediaId} via Discord reaction removal`);
-          await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Pending);
-        }
-      }
-    });
-  }
-
-  // --- User registration ---
-
-  private async onUserRequestReact(user: UserEntity, reaction: string): Promise<void> {
-    const eventType = USER_EVENT_BY_REACTION[reaction];
-    if (!eventType) {
+  private async handleMessageInteraction(message: Message): Promise<void> {
+    const result = await this.getEntityByDiscordMessageId(message.reference!.messageId!);
+    if (!result) {
       return;
     }
 
-    this.emit(eventType, { user });
+    await this.dispatchByEntityType(this.replyHandlers, result, message);
+  }
+
+  private async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
+    const result = await this.getEntityByDiscordMessageId(interaction.message.id);
+    if (!result) {
+      return;
+    }
+
+    await this.dispatchByEntityType(this.buttonHandlers, result, interaction);
+  }
+
+  private async dispatchByEntityType<TArg>(
+    handlers: {
+      [T in DiscordEntityType]?: (result: Extract<DiscordEntityResult, { type: T }>, arg: TArg) => Promise<void>;
+    },
+    result: DiscordEntityResult,
+    arg: TArg,
+  ): Promise<void> {
+    const handler = handlers[result.type] as ((result: DiscordEntityResult, arg: TArg) => Promise<void>) | undefined;
+    if (handler) {
+      await handler(result, arg);
+    }
   }
 
   async newRegistrationRequest(user: UserEntity): Promise<void> {
@@ -196,21 +308,21 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
     embed.setTitle(`Nouvelle demande d'inscription: ${user.name}`);
     embed.addFields({ name: _.capitalize(user.messagingKey), value: user.messagingId });
 
-    const message = await this.channel.send({ embeds: [embed] });
-    await this.usersRepository.linkApprovalMessageId(user.id, message.id);
+    const message = await this.channel.send({ embeds: [embed], components: [buildUserApprovalButtons()] });
+    await this.usersRepository.linkDiscordMessageId(user.id, message.id);
   }
 
-  async deleteApprovalMessage(user: UserEntity): Promise<void> {
-    if (!user.approvalMessageId) {
+  async deleteUserMessage(user: UserEntity): Promise<void> {
+    if (!user.discordMessageId) {
       return;
     }
 
     try {
-      const message = await DiscordService.getMessage(this.channel, user.approvalMessageId);
+      const message = await DiscordService.getMessage(this.channel, user.discordMessageId);
       await message.delete();
     } catch (error) {
       DiscordAdminMessaging.logger.error(
-        `Failed to delete approval message ${user.approvalMessageId}: ${error instanceof Error ? error.message : error}`,
+        `Failed to delete approval message ${user.discordMessageId}: ${error instanceof Error ? error.message : error}`,
       );
     }
   }
@@ -222,8 +334,8 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
     const embed = buildRequestEmbed(request, EMBED_COLORS.pending);
 
     try {
-      const message = await this.channel.send({ embeds: [embed] });
-      await this.requestsRepository.attachThread(request.mediaId, message.id);
+      const message = await this.channel.send({ embeds: [embed], components: [buildRequestRejectButton()] });
+      await this.requestsRepository.attachDiscordMessageId(request.mediaId, message.id);
       DiscordAdminMessaging.logger.log(`Discord message created for "${media.title}" (${message.id})`);
     } catch (error) {
       DiscordAdminMessaging.logger.error(
@@ -233,42 +345,44 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
   }
 
   async updateRequestStatus(request: RequestEntity): Promise<void> {
-    if (!request.threadId) {
+    if (!request.discordMessageId) {
       return;
     }
 
     try {
       if (request.status === RequestStatus.Fulfilled) {
-        const message = await DiscordService.getMessage(this.channel, request.threadId);
+        const message = await DiscordService.getMessage(this.channel, request.discordMessageId);
         await message.delete();
-        DiscordAdminMessaging.logger.log(`Deleted Discord message ${request.threadId} (fulfilled)`);
+        DiscordAdminMessaging.logger.log(`Deleted Discord message ${request.discordMessageId} (fulfilled)`);
         return;
       }
 
       const color = request.status === RequestStatus.Rejected ? EMBED_COLORS.rejected : EMBED_COLORS.pending;
       const embed = buildRequestEmbed(request, color);
-      const message = await DiscordService.getMessage(this.channel, request.threadId);
-      await message.edit({ embeds: [embed] });
-      DiscordAdminMessaging.logger.log(`Updated Discord message ${request.threadId} (${request.status})`);
+      const components =
+        request.status === RequestStatus.Rejected ? [buildRequestUnrejectButton()] : [buildRequestRejectButton()];
+      const message = await DiscordService.getMessage(this.channel, request.discordMessageId);
+      await message.edit({ embeds: [embed], components });
+      DiscordAdminMessaging.logger.log(`Updated Discord message ${request.discordMessageId} (${request.status})`);
     } catch (error) {
       DiscordAdminMessaging.logger.error(
-        `Failed to update Discord message ${request.threadId}: ${error instanceof Error ? error.message : error}`,
+        `Failed to update Discord message ${request.discordMessageId}: ${error instanceof Error ? error.message : error}`,
       );
     }
   }
 
   async deleteRequestMessage(request: RequestEntity): Promise<void> {
-    if (!request.threadId) {
+    if (!request.discordMessageId) {
       return;
     }
 
     try {
-      const message = await DiscordService.getMessage(this.channel, request.threadId);
+      const message = await DiscordService.getMessage(this.channel, request.discordMessageId);
       await message.delete();
-      DiscordAdminMessaging.logger.log(`Deleted Discord message ${request.threadId}`);
+      DiscordAdminMessaging.logger.log(`Deleted Discord message ${request.discordMessageId}`);
     } catch (error) {
       DiscordAdminMessaging.logger.error(
-        `Failed to delete Discord message ${request.threadId}: ${error instanceof Error ? error.message : error}`,
+        `Failed to delete Discord message ${request.discordMessageId}: ${error instanceof Error ? error.message : error}`,
       );
     }
   }
@@ -290,9 +404,9 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
 
     if (mediaRequestId) {
       const request = await this.requestsRepository.get(mediaRequestId);
-      if (request?.threadId) {
+      if (request?.discordMessageId) {
         try {
-          const message = await DiscordService.getMessage(this.channel, request.threadId);
+          const message = await DiscordService.getMessage(this.channel, request.discordMessageId);
           await message.reply({ embeds: [embed] });
           return;
         } catch {
@@ -332,7 +446,7 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
     }
 
     const message = await this.channel.send({ embeds: [embed] });
-    await this.requestsRepository.attachThread(request.mediaId, message.id);
+    await this.requestsRepository.attachDiscordMessageId(request.mediaId, message.id);
     DiscordAdminMessaging.logger.log(`Missing IMDb notification for "${media.title}" (${message.id})`);
   }
 
@@ -348,18 +462,18 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
   }
 
   async updateRequestUsers(request: RequestEntity): Promise<void> {
-    if (!request.threadId) {
+    if (!request.discordMessageId) {
       return;
     }
 
     try {
       const color = request.status === RequestStatus.Rejected ? EMBED_COLORS.rejected : EMBED_COLORS.pending;
       const embed = buildRequestEmbed(request, color);
-      const message = await DiscordService.getMessage(this.channel, request.threadId);
+      const message = await DiscordService.getMessage(this.channel, request.discordMessageId);
       await message.edit({ embeds: [embed] });
     } catch (error) {
       DiscordAdminMessaging.logger.error(
-        `Failed to update users on Discord message ${request.threadId}: ${error instanceof Error ? error.message : error}`,
+        `Failed to update users on Discord message ${request.discordMessageId}: ${error instanceof Error ? error.message : error}`,
       );
     }
   }

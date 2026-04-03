@@ -1,38 +1,23 @@
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 import {
+  ButtonInteraction,
   Channel,
   Client,
+  ClientEvents,
   Events,
   GatewayIntentBits,
   GuildMember,
+  Interaction,
   Message,
   MessageReaction,
+  PartialMessageReaction,
   Partials,
+  PartialUser,
   TextChannel,
   ThreadChannel,
   User,
-  ClientEvents,
-  PartialMessageReaction,
-  PartialUser,
 } from 'discord.js';
 import { z } from 'zod';
-
-export type MediaReactionEvent = {
-  mediaId: string;
-  reactionName: string;
-  userId: string;
-  messageId: string;
-  channelId: string;
-};
-
-export type MediaMessageEvent = {
-  mediaId: string;
-  content: string;
-  userId: string;
-  messageId: string;
-  channelId: string;
-  threadId: string;
-};
 
 export const discordConfigSchema = z.object({
   bot: z.object({
@@ -205,5 +190,13 @@ export class DiscordService implements OnModuleDestroy {
         callback(user.id, message.id, reaction.emoji.name!);
       },
     );
+  }
+
+  onButtonInteraction(callback: (interaction: ButtonInteraction) => Promise<void> | void): () => void {
+    return registerListener(this.client, Events.InteractionCreate, (interaction: Interaction): void => {
+      if (interaction.isButton() && !interaction.user.bot) {
+        return callback(interaction) as void;
+      }
+    });
   }
 }

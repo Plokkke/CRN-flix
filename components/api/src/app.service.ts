@@ -121,7 +121,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           const request = await this.requestsRepository.get(event.requestId);
           if (
             !request ||
-            request.threadId ||
+            request.discordMessageId ||
             request.status === RequestStatus.Fulfilled ||
             request.status === RequestStatus.Missing
           ) {
@@ -212,7 +212,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
                 failedFiles.length > 0 ? failedFiles : [job.packageName || 'unknown'],
                 errorMessage,
               );
-              await this.downloadJobs.updateDiscordErrorMessageId(event.jobId, messageId);
+              await this.downloadJobs.updateDiscordMessageId(event.jobId, messageId);
             } else {
               await this.adminsMessaging.notifyPipelineFailure(
                 failedFiles.join(', ') || job.packageName || 'unknown',
@@ -258,7 +258,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
         await this.usersRepository.setJellyfinId(user.id, user.jellyfinId);
       }
 
-      await this.adminsMessaging.deleteApprovalMessage(user);
+      await this.adminsMessaging.deleteUserMessage(user);
       this.messaging.registered(messagingContext, user, password);
     } catch (error) {
       if (error instanceof Error && error.message === 'User already exists') {
@@ -274,7 +274,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   private async onUserRejected(user: UserEntity): Promise<void> {
     const messagingContext = { key: user.messagingKey, id: user.messagingId };
     this.messaging.error(messagingContext, 'Votre inscription a été refusée');
-    await this.adminsMessaging.deleteApprovalMessage(user);
+    await this.adminsMessaging.deleteUserMessage(user);
     await this.usersRepository.remove(user.id);
   }
 

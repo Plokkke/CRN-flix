@@ -22,7 +22,7 @@ export type RequestEntity = {
   status: RequestStatus;
   createdAt: Date;
   updatedAt: Date;
-  threadId: string | null;
+  discordMessageId: string | null;
   darkiworldTitleId: number | null;
   darkiworldUrl: string | null;
   media?: MediaEntity;
@@ -49,7 +49,7 @@ export type SyncRequestSnapshot = {
 type RequestRecord = {
   media_id: string;
   status: RequestStatus;
-  thread_id: string | null;
+  discord_message_id: string | null;
   darkiworld_title_id: number | null;
   darkiworld_url: string | null;
   created_at: Date;
@@ -68,7 +68,7 @@ function fromRequestRecord(record: RequestRecord): RequestEntity {
   return {
     mediaId: record.media_id,
     status: record.status,
-    threadId: record.thread_id,
+    discordMessageId: record.discord_message_id,
     darkiworldTitleId: record.darkiworld_title_id,
     darkiworldUrl: record.darkiworld_url,
     createdAt: record.created_at,
@@ -234,7 +234,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                 json_build_object(
                     'mediaId', request.media_id,
                     'status', request.status,
-                    'threadId', request.thread_id,
+                    'discordMessageId', request.discord_message_id,
                     'darkiworldTitleId', request.darkiworld_title_id,
                     'darkiworldUrl', request.darkiworld_url,
                     'createdAt', request.created_at,
@@ -265,7 +265,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                                     'jellyfinId', u.jellyfin_id,
                                     'messagingKey', u.messaging_key,
                                     'messagingId', u.messaging_id,
-                                    'approvalMessageId', u.approval_message_id,
+                                    'discordMessageId', u.discord_message_id,
                                     'createdAt', u.created_at,
                                     'updatedAt', u.updated_at
                                 )
@@ -315,10 +315,10 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows.map(fromRequestUserRecord);
   }
 
-  async getByThreadId(threadId: string): Promise<RequestEntity | null> {
+  async getByDiscordMessageId(discordMessageId: string): Promise<RequestEntity | null> {
     const { rows } = await this.pool.query<{ media_id: string }>(
-      `SELECT media_id FROM media_requests WHERE thread_id = $1`,
-      [threadId],
+      `SELECT media_id FROM media_requests WHERE discord_message_id = $1`,
+      [discordMessageId],
     );
     if (!rows.length) {
       return null;
@@ -389,7 +389,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         json_build_object(
           'mediaId', request.media_id,
           'status', request.status,
-          'threadId', request.thread_id,
+          'discordMessageId', request.discord_message_id,
           'darkiworldTitleId', request.darkiworld_title_id,
           'darkiworldUrl', request.darkiworld_url,
           'createdAt', request.created_at,
@@ -420,7 +420,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                   'jellyfinId', u.jellyfin_id,
                   'messagingKey', u.messaging_key,
                   'messagingId', u.messaging_id,
-                  'approvalMessageId', u.approval_message_id,
+                  'discordMessageId', u.discord_message_id,
                   'createdAt', u.created_at,
                   'updatedAt', u.updated_at
                 )
@@ -479,21 +479,21 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows;
   }
 
-  async attachThread(mediaId: string, threadId: string): Promise<void> {
+  async attachDiscordMessageId(mediaId: string, discordMessageId: string): Promise<void> {
     const query = `
       UPDATE media_requests
-      SET thread_id = $2
+      SET discord_message_id = $2
       WHERE media_id = $1
     `;
-    await this.pool.query(query, [mediaId, threadId]);
+    await this.pool.query(query, [mediaId, discordMessageId]);
   }
 
-  async findRequestsWithoutThread(): Promise<RequestEntity[]> {
+  async findRequestsWithoutDiscordMessage(): Promise<RequestEntity[]> {
     const query = `
       SELECT 
         mr.media_id,
         mr.status,
-        mr.thread_id,
+        mr.discord_message_id,
         mr.created_at,
         mr.updated_at,
         m.id as media_id,
@@ -531,8 +531,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       JOIN medias m ON mr.media_id = m.id
       LEFT JOIN request_users ru ON mr.media_id = ru.request_media_id
       LEFT JOIN users u ON ru.user_id = u.id
-      WHERE mr.thread_id IS NULL AND mr.status = 'pending'
-      GROUP BY mr.media_id, mr.status, mr.thread_id, mr.darkiworld_title_id, mr.darkiworld_url, mr.created_at, mr.updated_at,
+      WHERE mr.discord_message_id IS NULL AND mr.status = 'pending'
+      GROUP BY mr.media_id, mr.status, mr.discord_message_id, mr.darkiworld_title_id, mr.darkiworld_url, mr.created_at, mr.updated_at,
                m.id, m.imdb_id, m.type, m.title, m.original_title, m.year, m.season_number, m.episode_number, m.created_at, m.updated_at
       ORDER BY mr.created_at DESC
     `;
@@ -542,7 +542,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows.map((row) => ({
       mediaId: row.media_id,
       status: row.status,
-      threadId: row.thread_id,
+      discordMessageId: row.discord_message_id,
       darkiworldTitleId: row.darkiworld_title_id,
       darkiworldUrl: row.darkiworld_url,
       createdAt: row.created_at,
@@ -578,7 +578,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         json_build_object(
           'mediaId', request.media_id,
           'status', request.status,
-          'threadId', request.thread_id,
+          'discordMessageId', request.discord_message_id,
           'darkiworldTitleId', request.darkiworld_title_id,
           'darkiworldUrl', request.darkiworld_url,
           'createdAt', request.created_at,

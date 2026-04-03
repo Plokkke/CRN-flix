@@ -1,13 +1,15 @@
 import { Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 
+import { DiscordWired } from './discord-wired';
+
 export type UserEntity = {
   id: string;
   name: string;
   jellyfinId: string | null;
   messagingKey: string;
   messagingId: string;
-  approvalMessageId: string | null;
+  discordMessageId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -18,7 +20,7 @@ type UserRecord = {
   jellyfin_id: string | null;
   messaging_key: string;
   messaging_id: string;
-  approval_message_id: string | null;
+  discord_message_id: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -30,13 +32,13 @@ function fromUserRecord(record: UserRecord): UserEntity {
     jellyfinId: record.jellyfin_id,
     messagingKey: record.messaging_key,
     messagingId: record.messaging_id,
-    approvalMessageId: record.approval_message_id,
+    discordMessageId: record.discord_message_id,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
 }
 
-export class UsersRepository {
+export class UsersRepository implements DiscordWired<UserEntity> {
   static readonly logger = new Logger(UsersRepository.name);
 
   constructor(private readonly pool: Pool) {}
@@ -60,13 +62,13 @@ export class UsersRepository {
     return rows.length ? fromUserRecord(rows[0]) : null;
   }
 
-  async getByApprovalMessageId(approvalMessageId: string): Promise<UserEntity | null> {
+  async getByDiscordMessageId(discordMessageId: string): Promise<UserEntity | null> {
     const query = `
       SELECT *
       FROM users
-      WHERE approval_message_id = $1
+      WHERE discord_message_id = $1
     `;
-    const { rows } = await this.pool.query<UserRecord>(query, [approvalMessageId]);
+    const { rows } = await this.pool.query<UserRecord>(query, [discordMessageId]);
     return rows.length ? fromUserRecord(rows[0]) : null;
   }
 
@@ -96,13 +98,13 @@ export class UsersRepository {
     return fromUserRecord(rows[0]);
   }
 
-  async linkApprovalMessageId(userId: string, approvalMessageId: string): Promise<void> {
+  async linkDiscordMessageId(userId: string, discordMessageId: string): Promise<void> {
     const query = `
       UPDATE users
-      SET approval_message_id = $2
+      SET discord_message_id = $2
       WHERE id = $1
     `;
-    await this.pool.query(query, [userId, approvalMessageId]);
+    await this.pool.query(query, [userId, discordMessageId]);
   }
 
   async remove(userId: string): Promise<void> {

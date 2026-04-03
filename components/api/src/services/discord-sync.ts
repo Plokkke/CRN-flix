@@ -12,7 +12,7 @@ export class DiscordSyncService {
   ) {}
 
   async sync(): Promise<void> {
-    const requests = await this.requestsRepository.findRequestsWithoutThread();
+    const requests = await this.requestsRepository.findRequestsWithoutDiscordMessage();
 
     if (requests.length === 0) {
       return;
