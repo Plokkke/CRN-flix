@@ -25,6 +25,7 @@ export const environmentVariablesSchema = z
     DARKIWORLD_API_KEY: z.string(),
     DARKIWORLD_HOST: z.string().default('https://darkiworld.com'),
     FETCHR_URL: z.string(),
+    FETCHR_API_KEY: z.string().optional(),
     FETCHR_DOWNLOADS_PREFIX: z.string().default('/downloads'),
     TMDB_API_KEY: z.string(),
     DOWNLOADS_PATH: z.string(),
@@ -71,6 +72,7 @@ export const environmentVariablesSchema = z
     },
     fetchr: {
       url: env.FETCHR_URL,
+      apiKey: env.FETCHR_API_KEY,
       downloadsPrefix: env.FETCHR_DOWNLOADS_PREFIX,
     },
     tmdb: {

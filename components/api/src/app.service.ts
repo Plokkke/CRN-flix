@@ -14,7 +14,7 @@ import {
   DownloadJobStatus,
   DownloadJobStatusChangedEvent,
 } from '@/services/database/download-jobs';
-import { MediasRepository } from '@/services/database/medias';
+import { MediasRepository, MediaType } from '@/services/database/medias';
 import {
   RequestCreatedEvent,
   RequestEvents,
@@ -27,11 +27,14 @@ import {
 import { UserEntity, UsersRepository } from '@/services/database/users';
 import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
+import { MediaIdentifierService } from '@/services/media-identifier';
 import {
   AdminEventMap,
   AdminEventType,
   AdminIdentificationRetryEvent,
   AdminImdbResolveEvent,
+  AdminLinkRetryEvent,
+  AdminLinkSubmittedEvent,
   DiscordAdminMessaging,
 } from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
@@ -66,6 +69,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly fetchrSync: FetchrSyncService,
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
+    private readonly mediaIdentifier: MediaIdentifierService,
   ) {}
 
   onModuleInit(): void {
@@ -237,6 +241,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       [AdminEventType.UserRejected]: ({ user }) => this.trackEvent(() => this.onUserRejected(user)),
       [AdminEventType.IdentificationRetry]: (event) => this.trackEvent(() => this.onIdentificationRetry(event)),
       [AdminEventType.ImdbResolve]: (event) => this.trackEvent(() => this.onImdbResolve(event)),
+      [AdminEventType.LinkSubmitted]: (event) => this.trackEvent(() => this.onLinkSubmitted(event)),
+      [AdminEventType.LinkRetry]: (event) => this.trackEvent(() => this.onLinkRetry(event)),
     });
   }
 
@@ -296,6 +302,97 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     AppService.logger.log(`Resolving IMDb ID for media "${request.media.title}" → ${imdbId}`);
     await this.mediasRepository.updateImdbId(request.media.id, imdbId);
     await this.adminsMessaging.reactToMessage(replyMessageId, '✅');
+  }
+
+  private async onLinkSubmitted({ url, messageId }: AdminLinkSubmittedEvent): Promise<void> {
+    AppService.logger.log(`Link submitted: ${url}`);
+
+    let fileName: string;
+    try {
+      const resolved = await this.fetchrSync.resolve(url);
+      fileName = resolved.fileName;
+      AppService.logger.log(`Resolved link: ${fileName}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      AppService.logger.warn(`Failed to resolve link: ${msg}`);
+      await this.adminsMessaging.notifyLinkResolveFailed(url, `Resolution echouee: ${msg}`, messageId);
+      return;
+    }
+
+    const parsed = this.mediaIdentifier.parseFilename(fileName);
+    const identification = await this.mediaIdentifier.identifyFromParsed(parsed);
+
+    if (!identification || !identification.imdbId) {
+      AppService.logger.warn(`Identification failed for resolved file: ${fileName}`);
+      await this.adminsMessaging.notifyLinkResolveFailed(url, `Identification echouee pour: ${fileName}`, messageId);
+      return;
+    }
+
+    await this.launchIdentifiedDownload(url, identification, messageId);
+  }
+
+  private async onLinkRetry({ url, imdbId, originalMessageId, replyMessageId }: AdminLinkRetryEvent): Promise<void> {
+    AppService.logger.log(`Link retry with IMDb ID ${imdbId} for ${url}`);
+
+    const { movies, tvShows } = await this.mediaIdentifier.tmdbFindByImdbId(imdbId);
+    const identification = movies[0]
+      ? {
+          imdbId,
+          title: movies[0].title,
+          year: movies[0].release_date ? parseInt(movies[0].release_date.substring(0, 4), 10) : null,
+          mediaType: 'movie' as const,
+        }
+      : tvShows[0]
+        ? {
+            imdbId,
+            title: tvShows[0].name,
+            year: tvShows[0].first_air_date ? parseInt(tvShows[0].first_air_date.substring(0, 4), 10) : null,
+            mediaType: 'episode' as const,
+          }
+        : null;
+
+    if (!identification) {
+      await this.adminsMessaging.reactToMessage(replyMessageId, '❌');
+      return;
+    }
+
+    await this.launchIdentifiedDownload(url, identification, originalMessageId);
+    await this.adminsMessaging.reactToMessage(replyMessageId, '✅');
+  }
+
+  private async launchIdentifiedDownload(
+    url: string,
+    identification: { imdbId: string | null; title: string; year: number | null; mediaType: 'movie' | 'episode' },
+    discordMessageId: string,
+  ): Promise<void> {
+    const media = await this.mediasRepository.upsert({
+      imdbId: identification.imdbId ?? '',
+      type: identification.mediaType === 'movie' ? MediaType.Movie : MediaType.Episode,
+      title: identification.title,
+      originalTitle: null,
+      year: identification.year,
+      seasonNumber: null,
+      episodeNumber: null,
+    });
+
+    await this.requestsRepository.upsert(media.id, RequestStatus.Pending);
+
+    const resolvedMessageId = await this.adminsMessaging.notifyLinkResolved(
+      identification.title,
+      identification.mediaType,
+      identification.year,
+      identification.imdbId,
+      discordMessageId,
+    );
+    await this.requestsRepository.attachDiscordMessageId(media.id, resolvedMessageId);
+
+    const metadata: Record<string, string> = { 'crn-flix-request-id': media.id };
+    if (identification.imdbId) {
+      metadata.imdbid = identification.imdbId;
+    }
+    this.fetchrSync.download(url, metadata);
+
+    AppService.logger.log(`Download launched for "${identification.title}" with request ${media.id}`);
   }
 
   private registerCronJob(name: string, cronExpression: string, handler: () => Promise<void>): void {

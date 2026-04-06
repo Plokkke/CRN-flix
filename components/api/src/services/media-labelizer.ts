@@ -29,14 +29,14 @@ function sanitizeTitle(title: string): string {
 }
 
 function buildFolderName(title: string, year: number | null, imdbId: string | null): string {
-  const parts = [title];
+  const parts = [sanitizeTitle(title)];
   if (year) {
     parts.push(`(${year})`);
   }
   if (imdbId) {
     parts.push(`[imdb${imdbId}]`);
   }
-  return parts.join(' ');
+  return parts.join('.');
 }
 
 export class MediaLabelizerService {

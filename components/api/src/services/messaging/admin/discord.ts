@@ -48,6 +48,8 @@ export enum AdminEventType {
   UserRejected = 'userRejected',
   IdentificationRetry = 'identificationRetry',
   ImdbResolve = 'imdbResolve',
+  LinkSubmitted = 'linkSubmitted',
+  LinkRetry = 'linkRetry',
 }
 
 enum ButtonId {
@@ -86,12 +88,16 @@ export type AdminUserAcceptedEvent = { user: UserEntity };
 export type AdminUserRejectedEvent = { user: UserEntity };
 export type AdminIdentificationRetryEvent = { job: DownloadJobEntity; imdbId: string; replyMessageId: string };
 export type AdminImdbResolveEvent = { request: RequestEntity; imdbId: string; replyMessageId: string };
+export type AdminLinkSubmittedEvent = { url: string; messageId: string };
+export type AdminLinkRetryEvent = { url: string; imdbId: string; originalMessageId: string; replyMessageId: string };
 
 export type AdminEventMap = {
   [AdminEventType.UserAccepted]: AdminUserAcceptedEvent;
   [AdminEventType.UserRejected]: AdminUserRejectedEvent;
   [AdminEventType.IdentificationRetry]: AdminIdentificationRetryEvent;
   [AdminEventType.ImdbResolve]: AdminImdbResolveEvent;
+  [AdminEventType.LinkSubmitted]: AdminLinkSubmittedEvent;
+  [AdminEventType.LinkRetry]: AdminLinkRetryEvent;
 };
 
 function mediaName(media: MediaEntity): string {
@@ -198,11 +204,16 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
       if (!this.config.adminIds.includes(message.author.id)) {
         return;
       }
-      if (!message.reference?.messageId) {
+
+      if (message.reference?.messageId) {
+        await this.handleMessageInteraction(message);
         return;
       }
 
-      await this.handleMessageInteraction(message);
+      const urlMatch = message.content.match(/https?:\/\/\S+/);
+      if (urlMatch) {
+        this.emit(AdminEventType.LinkSubmitted, { url: urlMatch[0], messageId: message.id });
+      }
     });
   }
 
@@ -272,12 +283,31 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
   };
 
   private async handleMessageInteraction(message: Message): Promise<void> {
-    const result = await this.getEntityByDiscordMessageId(message.reference!.messageId!);
-    if (!result) {
+    const referencedMessageId = message.reference!.messageId!;
+    const result = await this.getEntityByDiscordMessageId(referencedMessageId);
+
+    if (result) {
+      await this.dispatchByEntityType(this.replyHandlers, result, message);
       return;
     }
 
-    await this.dispatchByEntityType(this.replyHandlers, result, message);
+    // No entity found — check if this is a retry for a failed link identification
+    const imdbMatch = message.content.match(/tt\d{7,}/);
+    if (!imdbMatch) {
+      return;
+    }
+
+    // Try to extract the URL from the referenced message's embed
+    const referencedMessage = await DiscordService.getMessage(this.channel, referencedMessageId);
+    const embedUrl = referencedMessage.embeds[0]?.fields?.find((f) => f.name === 'URL')?.value;
+    if (embedUrl) {
+      this.emit(AdminEventType.LinkRetry, {
+        url: embedUrl,
+        imdbId: imdbMatch[0],
+        originalMessageId: referencedMessageId,
+        replyMessageId: message.id,
+      });
+    }
   }
 
   private async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
@@ -448,6 +478,39 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
     const message = await this.channel.send({ embeds: [embed] });
     await this.requestsRepository.attachDiscordMessageId(request.mediaId, message.id);
     DiscordAdminMessaging.logger.log(`Missing IMDb notification for "${media.title}" (${message.id})`);
+  }
+
+  async notifyLinkResolved(
+    title: string,
+    mediaType: string,
+    year: number | null,
+    imdbId: string | null,
+    originalMessageId: string,
+  ): Promise<string> {
+    const embed = new EmbedBuilder()
+      .setColor(0x2ecc71)
+      .setTitle(`Identifie: ${title}${year ? ` (${year})` : ''}`)
+      .addFields({ name: 'Type', value: mediaType, inline: true });
+
+    if (imdbId) {
+      embed.addFields({ name: 'IMDb', value: imdbId, inline: true });
+    }
+
+    const originalMessage = await DiscordService.getMessage(this.channel, originalMessageId);
+    const message = await originalMessage.reply({ embeds: [embed] });
+    return message.id;
+  }
+
+  async notifyLinkResolveFailed(url: string, errorMessage: string, originalMessageId: string): Promise<string> {
+    const embed = new EmbedBuilder()
+      .setColor(0xe74c3c)
+      .setTitle('Identification echouee')
+      .addFields({ name: 'URL', value: url.slice(0, 1024) }, { name: 'Erreur', value: errorMessage.slice(0, 1024) })
+      .setFooter({ text: 'Repondre avec un IMDb ID (ex: tt1234567) pour forcer' });
+
+    const originalMessage = await DiscordService.getMessage(this.channel, originalMessageId);
+    const message = await originalMessage.reply({ embeds: [embed] });
+    return message.id;
   }
 
   async reactToMessage(messageId: string, emoji: string): Promise<void> {

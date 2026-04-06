@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 import { MediasRepository, MediaType } from '@/services/database/medias';
 import { RequestsRepository, RequestStatus } from '@/services/database/requests';
 
-import { TmdbApiService, TmdbIdentification } from '../modules/tmdb/tmdb';
+import { TmdbApiService, TmdbIdentification, TmdbMovie, TmdbTvShow } from '../modules/tmdb/tmdb';
 
 export type ParsedMedia = {
   title: string;
@@ -153,6 +153,46 @@ export class MediaIdentifierService {
       seasonNumber: parsed.season ?? null,
       episodeNumber: parsed.episode ?? null,
       mediaRequestId,
+    };
+  }
+
+  async tmdbFindByImdbId(imdbId: string): Promise<{ movies: TmdbMovie[]; tvShows: TmdbTvShow[] }> {
+    return this.tmdb.findByImdbId(imdbId);
+  }
+
+  async identifyFromParsed(parsed: ParsedMedia): Promise<TmdbIdentification | null> {
+    if (!parsed.title) {
+      return null;
+    }
+    return parsed.isEpisode ? this.identifyEpisode(parsed) : this.identifyMovie(parsed);
+  }
+
+  async identifyFromRequest(
+    filePath: string,
+    requestId: string,
+    downloadJobId: string,
+  ): Promise<IdentificationResult | null> {
+    const request = await this.requests.get(requestId);
+    if (!request?.media) {
+      MediaIdentifierService.logger.warn(`Request ${requestId} not found for identifyFromRequest`);
+      return null;
+    }
+
+    const media = request.media;
+    const parsed = this.parseFilename(filePath);
+
+    await this.requests.linkDownloadJob(requestId, downloadJobId);
+    MediaIdentifierService.logger.log(`Linked request ${requestId} to job ${downloadJobId} via metadata`);
+
+    return {
+      tmdbId: 0,
+      imdbId: media.imdbId,
+      title: media.title,
+      year: media.year,
+      mediaType: media.type as 'movie' | 'episode',
+      seasonNumber: parsed.season ?? media.seasonNumber,
+      episodeNumber: parsed.episode ?? media.episodeNumber,
+      mediaRequestId: requestId,
     };
   }
 

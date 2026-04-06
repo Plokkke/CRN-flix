@@ -21,6 +21,7 @@ export type DownloadJobEntity = {
   sourcePaths: string[];
   errorMessage: string | null;
   discordMessageId: string | null;
+  metadata: Record<string, string> | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -34,6 +35,7 @@ type DownloadJobRecord = {
   source_paths: string[];
   error_message: string | null;
   discord_message_id: string | null;
+  metadata: Record<string, string> | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -48,6 +50,7 @@ function mapRecord(record: DownloadJobRecord): DownloadJobEntity {
     sourcePaths: record.source_paths,
     errorMessage: record.error_message,
     discordMessageId: record.discord_message_id,
+    metadata: record.metadata,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -124,13 +127,21 @@ export class DownloadJobsRepository extends Emitter<DownloadJobEvents> implement
     packageName: string;
     saveTo: string;
     sourcePaths?: string[];
+    metadata?: Record<string, string>;
   }): Promise<DownloadJobEntity | null> {
     const result = await this.pool.query<DownloadJobRecord>(
-      `INSERT INTO download_jobs (source_id, package_name, save_to, source_paths, status)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO download_jobs (source_id, package_name, save_to, source_paths, status, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (source_id) DO NOTHING
        RETURNING *`,
-      [data.sourceId, data.packageName, data.saveTo, data.sourcePaths ?? [], DownloadJobStatus.Detected],
+      [
+        data.sourceId,
+        data.packageName,
+        data.saveTo,
+        data.sourcePaths ?? [],
+        DownloadJobStatus.Detected,
+        data.metadata ? JSON.stringify(data.metadata) : null,
+      ],
     );
     if (result.rows.length === 0) {
       return null;

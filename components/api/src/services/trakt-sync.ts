@@ -4,6 +4,7 @@ import { DateTime } from 'luxon';
 import { z } from 'zod';
 
 import { concurrent } from '@/helpers/concurrent';
+import { appendQueryParams } from '@/helpers/url';
 import { DarkiworldService } from '@/modules/darkiworld/service';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
@@ -237,6 +238,12 @@ export class TraktSyncService {
 
     try {
       const media = await this.mediasRepository.upsert(desiredMedia.mediaInfos);
+      if (darkiworldUrl && media.imdbId) {
+        darkiworldUrl = appendQueryParams(darkiworldUrl, {
+          'crn-flix-request-id': media.id,
+          imdbid: media.imdbId,
+        });
+      }
       await this.requestsRepository.upsert(media.id, finalStatus, darkiworldTitleId, darkiworldUrl);
 
       for (const [userId, reasons] of Object.entries(desiredMedia.requestKindsByUserId)) {

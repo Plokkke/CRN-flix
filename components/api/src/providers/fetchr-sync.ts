@@ -11,6 +11,6 @@ export const fetchrSyncProvider: Provider = {
   useFactory: (downloadJobs: DownloadJobsRepository, configService: ConfigService<Config, true>): FetchrSyncService => {
     const fetchr = configService.get('fetchr');
     const mediaPaths = configService.get('mediaPaths');
-    return new FetchrSyncService(downloadJobs, fetchr.url, fetchr.downloadsPrefix, mediaPaths.downloads);
+    return new FetchrSyncService(downloadJobs, fetchr.url, fetchr.downloadsPrefix, mediaPaths.downloads, fetchr.apiKey);
   },
 };

@@ -1,6 +1,7 @@
 import * as path from 'path';
 
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import axios from 'axios';
 import * as WebSocket from 'ws';
 
 import { DownloadJobsRepository } from './database/download-jobs';
@@ -11,6 +12,7 @@ type FetchrCompletedEvent = {
   filePaths: string[];
   size: number | null;
   source: string;
+  metadata?: Record<string, string>;
   downloadedAt: string;
   completedAt: string;
 };
@@ -26,13 +28,17 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
 
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly fetchrApiUrl: string;
 
   constructor(
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly fetchrUrl: string,
     private readonly fetchrPrefix: string,
     private readonly localPrefix: string,
-  ) {}
+    private readonly fetchrApiKey?: string,
+  ) {
+    this.fetchrApiUrl = fetchrUrl.replace(/^ws/, 'http');
+  }
 
   onModuleInit(): void {
     this.connect();
@@ -111,6 +117,22 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
     this.send({ type: 'remove', id: downloadId });
   }
 
+  async resolve(url: string): Promise<{ fileName: string; size: number | null }> {
+    const headers: Record<string, string> = {};
+    if (this.fetchrApiKey) {
+      headers['x-api-key'] = this.fetchrApiKey;
+    }
+    const response = await axios.get<{ fileName: string; size: number | null }>(`${this.fetchrApiUrl}/infos`, {
+      params: { url },
+      headers,
+    });
+    return response.data;
+  }
+
+  download(url: string, metadata?: Record<string, string>): void {
+    this.send({ type: 'download', url, metadata });
+  }
+
   private mapPath(fetchrPath: string): string {
     if (fetchrPath.startsWith(this.fetchrPrefix)) {
       return fetchrPath.replace(this.fetchrPrefix, this.localPrefix);
@@ -134,6 +156,7 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
       packageName: data.fileName,
       saveTo,
       sourcePaths: localPaths,
+      metadata: data.metadata,
     });
   }
 }

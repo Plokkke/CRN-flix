@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 
 import { concurrent } from '@/helpers/concurrent';
+import { appendQueryParams } from '@/helpers/url';
 import { DarkiworldService } from '@/modules/darkiworld/service';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 
@@ -36,8 +37,14 @@ export class DarkiworldSyncService {
       }
 
       const darkiworldTitleId = result.title?.id ?? null;
+      const downloadUrl = result.downloadUrl
+        ? appendQueryParams(result.downloadUrl, {
+            'crn-flix-request-id': request.mediaId,
+            imdbid: request.media.imdbId,
+          })
+        : null;
       if (darkiworldTitleId) {
-        await this.requestsRepository.setDarkiworldInfo(request.mediaId, darkiworldTitleId, result.downloadUrl);
+        await this.requestsRepository.setDarkiworldInfo(request.mediaId, darkiworldTitleId, downloadUrl);
       }
       await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Pending);
       DarkiworldSyncService.logger.log(

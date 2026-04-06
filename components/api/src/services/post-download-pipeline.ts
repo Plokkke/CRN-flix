@@ -47,7 +47,7 @@ export class PostDownloadPipeline {
       await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Identifying);
 
       for (const videoFile of job.sourcePaths) {
-        const identity = await this.identification.identify(videoFile, job.id);
+        const identity = await this.resolveIdentity(videoFile, job);
         if (!identity) {
           throw new Error(`Identification failed for ${path.basename(videoFile)}`);
         }
@@ -62,6 +62,29 @@ export class PostDownloadPipeline {
       PostDownloadPipeline.logger.error(`Job ${job.id} failed: ${message}`);
       await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Failed, message);
     }
+  }
+
+  private async resolveIdentity(videoFile: string, job: DownloadJobEntity) {
+    const requestId = job.metadata?.['crn-flix-request-id'];
+    if (requestId) {
+      PostDownloadPipeline.logger.log(`Job ${job.id} — resolving via metadata request ID: ${requestId}`);
+      const identity = await this.identification.identifyFromRequest(videoFile, requestId, job.id);
+      if (identity) {
+        return identity;
+      }
+    }
+
+    const imdbId = job.metadata?.imdbid;
+    if (imdbId) {
+      PostDownloadPipeline.logger.log(`Job ${job.id} — resolving via metadata IMDb ID: ${imdbId}`);
+      const identity = await this.identification.identifyWithImdbId(videoFile, imdbId, job.id);
+      if (identity) {
+        return identity;
+      }
+    }
+
+    PostDownloadPipeline.logger.log(`Job ${job.id} — resolving via filename identification`);
+    return this.identification.identify(videoFile, job.id);
   }
 
   async retryWithImdbId(jobId: string, imdbId: string): Promise<void> {

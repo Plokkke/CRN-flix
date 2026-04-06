@@ -129,6 +129,7 @@ model DownloadJob {
   sourcePaths              String[]          @map("source_paths")
   errorMessage             String?           @map("error_message")
   discordMessageId         String?           @map("discord_message_id")
+  metadata                 Json?             @db.JsonB
   createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
