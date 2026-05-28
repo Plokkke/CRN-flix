@@ -14,8 +14,7 @@ export type ListLinksOptions = {
   host?: number;
 };
 
-export type DarkiworldAvailability = {
-  available: boolean;
-  title: DarkiworldTitle | null;
-  downloadUrl: string | null;
-};
+export type DarkiworldAvailability =
+  | { status: 'available'; title: DarkiworldTitle; downloadUrl: string }
+  | { status: 'not-found' }
+  | { status: 'unknown'; reason: string };

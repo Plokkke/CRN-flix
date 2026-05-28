@@ -16,9 +16,15 @@ export class DarkiworldSyncService {
   ) {}
 
   async sync(): Promise<void> {
-    DarkiworldSyncService.logger.log('Checking Darkiworld availability for missing requests');
-    const requests = await this.requestsRepository.listByStatuses([RequestStatus.Missing]);
-    DarkiworldSyncService.logger.log(`Found ${requests.length} missing requests to check`);
+    DarkiworldSyncService.logger.log('Checking Darkiworld availability for missing and pending requests');
+
+    if (!(await this.darkiworldService.isHealthy())) {
+      DarkiworldSyncService.logger.warn('Darkiworld unreachable, skipping sync to avoid wiping URLs');
+      return;
+    }
+
+    const requests = await this.requestsRepository.listByStatuses([RequestStatus.Missing, RequestStatus.Pending]);
+    DarkiworldSyncService.logger.log(`Found ${requests.length} requests to check`);
 
     await concurrent(requests, DARKIWORLD_CONCURRENCY, (request) => this.checkOne(request));
 
@@ -32,24 +38,33 @@ export class DarkiworldSyncService {
 
     try {
       const result = await this.darkiworldService.find(request.media);
-      if (!result.available) {
+
+      if (result.status === 'available') {
+        const downloadUrl = appendQueryParams(result.downloadUrl, {
+          'crn-flix-request-id': request.mediaId,
+          imdbid: request.media.imdbId,
+        });
+        await this.requestsRepository.setDarkiworldInfo(request.mediaId, result.title.id, downloadUrl);
+        if (request.status === RequestStatus.Missing) {
+          await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Pending);
+          DarkiworldSyncService.logger.log(
+            `"${request.media.title}" (${request.media.imdbId}) now available on Darkiworld`,
+          );
+        } else if (downloadUrl !== request.darkiworldUrl) {
+          DarkiworldSyncService.logger.log(
+            `"${request.media.title}" (${request.media.imdbId}) Darkiworld URL refreshed`,
+          );
+        }
         return;
       }
 
-      const darkiworldTitleId = result.title?.id ?? null;
-      const downloadUrl = result.downloadUrl
-        ? appendQueryParams(result.downloadUrl, {
-            'crn-flix-request-id': request.mediaId,
-            imdbid: request.media.imdbId,
-          })
-        : null;
-      if (darkiworldTitleId) {
-        await this.requestsRepository.setDarkiworldInfo(request.mediaId, darkiworldTitleId, downloadUrl);
+      if (result.status === 'not-found' && request.status === RequestStatus.Pending) {
+        await this.requestsRepository.clearDarkiworldUrl(request.mediaId);
+        await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Missing);
+        DarkiworldSyncService.logger.log(
+          `"${request.media.title}" (${request.media.imdbId}) no longer available on Darkiworld, reverted to missing`,
+        );
       }
-      await this.requestsRepository.updateStatus(request.mediaId, RequestStatus.Pending);
-      DarkiworldSyncService.logger.log(
-        `"${request.media.title}" (${request.media.imdbId}) now available on Darkiworld`,
-      );
     } catch (error) {
       DarkiworldSyncService.logger.error(
         `Darkiworld check failed for "${request.media.title}" (${request.media.imdbId}): ${error instanceof Error ? error.message : error}`,

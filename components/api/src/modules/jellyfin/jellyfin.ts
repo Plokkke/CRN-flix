@@ -3,6 +3,7 @@ import axios, { AxiosError, AxiosInstance } from 'axios';
 import { z } from 'zod';
 
 import { logAxiosError, logAxiosRequest, logAxiosResponse } from '@/helpers/axios-logger';
+import { applyAxiosRetry } from '@/helpers/axios-retry';
 
 export type JellyfinUser = {
   id: string;
@@ -44,10 +45,12 @@ export type JellyfinMedia = {
   SeriesName?: string;
   ParentIndexNumber?: number;
   IndexNumber?: number;
+  IndexNumberEnd?: number;
   ProviderIds: ExternalIds;
   SeriesPrimaryImage?: string;
   ChannelImage?: string;
   SeriesId?: string;
+  Path?: string;
 };
 
 export type JellyfinPlugin = {
@@ -115,6 +118,8 @@ export class JellyfinMediaService {
         throw error;
       },
     );
+
+    applyAxiosRetry(this.api, 'jellyfin');
   }
 
   get url(): string {
@@ -160,14 +165,23 @@ export class JellyfinMediaService {
     await this.api.post('/Library/Refresh');
   }
 
-  async listAssets(): Promise<JellyfinMedia[]> {
+  async listAssets(opts: { requireImdbId?: boolean } = {}): Promise<JellyfinMedia[]> {
+    const requireImdbId = opts.requireImdbId ?? true;
     try {
       const itemsResponse = await this.api.get<{ Items: JellyfinMedia[] }>(`/Items`, {
         params: {
           Recursive: true,
-          Fields: 'Id,Name,Type,OriginalTitle,ExternalSeriesId,ProviderIds,ExtraIds,ParentId',
-          hasImdbId: true,
-          includeItemTypes: 'Movie,Episode',
+          Fields:
+            'Id,Name,Type,OriginalTitle,ExternalSeriesId,ProviderIds,ExtraIds,ParentId,SeriesId,Path,IndexNumberEnd',
+          // hasImdbId filters by the ITEM's imdb. For episodes, the relevant
+          // imdb is the series' (resolved via SeriesId downstream), so the
+          // audit passes requireImdbId=false to catch episodes that have no
+          // episode-level imdb but live under a properly-tagged series.
+          ...(requireImdbId && { hasImdbId: true }),
+          // Series are included so we can resolve each episode's owning show
+          // IMDb id (ProviderIds.Imdb on an Episode is the EPISODE's imdb,
+          // not the series' — which breaks Darkiworld/TMDB show lookups).
+          includeItemTypes: 'Movie,Series,Episode',
         },
       });
 

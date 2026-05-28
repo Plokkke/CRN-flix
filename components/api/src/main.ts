@@ -4,6 +4,7 @@ import { WinstonModule } from 'nest-winston';
 
 import { configureAppModule } from '@/app.module';
 import { loadEnv } from '@/environment';
+import { installShutdownHandlers } from '@/helpers/shutdown';
 import { logger } from '@/services/logger';
 
 (async () => {
@@ -15,12 +16,9 @@ import { logger } from '@/services/logger';
     }),
   });
 
+  app.enableShutdownHooks();
+  installShutdownHandlers(app);
+
   await app.init();
-
-  process.on('SIGINT', async () => {
-    await app.close();
-    process.exit(0);
-  });
-
   await app.listen(env.server.port);
 })();

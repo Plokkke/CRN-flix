@@ -20,6 +20,7 @@ export const syncConfigSchema = z.object({
   wantedLimit: z.number().int().optional().default(30),
   progressLimit: z.number().int().optional().default(10),
   bufferDuration: z.number().int().optional().default(150),
+  fullSyncIntervalHours: z.number().int().positive().optional().default(24),
 });
 
 export type SyncConfig = z.infer<typeof syncConfigSchema>;
@@ -69,7 +70,7 @@ function mapEpisodeToRequest(episode: Episode, show: Show): MediaInfos {
     title: show.title,
     originalTitle: show.title,
     year: show.year,
-    imdbId: episode.ids.imdb ?? '',
+    imdbId: show.ids.imdb ?? '',
     seasonNumber: episode.season,
     episodeNumber: episode.number,
   };
@@ -224,10 +225,14 @@ export class TraktSyncService {
     if (desiredMedia.mediaInfos.imdbId) {
       try {
         const result = await this.darkiworldService.find(desiredMedia.mediaInfos);
-        darkiworldTitleId = result.title?.id ?? null;
-        darkiworldUrl = result.available ? result.downloadUrl : null;
-        if (darkiworldUrl) {
+        if (result.status === 'available') {
+          darkiworldTitleId = result.title.id;
+          darkiworldUrl = result.downloadUrl;
           finalStatus = RequestStatus.Pending;
+        } else if (result.status === 'unknown') {
+          TraktSyncService.logger.warn(
+            `Darkiworld inconclusive for new request "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${result.reason}`,
+          );
         }
       } catch (error) {
         TraktSyncService.logger.error(
@@ -304,9 +309,24 @@ export class TraktSyncService {
 
   private async getKindsToSync(user: UserAuthCtxt): Promise<Set<RequestKind>> {
     const lastUpdatedAtByKind = await this.userActivitiesRepository.getForUserId(user.id);
+    const allKinds = Object.values(RequestKind);
+
+    const fullSyncCutoff = DateTime.now().minus({ hours: this.config.fullSyncIntervalHours });
+    const needsFullSync = allKinds.some((kind) => {
+      const lastSync = lastUpdatedAtByKind[kind];
+      return !lastSync || lastSync < fullSyncCutoff;
+    });
+
+    if (needsFullSync) {
+      TraktSyncService.logger.log(
+        `User ${user.id}: forcing full sync (no kind synced within ${this.config.fullSyncIntervalHours}h)`,
+      );
+      return new Set(allKinds);
+    }
+
     const updatedAtByKind = await this.getLastUpdatedAtByKind(user);
     return new Set(
-      Object.values(RequestKind).filter(
+      allKinds.filter(
         (kind) =>
           !lastUpdatedAtByKind[kind] || !updatedAtByKind[kind] || updatedAtByKind[kind] > lastUpdatedAtByKind[kind],
       ),
@@ -315,9 +335,13 @@ export class TraktSyncService {
 
   private async expandProgressShows(progressShows: ProgressShow[]): Promise<MediaInfos[]> {
     const episodes = await Promise.all(
-      progressShows.map((p) =>
-        this.bufferedExpansion(p.show, p.next_episode?.season ?? 1, p.next_episode?.number ?? 1),
-      ),
+      progressShows.map(async (p) => {
+        const expanded = await this.bufferedExpansion(p.show, p.next_episode?.season ?? 1, p.next_episode?.number ?? 1);
+        TraktSyncService.logger.log(
+          `[progress.expand] "${p.show.title}" from S${p.next_episode?.season ?? 1}E${p.next_episode?.number ?? 1} → ${expanded.length} episode(s)`,
+        );
+        return expanded;
+      }),
     );
 
     return episodes.flat();
@@ -339,7 +363,7 @@ export class TraktSyncService {
       .filter((media) => media.type === 'episode')
       .map((m) => ({
         type: MediaType.Episode,
-        imdbId: m.episode.ids.imdb ?? '',
+        imdbId: m.show.ids.imdb ?? '',
         title: m.show.title,
         originalTitle: m.show.title,
         year: m.show.year,

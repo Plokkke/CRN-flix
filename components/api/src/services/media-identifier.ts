@@ -25,6 +25,7 @@ export type IdentificationResult = {
   mediaType: 'movie' | 'episode';
   seasonNumber: number | null;
   episodeNumber: number | null;
+  episodeNumberEnd: number | null;
   mediaRequestId: string;
 };
 
@@ -47,7 +48,7 @@ export class MediaIdentifierService {
       year: parsed.year,
       season: parsed.season,
       episode: parsed.episode,
-      isEpisode: parsed.season !== undefined || parsed.episode !== undefined,
+      isEpisode: parsed.season !== undefined && parsed.episode !== undefined,
     };
   }
 
@@ -80,6 +81,7 @@ export class MediaIdentifierService {
       imdbId: identification.imdbId,
       seasonNumber: parsed.season ?? null,
       episodeNumber: parsed.episode ?? null,
+      episodeNumberEnd: null,
       mediaRequestId,
     };
   }
@@ -152,6 +154,7 @@ export class MediaIdentifierService {
       imdbId,
       seasonNumber: parsed.season ?? null,
       episodeNumber: parsed.episode ?? null,
+      episodeNumberEnd: null,
       mediaRequestId,
     };
   }
@@ -192,6 +195,7 @@ export class MediaIdentifierService {
       mediaType: media.type as 'movie' | 'episode',
       seasonNumber: parsed.season ?? media.seasonNumber,
       episodeNumber: parsed.episode ?? media.episodeNumber,
+      episodeNumberEnd: null,
       mediaRequestId: requestId,
     };
   }

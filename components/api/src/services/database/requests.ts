@@ -1,9 +1,10 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import { z } from 'zod';
 
+import { withDbRetry } from '@/helpers/db-retry';
 import { Emitter } from '@/helpers/events';
-import { listen } from '@/helpers/sql';
+import { ListenChannel, ListenHandle, listenWithReconnect } from '@/helpers/sql';
 import { MediaEntity } from '@/services/database/medias';
 import { UserEntity } from '@/services/database/users';
 
@@ -122,59 +123,45 @@ export type RequestEvents = {
   userLeft: UserLeftRequestEvent;
 };
 
-const LISTENING_MAP: {
-  channel: string;
-  schema: z.ZodType<RequestEvents[keyof RequestEvents]>;
-  event: keyof RequestEvents;
-}[] = [
-  {
-    channel: 'request_status_changed',
-    schema: requestStatusChangedEventMorphing,
-    event: 'statusChange',
-  },
-  {
-    channel: 'request_created',
-    schema: requestCreatedEventMorphing,
-    event: 'created',
-  },
-  {
-    channel: 'user_joined_request',
-    schema: userJoinedRequestEventMorphing,
-    event: 'userJoined',
-  },
-  {
-    channel: 'user_left_request',
-    schema: userLeftRequestEventMorphing,
-    event: 'userLeft',
-  },
-];
-
 export class RequestsRepository extends Emitter<RequestEvents> implements OnModuleInit, OnModuleDestroy {
   static readonly logger = new Logger(RequestsRepository.name);
 
-  private listenClient: PoolClient | null = null;
+  private listenHandle: ListenHandle | null = null;
 
   constructor(private readonly pool: Pool) {
     super();
   }
 
-  async onModuleInit(): Promise<void> {
-    // Keep a dedicated client for LISTEN — releasing it would drop subscriptions
-    this.listenClient = await this.pool.connect();
-
-    for (const { channel, schema, event } of LISTENING_MAP) {
-      RequestsRepository.logger.log(`Subscribing to PostgreSQL channel: ${channel}`);
-      listen(this.listenClient, channel, schema, (msg: z.infer<typeof schema>) => {
-        RequestsRepository.logger.debug(`Received event "${String(event)}": ${JSON.stringify(msg)}`);
-        this.emit(event, msg);
-      });
-    }
+  onModuleInit(): void {
+    const channels: ListenChannel[] = [
+      {
+        channel: 'request_status_changed',
+        schema: requestStatusChangedEventMorphing,
+        callback: (msg) => this.emit('statusChange', msg as RequestStatusChangedEvent),
+      },
+      {
+        channel: 'request_created',
+        schema: requestCreatedEventMorphing,
+        callback: (msg) => this.emit('created', msg as RequestCreatedEvent),
+      },
+      {
+        channel: 'user_joined_request',
+        schema: userJoinedRequestEventMorphing,
+        callback: (msg) => this.emit('userJoined', msg as UserJoinedRequestEvent),
+      },
+      {
+        channel: 'user_left_request',
+        schema: userLeftRequestEventMorphing,
+        callback: (msg) => this.emit('userLeft', msg as UserLeftRequestEvent),
+      },
+    ];
+    this.listenHandle = listenWithReconnect(this.pool, channels, undefined, 'RequestsRepository');
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.listenClient) {
-      this.listenClient.release();
-      this.listenClient = null;
+    if (this.listenHandle) {
+      await this.listenHandle.close();
+      this.listenHandle = null;
     }
   }
 
@@ -191,13 +178,10 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       ON CONFLICT (media_id) DO NOTHING
       RETURNING *
     `;
-    const { rows } = await this.pool.query<RequestRecord>(query, [
-      mediaId,
-      status,
-      darkiworldTitleId,
-      darkiworldUrl,
-      downloadJobId,
-    ]);
+    const { rows } = await withDbRetry(
+      () => this.pool.query<RequestRecord>(query, [mediaId, status, darkiworldTitleId, darkiworldUrl, downloadJobId]),
+      { label: 'requests.upsert' },
+    );
     if (!rows.length) {
       return (await this.get(mediaId))!;
     }
@@ -205,27 +189,39 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
   }
 
   async upsertFulfilled(mediaId: string): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO media_requests (media_id, status)
-       VALUES ($1, $2)
-       ON CONFLICT (media_id) DO UPDATE SET status = $2, updated_at = NOW()
-       WHERE media_requests.status != $2`,
-      [mediaId, RequestStatus.Fulfilled],
+    await withDbRetry(
+      () =>
+        this.pool.query(
+          `INSERT INTO media_requests (media_id, status)
+           VALUES ($1, $2)
+           ON CONFLICT (media_id) DO UPDATE SET status = $2, updated_at = NOW()
+           WHERE media_requests.status != $2`,
+          [mediaId, RequestStatus.Fulfilled],
+        ),
+      { label: 'requests.upsertFulfilled' },
     );
   }
 
   async linkDownloadJob(mediaId: string, downloadJobId: string): Promise<void> {
-    await this.pool.query(`UPDATE media_requests SET download_job_id = $2, updated_at = NOW() WHERE media_id = $1`, [
-      mediaId,
-      downloadJobId,
-    ]);
+    await withDbRetry(
+      () =>
+        this.pool.query(`UPDATE media_requests SET download_job_id = $2, updated_at = NOW() WHERE media_id = $1`, [
+          mediaId,
+          downloadJobId,
+        ]),
+      { label: 'requests.linkDownloadJob' },
+    );
   }
 
   async fulfillByJobId(downloadJobId: string): Promise<void> {
-    await this.pool.query(`UPDATE media_requests SET status = $2, updated_at = NOW() WHERE download_job_id = $1`, [
-      downloadJobId,
-      RequestStatus.Fulfilled,
-    ]);
+    await withDbRetry(
+      () =>
+        this.pool.query(`UPDATE media_requests SET status = $2, updated_at = NOW() WHERE download_job_id = $1`, [
+          downloadJobId,
+          RequestStatus.Fulfilled,
+        ]),
+      { label: 'requests.fulfillByJobId' },
+    );
   }
 
   async get(id: string): Promise<RequestEntity | null> {
@@ -570,6 +566,15 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       WHERE media_id = $1
     `;
     await this.pool.query(query, [mediaId, titleId, url]);
+  }
+
+  async clearDarkiworldUrl(mediaId: string): Promise<void> {
+    const query = `
+      UPDATE media_requests
+      SET darkiworld_url = NULL
+      WHERE media_id = $1
+    `;
+    await this.pool.query(query, [mediaId]);
   }
 
   async listByStatuses(statuses: RequestStatus[]): Promise<RequestEntity[]> {

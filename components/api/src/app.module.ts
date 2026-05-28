@@ -28,6 +28,7 @@ import { jellyfinSyncProvider } from '@/providers/jellyfin-sync';
 import { adminMessagingProvider } from '@/providers/messaging/admin';
 import { allUserMessagingProvider } from '@/providers/messaging/all';
 import { userMessagingProviders } from '@/providers/messaging/user';
+import { namingAuditProviders } from '@/providers/naming-audit';
 import { postDownloadProviders } from '@/providers/post-download';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
 import { tmdbProvider } from '@/providers/tmdb';
@@ -35,8 +36,11 @@ import { traktProvider } from '@/providers/trakt';
 import { traktSyncProvider } from '@/providers/trakt-sync';
 import { traktPluginProvider } from '@/providers/traktPlugin';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
+import { HealthChecksService } from '@/services/health-checks';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
+import { namingAuditConfigSchema } from '@/services/naming-audit';
+import { StartupRecoveryService } from '@/services/startup-recovery';
 import { syncConfigSchema } from '@/services/trakt-sync';
 
 export const configSchema = z.object({
@@ -53,10 +57,12 @@ export const configSchema = z.object({
   darkiworld: darkiworldConfigSchema,
   fetchr: z.object({
     url: z.string(),
+    apiKey: z.string().optional(),
     downloadsPrefix: z.string(),
   }),
   tmdb: tmdbConfigSchema,
   mediaPaths: mediaPathsConfigSchema,
+  namingAudit: namingAuditConfigSchema,
   administration: z.object({
     discordChannelId: z.string(),
     adminIds: z.array(z.string().min(1)).min(1),
@@ -87,6 +93,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
     fetchr: env.fetchr,
     tmdb: env.tmdb,
     mediaPaths: env.mediaPaths,
+    namingAudit: env.namingAudit,
     administration: {
       adminIds: env.server.adminIds,
       discordChannelId: env.discord.channelId,
@@ -120,6 +127,9 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       fetchrSyncProvider,
       tmdbProvider,
       ...postDownloadProviders,
+      ...namingAuditProviders,
+      HealthChecksService,
+      StartupRecoveryService,
     ],
   })
   class App implements NestModule {

@@ -78,7 +78,11 @@ export class UsersController {
         )
         .catch(() => null);
       if (authCtxt) {
-        await this.traktPlugin.setConfig(user.jellyfinId!, authCtxt.accessToken);
+        await this.traktPlugin.setConfig(user.jellyfinId!, {
+          accessToken: authCtxt.accessToken,
+          refreshToken: authCtxt.refreshToken,
+          accessTokenExpiration: authCtxt.accessTokenExpiration,
+        });
       }
     });
 

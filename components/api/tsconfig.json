@@ -2,7 +2,7 @@
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
     "allowUnreachableCode": false,
-    "types": ["node"],
+    "types": ["node", "jest"],
     "rootDir": "./src",
     "declaration": false,
     "emitDecoratorMetadata": true,

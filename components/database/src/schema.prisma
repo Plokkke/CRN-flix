@@ -120,6 +120,28 @@ enum DownloadJobStatus {
   failed
 }
 
+model NamingAuditItem {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  auditRunId    String   @map("audit_run_id") @db.Uuid
+  mediaType     String   @map("media_type")
+  imdbId        String?  @map("imdb_id")
+  currentPath   String   @map("current_path")
+  expectedPath  String   @map("expected_path")
+  reasons       String[]
+  englishTitle  String?  @map("english_title")
+  year          Int?
+  seasonNumber  Int?     @map("season_number")
+  episodeNumber Int?     @map("episode_number")
+  status        String   @default("pending")
+  error         String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  appliedAt     DateTime? @map("applied_at") @db.Timestamptz(6)
+
+  @@index([auditRunId])
+  @@index([status])
+  @@map("naming_audit_items")
+}
+
 model DownloadJob {
   id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   jdownloaderPackageId BigInt            @unique @map("jdownloader_package_id") @db.BigInt

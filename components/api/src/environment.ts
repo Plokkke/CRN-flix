@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import { z } from 'zod';
 
 import { logger } from '@/services/logger';
@@ -29,8 +31,11 @@ export const environmentVariablesSchema = z
     FETCHR_DOWNLOADS_PREFIX: z.string().default('/downloads'),
     TMDB_API_KEY: z.string(),
     DOWNLOADS_PATH: z.string(),
-    MOVIES_PATH: z.string(),
-    SERIES_PATH: z.string(),
+    MEDIAS_PATH: z.string(),
+    MOVIES_FOLDER: z.string().default('movies'),
+    SERIES_FOLDER: z.string().default('series'),
+    PRIVATE_FOLDER: z.string().default('private'),
+    JELLYFIN_LIBRARY_ROOT: z.string().default('/medias'),
   })
   .transform((env) => ({
     name: env.SERVICE_NAME,
@@ -80,8 +85,14 @@ export const environmentVariablesSchema = z
     },
     mediaPaths: {
       downloads: env.DOWNLOADS_PATH,
-      movies: env.MOVIES_PATH,
-      series: env.SERIES_PATH,
+      movies: path.join(env.MEDIAS_PATH, env.MOVIES_FOLDER),
+      series: path.join(env.MEDIAS_PATH, env.SERIES_FOLDER),
+      privateMovies: path.join(env.MEDIAS_PATH, env.PRIVATE_FOLDER, env.MOVIES_FOLDER),
+      privateSeries: path.join(env.MEDIAS_PATH, env.PRIVATE_FOLDER, env.SERIES_FOLDER),
+    },
+    namingAudit: {
+      jellyfinLibraryRoot: env.JELLYFIN_LIBRARY_ROOT,
+      engineMediasPath: env.MEDIAS_PATH,
     },
   }));
 

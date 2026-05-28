@@ -52,7 +52,7 @@ export class PostDownloadPipeline {
           throw new Error(`Identification failed for ${path.basename(videoFile)}`);
         }
 
-        await this.placement.move(videoFile, identity);
+        await this.placement.move(videoFile, identity, job.metadata);
       }
 
       await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Completed);
@@ -103,7 +103,7 @@ export class PostDownloadPipeline {
           throw new Error(`Cannot identify ${path.basename(videoFile)} with IMDb ID ${imdbId}`);
         }
 
-        await this.placement.move(videoFile, identity);
+        await this.placement.move(videoFile, identity, job.metadata);
       }
 
       await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Completed);

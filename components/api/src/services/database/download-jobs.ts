@@ -1,9 +1,10 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import { z } from 'zod';
 
+import { withDbRetry } from '@/helpers/db-retry';
 import { Emitter } from '@/helpers/events';
-import { listen } from '@/helpers/sql';
+import { ListenChannel, ListenHandle, listenWithReconnect } from '@/helpers/sql';
 
 export enum DownloadJobStatus {
   Detected = 'detected',
@@ -77,48 +78,56 @@ export type DownloadJobEvents = {
   statusChange: DownloadJobStatusChangedEvent;
 };
 
-const LISTENING_MAP: {
-  channel: string;
-  schema: z.ZodType<DownloadJobEvents[keyof DownloadJobEvents]>;
-  event: keyof DownloadJobEvents;
-}[] = [
-  {
-    channel: 'download_job_created',
-    schema: downloadJobCreatedEventMorphing,
-    event: 'created',
-  },
-  {
-    channel: 'download_job_status_changed',
-    schema: downloadJobStatusChangedEventMorphing,
-    event: 'statusChange',
-  },
-];
-
 export class DownloadJobsRepository extends Emitter<DownloadJobEvents> implements OnModuleInit, OnModuleDestroy {
   private static readonly logger = new Logger(DownloadJobsRepository.name);
 
-  private listenClient: PoolClient | null = null;
+  private listenHandle: ListenHandle | null = null;
+  private onListenReconnect: (() => Promise<void>) | null = null;
 
   constructor(private readonly pool: Pool) {
     super();
   }
 
-  async onModuleInit(): Promise<void> {
-    this.listenClient = await this.pool.connect();
+  /** Wire a callback that runs after the LISTEN client reconnects (e.g. to replay missed events). */
+  setOnListenReconnect(cb: () => Promise<void>): void {
+    this.onListenReconnect = cb;
+  }
 
-    for (const { channel, schema, event } of LISTENING_MAP) {
-      DownloadJobsRepository.logger.log(`Subscribing to PostgreSQL channel: ${channel}`);
-      listen(this.listenClient, channel, schema, (msg: z.infer<typeof schema>) => {
-        DownloadJobsRepository.logger.debug(`Received event "${String(event)}": ${JSON.stringify(msg)}`);
-        this.emit(event, msg);
-      });
-    }
+  onModuleInit(): void {
+    const channels: ListenChannel[] = [
+      {
+        channel: 'download_job_created',
+        schema: downloadJobCreatedEventMorphing,
+        callback: (msg) => {
+          DownloadJobsRepository.logger.debug(`Received "created": ${JSON.stringify(msg)}`);
+          this.emit('created', msg as DownloadJobCreatedEvent);
+        },
+      },
+      {
+        channel: 'download_job_status_changed',
+        schema: downloadJobStatusChangedEventMorphing,
+        callback: (msg) => {
+          DownloadJobsRepository.logger.debug(`Received "statusChange": ${JSON.stringify(msg)}`);
+          this.emit('statusChange', msg as DownloadJobStatusChangedEvent);
+        },
+      },
+    ];
+    this.listenHandle = listenWithReconnect(
+      this.pool,
+      channels,
+      async () => {
+        if (this.onListenReconnect) {
+          await this.onListenReconnect();
+        }
+      },
+      'DownloadJobsRepository',
+    );
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.listenClient) {
-      this.listenClient.release();
-      this.listenClient = null;
+    if (this.listenHandle) {
+      await this.listenHandle.close();
+      this.listenHandle = null;
     }
   }
 
@@ -129,19 +138,23 @@ export class DownloadJobsRepository extends Emitter<DownloadJobEvents> implement
     sourcePaths?: string[];
     metadata?: Record<string, string>;
   }): Promise<DownloadJobEntity | null> {
-    const result = await this.pool.query<DownloadJobRecord>(
-      `INSERT INTO download_jobs (source_id, package_name, save_to, source_paths, status, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (source_id) DO NOTHING
-       RETURNING *`,
-      [
-        data.sourceId,
-        data.packageName,
-        data.saveTo,
-        data.sourcePaths ?? [],
-        DownloadJobStatus.Detected,
-        data.metadata ? JSON.stringify(data.metadata) : null,
-      ],
+    const result = await withDbRetry(
+      () =>
+        this.pool.query<DownloadJobRecord>(
+          `INSERT INTO download_jobs (source_id, package_name, save_to, source_paths, status, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (source_id) DO NOTHING
+           RETURNING *`,
+          [
+            data.sourceId,
+            data.packageName,
+            data.saveTo,
+            data.sourcePaths ?? [],
+            DownloadJobStatus.Detected,
+            data.metadata ? JSON.stringify(data.metadata) : null,
+          ],
+        ),
+      { label: 'downloadJobs.create' },
     );
     if (result.rows.length === 0) {
       return null;
@@ -150,35 +163,60 @@ export class DownloadJobsRepository extends Emitter<DownloadJobEvents> implement
   }
 
   async updateSourcePaths(id: string, sourcePaths: string[]): Promise<void> {
-    await this.pool.query(`UPDATE download_jobs SET source_paths = $2, updated_at = NOW() WHERE id = $1`, [
-      id,
-      sourcePaths,
-    ]);
+    await withDbRetry(
+      () =>
+        this.pool.query(`UPDATE download_jobs SET source_paths = $2, updated_at = NOW() WHERE id = $1`, [
+          id,
+          sourcePaths,
+        ]),
+      { label: 'downloadJobs.updateSourcePaths' },
+    );
   }
 
   async updateStatus(id: string, status: DownloadJobStatus, errorMessage?: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE download_jobs SET status = $2, error_message = $3, updated_at = NOW() WHERE id = $1`,
-      [id, status, errorMessage ?? null],
+    await withDbRetry(
+      () =>
+        this.pool.query(`UPDATE download_jobs SET status = $2, error_message = $3, updated_at = NOW() WHERE id = $1`, [
+          id,
+          status,
+          errorMessage ?? null,
+        ]),
+      { label: 'downloadJobs.updateStatus' },
     );
   }
 
   async get(id: string): Promise<DownloadJobEntity | null> {
-    const result = await this.pool.query<DownloadJobRecord>('SELECT * FROM download_jobs WHERE id = $1', [id]);
+    const result = await withDbRetry(
+      () => this.pool.query<DownloadJobRecord>('SELECT * FROM download_jobs WHERE id = $1', [id]),
+      { label: 'downloadJobs.get' },
+    );
+    return result.rows[0] ? mapRecord(result.rows[0]) : null;
+  }
+
+  async getBySourceId(sourceId: string): Promise<DownloadJobEntity | null> {
+    const result = await withDbRetry(
+      () => this.pool.query<DownloadJobRecord>('SELECT * FROM download_jobs WHERE source_id = $1', [sourceId]),
+      { label: 'downloadJobs.getBySourceId' },
+    );
     return result.rows[0] ? mapRecord(result.rows[0]) : null;
   }
 
   async updateDiscordMessageId(id: string, messageId: string): Promise<void> {
-    await this.pool.query(`UPDATE download_jobs SET discord_message_id = $2, updated_at = NOW() WHERE id = $1`, [
-      id,
-      messageId,
-    ]);
+    await withDbRetry(
+      () =>
+        this.pool.query(`UPDATE download_jobs SET discord_message_id = $2, updated_at = NOW() WHERE id = $1`, [
+          id,
+          messageId,
+        ]),
+      { label: 'downloadJobs.updateDiscordMessageId' },
+    );
   }
 
   async getByDiscordMessageId(messageId: string): Promise<DownloadJobEntity | null> {
-    const result = await this.pool.query<DownloadJobRecord>(
-      'SELECT * FROM download_jobs WHERE discord_message_id = $1',
-      [messageId],
+    const result = await withDbRetry(
+      () =>
+        this.pool.query<DownloadJobRecord>('SELECT * FROM download_jobs WHERE discord_message_id = $1', [messageId]),
+      { label: 'downloadJobs.getByDiscordMessageId' },
     );
     return result.rows[0] ? mapRecord(result.rows[0]) : null;
   }

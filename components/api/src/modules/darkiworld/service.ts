@@ -6,7 +6,27 @@ import { DarkiworldApi } from './api';
 import { DarkiworldAvailability, DarkiworldTitle } from './types';
 
 const MEDIA_TYPES_FILTER = new Set(['music', 'emulation', 'ebooks', 'logiciels', 'jeux']);
-const QUALITY_IDS = [86, 83, 50];
+
+const QUALITIES = {
+  HDLIGHT_1080P_X265: 86,
+  WEB_1080P_X265: 83,
+  WEB_1080P_LIGHT: 94,
+  HDLIGHT_1080P: 50,
+  WEB_1080P: 55,
+  HD_1080P: 52,
+  HDTV_1080P: 62,
+} as const;
+
+const QUALITY_IDS: number[] = [
+  QUALITIES.HDLIGHT_1080P_X265,
+  QUALITIES.WEB_1080P_X265,
+  QUALITIES.WEB_1080P_LIGHT,
+  QUALITIES.HDLIGHT_1080P,
+  QUALITIES.WEB_1080P,
+  QUALITIES.HD_1080P,
+  QUALITIES.HDTV_1080P,
+];
+
 const LANG_TRUEFRENCH = 8;
 const HOST_1FICHIER = 5;
 
@@ -19,12 +39,15 @@ function sanitizeForSearch(str: string): string {
     .trim();
 }
 
-function buildFiltersBase64(quality: number): string {
-  const filters = [
+function buildFiltersBase64(quality: number, episodeNumber: number | null): string {
+  const filters: Record<string, unknown>[] = [
     { key: 'id_host', value: HOST_1FICHIER, valueKey: HOST_1FICHIER, isInactive: false },
     { key: 'qualite', value: quality, isInactive: false, operator: '=', valueKey: quality },
     { key: 'langues', value: LANG_TRUEFRENCH, isInactive: false, operator: 'has', valueKey: LANG_TRUEFRENCH },
   ];
+  if (episodeNumber !== null) {
+    filters.push({ key: 'episode', value: episodeNumber, operator: '=' });
+  }
   return Buffer.from(JSON.stringify(filters)).toString('base64');
 }
 
@@ -38,22 +61,34 @@ export class DarkiworldService {
 
   async find(media: MediaInfos): Promise<DarkiworldAvailability> {
     if (!media.imdbId) {
-      return { available: false, title: null, downloadUrl: null };
+      return { status: 'not-found' };
     }
 
-    const title = await this.findTitle(media);
+    try {
+      const title = await this.findTitle(media);
+      if (!title) {
+        DarkiworldService.logger.debug(`No Darkiworld match for "${media.title}" (${media.imdbId})`);
+        return { status: 'not-found' };
+      }
 
-    if (!title) {
-      DarkiworldService.logger.debug(`No Darkiworld match for "${media.title}" (${media.imdbId})`);
-      return { available: false, title: null, downloadUrl: null };
+      const downloadUrl = await this.checkAvailability(title.id, media);
+      DarkiworldService.logger.log(
+        `Darkiworld "${title.name}" (${title.id}): ${downloadUrl ? 'available' : 'not available'}`,
+      );
+
+      if (!downloadUrl) {
+        return { status: 'not-found' };
+      }
+      return { status: 'available', title, downloadUrl };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      DarkiworldService.logger.warn(`find() inconclusive for "${media.title}" (${media.imdbId}): ${reason}`);
+      return { status: 'unknown', reason };
     }
+  }
 
-    const downloadUrl = await this.checkAvailability(title.id, media);
-    DarkiworldService.logger.log(
-      `Darkiworld "${title.name}" (${title.id}): ${downloadUrl ? 'available' : 'not available'}`,
-    );
-
-    return { available: downloadUrl !== null, title, downloadUrl };
+  async isHealthy(): Promise<boolean> {
+    return this.api.ping();
   }
 
   private async findTitle(media: MediaInfos): Promise<DarkiworldTitle | null> {
@@ -130,10 +165,11 @@ export class DarkiworldService {
   }
 
   private buildDownloadUrl(titleId: number, quality: number, media: MediaInfos): string {
-    const filters = buildFiltersBase64(quality);
+    const isEpisode = media.type === 'episode' && media.seasonNumber !== null && media.episodeNumber !== null;
+    const filters = buildFiltersBase64(quality, isEpisode ? media.episodeNumber : null);
     const basePath = `${this.siteHost}/titles/${titleId}`;
 
-    if (media.type === 'episode' && media.seasonNumber !== null && media.episodeNumber !== null) {
+    if (isEpisode) {
       return `${basePath}/season/${media.seasonNumber}/episode/${media.episodeNumber}/download?filters=${filters}`;
     }
 

@@ -3,6 +3,7 @@ import axios, { AxiosInstance } from 'axios';
 import { z } from 'zod';
 
 import { logAxiosError, logAxiosRequest, logAxiosResponse } from '@/helpers/axios-logger';
+import { applyAxiosRetry } from '@/helpers/axios-retry';
 
 export const tmdbConfigSchema = z.object({
   apiKey: z.string(),
@@ -77,6 +78,8 @@ export class TmdbApiService {
         throw error;
       },
     );
+
+    applyAxiosRetry(this.client, 'tmdb');
   }
 
   async searchMovie(title: string, year?: number): Promise<TmdbMovie[]> {
@@ -103,9 +106,12 @@ export class TmdbApiService {
     return response.data;
   }
 
-  async findByImdbId(imdbId: string): Promise<{ movies: TmdbMovie[]; tvShows: TmdbTvShow[] }> {
+  async findByImdbId(
+    imdbId: string,
+    opts: { language?: string } = {},
+  ): Promise<{ movies: TmdbMovie[]; tvShows: TmdbTvShow[] }> {
     const response = await this.client.get(`/find/${imdbId}`, {
-      params: { external_source: 'imdb_database' },
+      params: { external_source: 'imdb_id', ...(opts.language && { language: opts.language }) },
     });
     return {
       movies: response.data.movie_results ?? [],

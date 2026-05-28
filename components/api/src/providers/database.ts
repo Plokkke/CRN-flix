@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
+import { NamingAuditRepository } from '@/services/database/naming-audit';
 import { RequestsRepository } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { UsersRepository } from '@/services/database/users';
@@ -14,6 +15,7 @@ const REPOSITORIES = [
   UserActivitiesRepository,
   RequestsRepository,
   DownloadJobsRepository,
+  NamingAuditRepository,
 ];
 
 export const repositoryProviders: Provider[] = [

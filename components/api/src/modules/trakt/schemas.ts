@@ -217,6 +217,8 @@ export const progressShowSchema = z.object({
 export const deviceTokenSchema = z.object({
   access_token: z.string(),
   refresh_token: z.string(),
+  expires_in: z.number().int(),
+  created_at: z.number().int(),
 });
 
 export const activityTypeSchema = z.enum(ActivityType);

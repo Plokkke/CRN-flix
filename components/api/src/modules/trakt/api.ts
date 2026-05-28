@@ -95,6 +95,13 @@ function lastActivityOf(activity: ActivityType, lastActivities: LastActivities):
   return dates.sort((a, b) => b.diff(a).as('seconds'))[0];
 }
 
+export type TraktDeviceAuthResult = {
+  accessToken: string;
+  refreshToken: string;
+  /** ISO 8601 absolute expiration, suitable for Jellyfin Trakt plugin config. */
+  accessTokenExpiration: string;
+};
+
 export class TraktApi {
   private readonly api: AxiosInstance;
   private static readonly logger = new Logger(TraktApi.name);
@@ -164,10 +171,27 @@ export class TraktApi {
     return authDeviceCtxtSchema.parse(response.data);
   }
 
-  private async requestDeviceToken(code: string, interval: number = 1): Promise<UserAuthCtxt> {
+  private async requestDeviceToken(
+    code: string,
+    interval: number = 1,
+    expiresInSeconds: number = 600,
+  ): Promise<TraktDeviceAuthResult> {
+    // Trakt OAuth device flow polling states (per https://trakt.docs.apiary.io):
+    //   400 Pending — user hasn't approved yet; keep polling
+    //   404 Not Found — invalid device_code
+    //   409 Conflict — already approved for a different app
+    //   410 Gone — device_code expired (expires_in elapsed)
+    //   418 Teapot — user denied
+    //   429 Slow Down — we polled too fast, back off
+    let intervalMs = interval * 1000;
+    const deadline = Date.now() + expiresInSeconds * 1000;
     let response: AxiosResponse<unknown>;
-    do {
-      await wait(interval * 1000);
+
+    while (true) {
+      if (Date.now() >= deadline) {
+        throw new Error('Trakt device authorization timed out (expires_in elapsed)');
+      }
+      await wait(intervalMs);
       response = await this.api.post<unknown>(
         '/oauth/device/token',
         {
@@ -177,16 +201,40 @@ export class TraktApi {
         },
         { validateStatus: null },
       );
-    } while (response.status === 400);
 
-    if (response.status !== 200) {
-      throw new Error('Failed to authorize device');
+      if (response.status === 200) {
+        break;
+      }
+      if (response.status === 400) {
+        continue;
+      }
+      if (response.status === 429) {
+        TraktApi.logger.warn('Trakt device token poll rate-limited, doubling interval');
+        intervalMs = Math.min(intervalMs * 2, 60_000);
+        continue;
+      }
+      if (response.status === 404) {
+        throw new Error('Trakt device authorization failed: invalid device_code');
+      }
+      if (response.status === 409) {
+        throw new Error('Trakt device authorization failed: already used');
+      }
+      if (response.status === 410) {
+        throw new Error('Trakt device authorization expired before user approved');
+      }
+      if (response.status === 418) {
+        throw new Error('Trakt device authorization denied by user');
+      }
+      throw new Error(`Trakt device authorization failed with status ${response.status}`);
     }
 
     const tokens = deviceTokenSchema.parse(response.data);
+    // Trakt returns `created_at` (unix s) and `expires_in` (s); compose absolute expiration.
+    const expirationMs = (tokens.created_at + tokens.expires_in) * 1000;
     return {
-      id: '',
       accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      accessTokenExpiration: new Date(expirationMs).toISOString(),
     };
   }
 
@@ -229,7 +277,9 @@ export class TraktApi {
     );
   }
 
-  async authorizeDevice(codeHandler: (ctxt: AuthDevicePublicCtxt) => Promise<void> | void): Promise<UserAuthCtxt> {
+  async authorizeDevice(
+    codeHandler: (ctxt: AuthDevicePublicCtxt) => Promise<void> | void,
+  ): Promise<TraktDeviceAuthResult & { id: string }> {
     const authDeviceCtxt = await this.requestAuthDeviceCtxt();
 
     await codeHandler({
@@ -238,12 +288,15 @@ export class TraktApi {
       expires_in: authDeviceCtxt.expires_in,
     });
 
-    const authCtxt = await this.requestDeviceToken(authDeviceCtxt.device_code, authDeviceCtxt.interval);
+    const tokenResult = await this.requestDeviceToken(
+      authDeviceCtxt.device_code,
+      authDeviceCtxt.interval,
+      authDeviceCtxt.expires_in,
+    );
 
-    const userSettings = await this.requestUserSettings(authCtxt);
+    const userSettings = await this.requestUserSettings({ id: '', accessToken: tokenResult.accessToken });
 
-    authCtxt.id = userSettings.user.ids.slug;
-    return authCtxt;
+    return { ...tokenResult, id: userSettings.user.ids.slug };
   }
 
   async requestUserWatchlist(user: UserAuthCtxt, released: true): Promise<ReleasedMedia[]>;
@@ -311,7 +364,10 @@ export class TraktApi {
   }
 
   async requestShowProgress(user: UserAuthCtxt, showId: number): Promise<ProgressShowNoDetails> {
-    return this.withCache(user, ActivityType.Watched, async () => {
+    const lastActivities = await this.requestLastActivities(user);
+    const watchedTs = lastActivityOf(ActivityType.Watched, lastActivities);
+    const cacheKey = `show-progress-${user.id}-${showId}-${watchedTs}`;
+    return this.cache.withCache(cacheKey, async () => {
       const response = await this.api.get<unknown>(`/shows/${showId}/progress/watched`, {
         headers: { Authorization: getAuthorization(user) },
       });
@@ -322,9 +378,13 @@ export class TraktApi {
   async getWatchingShows(user: UserAuthCtxt): Promise<ProgressShow[]> {
     const hiddenShows = await this.requestUserHidden(user);
     const hiddenShowsIds = hiddenShows.map((hidden) => hidden.show.ids.trakt);
+    TraktApi.logger.log(`[progress] user ${user.id}: ${hiddenShows.length} hidden shows`);
 
-    let watchedShows = await this.requestUserWatched(user);
-    watchedShows = watchedShows.filter((show) => !hiddenShowsIds.includes(show.show.ids.trakt));
+    const allWatchedShows = await this.requestUserWatched(user);
+    const watchedShows = allWatchedShows.filter((show) => !hiddenShowsIds.includes(show.show.ids.trakt));
+    TraktApi.logger.log(
+      `[progress] user ${user.id}: ${allWatchedShows.length} watched shows (${watchedShows.length} after hidden filter)`,
+    );
 
     const progress = await watchedShows.reduce(
       async (acc, show) => {
@@ -337,7 +397,16 @@ export class TraktApi {
       Promise.resolve([] as ProgressShow[]),
     );
 
-    return progress.filter((show: ProgressShow) => show.next_episode !== null && show.aired > show.completed);
+    const eligible = progress.filter((show: ProgressShow) => show.next_episode !== null && show.aired > show.completed);
+    TraktApi.logger.log(
+      `[progress] user ${user.id}: ${progress.length} progress entries, ${eligible.length} with next episode pending (aired>completed)`,
+    );
+    for (const p of progress) {
+      TraktApi.logger.debug(
+        `[progress] "${p.show.title}" (${p.show.ids.trakt}): aired=${p.aired}, completed=${p.completed}, next=${p.next_episode ? `S${p.next_episode.season}E${p.next_episode.number}` : 'none'}`,
+      );
+    }
+    return eligible;
   }
 
   async requestUserRated(user: UserAuthCtxt, type: MediaType, rates: number[]): Promise<Media[]> {

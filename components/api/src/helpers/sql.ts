@@ -78,3 +78,135 @@ export function listen<T>(
 
   client.query(`LISTEN ${channel}`);
 }
+
+export type ListenChannel<T = unknown> = {
+  channel: string;
+  schema: z.ZodType<T>;
+  callback: (payload: T) => void;
+};
+
+export type ListenHandle = {
+  close(): Promise<void>;
+};
+
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30000;
+
+/**
+ * Listen on multiple PostgreSQL NOTIFY channels with auto-reconnect.
+ * On connection drop, reacquires a client, re-subscribes, and invokes onReconnect (e.g. to replay missed events).
+ */
+export function listenWithReconnect(
+  pool: Pool,
+  channels: ListenChannel[],
+  onReconnect?: () => Promise<void>,
+  loggerName = 'ListenWithReconnect',
+): ListenHandle {
+  const logger = new Logger(loggerName);
+  let client: PoolClient | null = null;
+  let stopped = false;
+  let reconnectTimer: NodeJS.Timeout | null = null;
+  let reconnectAttempt = 0;
+  let hasConnectedOnce = false;
+
+  const onNotification = (msg: Notification): void => {
+    const def = channels.find((c) => c.channel === msg.channel);
+    if (!def) {
+      return;
+    }
+    const parsed = def.schema.safeParse(msg.payload);
+    if (!parsed.success) {
+      logger.error(`Failed to parse payload "${msg.payload}" for channel ${def.channel}`);
+      return;
+    }
+    def.callback(parsed.data);
+  };
+
+  const detach = (c: PoolClient): void => {
+    c.removeAllListeners('notification');
+    c.removeAllListeners('error');
+    c.removeAllListeners('end');
+  };
+
+  const connect = async (): Promise<void> => {
+    if (stopped) {
+      return;
+    }
+    try {
+      client = await pool.connect();
+      reconnectAttempt = 0;
+      client.on('notification', onNotification);
+      client.on('error', (err) => {
+        logger.error(`Listen client error: ${err.message}`);
+        if (client) {
+          detach(client);
+          try {
+            client.release(err);
+          } catch {
+            /* ignore */
+          }
+          client = null;
+        }
+        scheduleReconnect();
+      });
+      client.on('end', () => {
+        logger.warn('Listen client ended');
+        if (client) {
+          detach(client);
+          client = null;
+        }
+        scheduleReconnect();
+      });
+      for (const { channel } of channels) {
+        await client.query(`LISTEN ${channel}`);
+        logger.log(`Subscribed to PostgreSQL channel: ${channel}`);
+      }
+      const wasReconnect = hasConnectedOnce;
+      hasConnectedOnce = true;
+      if (wasReconnect && onReconnect) {
+        try {
+          await onReconnect();
+        } catch (err) {
+          logger.error(`onReconnect callback failed: ${(err as Error).message}`);
+        }
+      }
+    } catch (err) {
+      logger.error(`Failed to acquire listen client: ${(err as Error).message}`);
+      scheduleReconnect();
+    }
+  };
+
+  function scheduleReconnect(): void {
+    if (stopped || reconnectTimer) {
+      return;
+    }
+    const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** reconnectAttempt) * (0.5 + Math.random());
+    reconnectAttempt += 1;
+    logger.warn(`Listen client lost, reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempt})`);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void connect();
+    }, delay);
+  }
+
+  void connect();
+
+  return {
+    async close(): Promise<void> {
+      stopped = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (client) {
+        detach(client);
+        try {
+          client.release();
+        } catch {
+          /* ignore */
+        }
+        client = null;
+      }
+    },
+  };
+}

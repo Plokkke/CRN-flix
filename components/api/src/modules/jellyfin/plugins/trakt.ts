@@ -101,15 +101,32 @@ export class TraktPlugin {
     return userConfig;
   }
 
-  async setConfig(userId: string, accessToken: string): Promise<void> {
+  async setConfig(
+    userId: string,
+    tokens: { accessToken: string; refreshToken: string; accessTokenExpiration: string },
+  ): Promise<void> {
     const userConfig: TraktPluginUserConfig = {
       ...DEFAULT_TRAKT_PLUGIN_CONFIG,
       LocationsExcluded: DEFAULT_TRAKT_PLUGIN_CONFIG.LocationsExcluded.slice(),
-      AccessToken: accessToken,
+      AccessToken: tokens.accessToken,
+      RefreshToken: tokens.refreshToken,
+      AccessTokenExpiration: tokens.accessTokenExpiration,
       LinkedMbUserId: userId,
     };
     const pluginConfig = await this.getFullConfig();
-    pluginConfig.TraktUsers.push(userConfig);
+    const existingIdx = pluginConfig.TraktUsers.findIndex((c) => c.LinkedMbUserId === userId);
+    if (existingIdx >= 0) {
+      // Merge to preserve any Jellyfin-managed fields we don't own (scrobble
+      // prefs, excluded locations) while overwriting the auth tuple cohesively.
+      pluginConfig.TraktUsers[existingIdx] = {
+        ...pluginConfig.TraktUsers[existingIdx],
+        AccessToken: tokens.accessToken,
+        RefreshToken: tokens.refreshToken,
+        AccessTokenExpiration: tokens.accessTokenExpiration,
+      };
+    } else {
+      pluginConfig.TraktUsers.push(userConfig);
+    }
     await this.jellyfin.setPluginConfiguration(this.pluginId, pluginConfig);
   }
 

@@ -14,6 +14,13 @@ export const configSchema = z.object({
 
 export type DarkiworldConfig = z.infer<typeof configSchema>;
 
+export class DarkiworldUnparseableResponseError extends Error {
+  constructor(query: string, preview: string) {
+    super(`Unparseable Darkiworld response for "${query}": ${preview}`);
+    this.name = 'DarkiworldUnparseableResponseError';
+  }
+}
+
 export class DarkiworldApi {
   private static readonly logger = new Logger(DarkiworldApi.name);
 
@@ -55,10 +62,19 @@ export class DarkiworldApi {
     const result = darkiworldSearchResponseSchema.safeParse(response.data);
     if (!result.success) {
       const preview = typeof response.data === 'string' ? response.data.slice(0, 200) : JSON.stringify(response.data);
-      DarkiworldApi.logger.warn(`Unexpected search response for "${query}": ${typeof response.data} — ${preview}`);
-      return [];
+      throw new DarkiworldUnparseableResponseError(query, preview);
     }
     return result.data.results;
+  }
+
+  async ping(): Promise<boolean> {
+    try {
+      await this.search('a', 1);
+      return true;
+    } catch (error) {
+      DarkiworldApi.logger.warn(`Health check failed: ${error instanceof Error ? error.message : error}`);
+      return false;
+    }
   }
 
   async listLinks(titleId: number, options: ListLinksOptions = {}): Promise<boolean> {
@@ -78,7 +94,7 @@ export class DarkiworldApi {
       const count = response.data?.count ?? response.data?.data?.count ?? 0;
       return count > 0;
     } catch (error) {
-      if (axios.isAxiosError(error) && (error.response?.status === 402 || error.response?.status === 500)) {
+      if (axios.isAxiosError(error) && error.response?.status === 402) {
         DarkiworldApi.logger.debug(`Links available for title ${titleId} (got ${error.response.status})`);
         return true;
       }

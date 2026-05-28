@@ -150,6 +150,14 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
           await this.adminsMessaging.updateRequestStatus(request);
 
+          const userNotifiableStatuses: RequestStatus[] = [RequestStatus.Fulfilled, RequestStatus.Rejected];
+          if (!userNotifiableStatuses.includes(request.status)) {
+            AppService.logger.debug(
+              `Skipping user notifications for request ${event.requestId} (status ${request.status} is transient)`,
+            );
+            return;
+          }
+
           const userIds = request.userRequests?.map((user) => user.userId) ?? [];
           AppService.logger.log(`Notifying ${userIds.length} users for request ${event.requestId}`);
           for (const userId of userIds) {
