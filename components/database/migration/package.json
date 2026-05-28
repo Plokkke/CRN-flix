@@ -1,0 +1,13 @@
+{
+  "name": "crn-flix-migration",
+  "version": "1.0.0",
+  "description": "Database migration runner for CRN-Flix",
+  "main": "src/migrate.js",
+  "scripts": {
+    "migrate": "node src/migrate.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.19.0",
+    "prisma": "^5.19.0"
+  }
+}

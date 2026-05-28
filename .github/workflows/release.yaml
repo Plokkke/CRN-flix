@@ -1,19 +1,61 @@
-name: Release
+name: Release Components
 
 on:
   push:
     branches: [ main ]
 
-permissions: write-all
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+  actions: read
 
 jobs:
-  release:
+  detect-changes:
+    name: Detect Changes
     runs-on: ubuntu-latest
-    name: Release
+    outputs:
+      has_changes: ${{ steps.changes.outputs.has_changes }}
+      has_infra_changes: ${{ steps.changes.outputs.has_infra_changes }}
+      has_docs_changes: ${{ steps.changes.outputs.has_docs_changes }}
+      components: ${{ steps.changes.outputs.components }}
+      release_type: ${{ steps.changes.outputs.release_type }}
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Node.js
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Detect releasable changes
+        id: changes
+        run: |
+          # Get last release tag or fallback to first commit
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          current_sha=$(git rev-parse HEAD)
+          
+          echo "Comparing changes from $last_tag to $current_sha"
+          python3 .github/scripts/detect_changes.py "$last_tag" "$current_sha" --release
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      released: ${{ steps.release.outputs.released }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
@@ -22,37 +64,189 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Release
+      - name: Run semantic release
+        id: release
         env:
-            GITHUB_TOKEN: ${{ secrets.X_GITHUB_TOKEN }}
-        run: npx semantic-release
+          GITHUB_TOKEN: ${{ secrets.X_GITHUB_TOKEN }}
+        run: |
+          npx semantic-release
+          if [[ $? -eq 0 ]]; then
+            version=$(node -p "require('./package.json').version")
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "released=true" >> $GITHUB_OUTPUT
+          else
+            echo "released=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Trigger publish workflow
-        if: success()
+      - name: Setup Python for version management
+        if: steps.release.outputs.released == 'true'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Update component versions (selective)
+        if: steps.release.outputs.released == 'true'
+        run: |
+          # Use our Python script for selective version management
+          python3 .github/scripts/manage_versions.py \
+            '${{ needs.detect-changes.outputs.components }}' \
+            '${{ needs.detect-changes.outputs.release_type }}' \
+            '${{ fromJSON(needs.detect-changes.outputs.components) != fromJSON("[]") }}'
+
+      - name: Commit version updates
+        if: steps.release.outputs.released == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add components/*/package.json
+          git commit -m "chore: sync component versions to ${{ steps.release.outputs.version }}" || echo "No changes to commit"
+          git push https://${{ secrets.X_GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+
+
+  get-registry-config:
+    name: Get Registry Configuration
+    runs-on: ubuntu-latest
+    needs: [detect-changes, release]
+    if: needs.release.outputs.released == 'true' && needs.detect-changes.outputs.has_changes == 'true'
+    outputs:
+      image_registry: ${{ steps.config.outputs.image_registry }}
+      app_slug: ${{ steps.config.outputs.app_slug }}
+      registry_host: ${{ steps.config.outputs.registry_host }}
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Get Production Secrets
+        id: terraform-config
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            terraform-config:projects/${{ vars.GCP_PROJECT_ID }}/secrets/terraform-config/versions/latest
+
+      - name: Extract registry configuration
+        id: config
+        run: |
+          # Extract image_registry from secrets
+          image_registry=$(echo '${{ steps.terraform-config.outputs.terraform-config }}' | jq -r '.image_registry')
+          registry_host=$(echo "$image_registry" | cut -d'/' -f1)
+          slug=$(echo '${{ steps.terraform-config.outputs.terraform-config }}' | jq -r '.slug')
+          
+          echo "image_registry=$image_registry" >> $GITHUB_OUTPUT
+          echo "registry_host=$registry_host" >> $GITHUB_OUTPUT
+          echo "app_slug=$slug" >> $GITHUB_OUTPUT
+
+  publish:
+    name: Publish Components
+    runs-on: ubuntu-latest
+    needs: [detect-changes, release, get-registry-config]
+    if: needs.release.outputs.released == 'true' && needs.detect-changes.outputs.has_changes == 'true'
+    strategy:
+      matrix:
+        component: ${{ fromJSON(needs.detect-changes.outputs.components) }}
+      fail-fast: false
+    defaults:
+      run:
+        working-directory: components/${{ matrix.component }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: 'components/${{ matrix.component }}/.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: 'components/${{ matrix.component }}/package-lock.json'
+
+      - name: Install component dependencies
+        run: |
+          npm ci
+
+      - name: Build component
+        run: |
+          npm run build
+
+      - name: Authenticate to Google Cloud
+        if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker registry
+        if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
+        run: |
+          # Configure Docker auth using registry host from previous job
+          gcloud auth configure-docker "${{ needs.get-registry-config.outputs.registry_host }}"
+
+      - name: Setup Docker Buildx
+        if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        if: hashFiles(format('components/{0}/Dockerfile', matrix.component)) != ''
+        uses: docker/build-push-action@v5
+        with:
+          context: components/${{ matrix.component }}
+          file: components/${{ matrix.component }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ needs.get-registry-config.outputs.image_registry }}/${{ needs.get-registry-config.outputs.app_slug }}-${{ matrix.component }}:${{ needs.release.outputs.version }}
+            ${{ needs.get-registry-config.outputs.image_registry }}/${{ needs.get-registry-config.outputs.app_slug }}-${{ matrix.component }}:latest
+          push: true
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+  post-release:
+    name: Post-Release Actions
+    runs-on: ubuntu-latest
+    needs: [detect-changes, release, publish]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Python for draft creation
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Create next development iteration
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Use our Python script to create draft versions and branch
+          python3 .github/scripts/create_drafts.py true
+
+      - name: Trigger deployment workflow
+        if: fromJSON(needs.detect-changes.outputs.components) != '[]'
         uses: actions/github-script@v7
         with:
           script: |
-            const version = require('./package.json').version;
+            const components = JSON.parse('${{ needs.detect-changes.outputs.components }}');
+            const version = '${{ needs.release.outputs.version }}';
+            
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: 'publish.yml',
+              workflow_id: 'deploy.yml',
               ref: 'main',
               inputs: {
-                version: version
+                version: version,
+                components: components.join(',')
               }
             });
-
-      - name: Create draft branch
-        if: success()
-        run: |
-            git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-            
-            npm version prepatch --no-git-tag --preid="draft"
-            DRAFT_VERSION=$(node -p "require('./package.json').version")
-            
-            git checkout -b ${DRAFT_VERSION}
-            git add .
-            git commit -m "chore(${DRAFT_VERSION}): prepare for next development iteration"
-            git push https://${{ secrets.X_GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${DRAFT_VERSION}

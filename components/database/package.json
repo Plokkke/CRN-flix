@@ -1,0 +1,22 @@
+{
+  "private": true,
+  "name": "@crn-flix/database",
+  "version": "1.0.0",
+  "description": "Database schema and Prisma client for CRN-Flix",
+  "scripts": {
+    "build": "npm run generate",
+    "generate": "prisma generate --schema=src/schema.prisma",
+    "introspect": "prisma db pull --schema=src/schema.prisma",
+    "studio": "prisma studio --schema=src/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.10.9",
+    "prisma": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

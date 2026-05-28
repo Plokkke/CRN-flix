@@ -1,0 +1,206 @@
+name: Deploy Components
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - local
+      version:
+        description: 'Version to deploy'
+        required: false
+        type: string
+      components:
+        description: 'Components to deploy (comma-separated, empty for all)'
+        required: false
+        type: string
+
+env:
+  TF_VERSION: '1.7.0'
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  prepare-deployment:
+    name: Prepare Deployment
+    runs-on: ubuntu-latest
+    outputs:
+      components: ${{ steps.components.outputs.components }}
+      version: ${{ steps.version.outputs.version }}
+      environment: ${{ steps.environment.outputs.environment }}
+      tf-backend: ${{ steps.backend.outputs.tf-backend }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Prepare deployment configuration
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_COMPONENTS: ${{ github.event.inputs.components }}
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+        run: |
+          # Use our Python script for deployment preparation
+          python3 .github/scripts/prepare_deployment.py
+
+  build-components:
+    name: Build ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    needs: prepare-deployment
+    if: needs.prepare-deployment.outputs.components != '[]'
+    strategy:
+      matrix:
+        component: ${{ fromJSON(needs.prepare-deployment.outputs.components) }}
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Load Docker Image
+        run: |
+          component="${{ matrix.component }}"
+          version="${{ needs.prepare-deployment.outputs.version }}"
+          
+          echo "Building Docker image for component: ${component}"
+          echo "Version: ${version}"
+          
+          if ! docker buildx build \
+            --platform linux/arm64 \
+            --tag crn-flix-${component}:${version} \
+            --tag crn-flix-${component}:latest \
+            --load \
+            components/${component}; then
+            echo "❌ Failed to build Docker image for ${component}"
+            exit 1
+          fi
+          
+          echo "✅ Successfully built Docker image for ${component}"
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, build-components]
+    environment: ${{ needs.prepare-deployment.outputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Get Terraform Variables
+        id: terraform-config
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            terraform-config:projects/${{ vars.GCP_PROJECT_ID }}/secrets/terraform-config/versions/latest
+
+      - name: Create Terraform Variables
+        run: |
+          environment="${{ needs.prepare-deployment.outputs.environment }}"
+          version="${{ needs.prepare-deployment.outputs.version }}"
+          
+          # Get terraform vars from Secret Manager and add deployment context
+          echo '${{ steps.terraform-config.outputs.terraform-config }}' | jq --arg env "$environment" --arg ver "$version" '
+          . + {
+            app_name: "crn-flix",
+            app_version: $ver,
+            environment: $env
+          }
+          ' > terraform/terraform.tfvars.json
+
+      - name: Configure Terraform Backend
+        if: needs.prepare-deployment.outputs.tf-backend == 'true'
+        run: |
+          cd terraform
+          cat > backend.tf << EOF
+          terraform {
+            backend "gcs" {
+              bucket = "${{ vars.TF_STATE_BUCKET }}"
+              prefix = "crn-flix/${{ needs.prepare-deployment.outputs.environment }}"
+            }
+          }
+          EOF
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          if [[ "${{ needs.prepare-deployment.outputs.tf-backend }}" == "true" ]]; then
+            terraform init
+          else
+            terraform init -backend=false
+          fi
+
+      - name: Setup SSH for Docker (remote only)
+        if: needs.prepare-deployment.outputs.environment != 'local'
+        run: |
+          # Create SSH key file for Docker connection from Terraform vars
+          mkdir -p ~/.ssh
+          echo '${{ steps.terraform-config.outputs.terraform-config }}' | jq -r '.docker_ssh_key' > ~/.ssh/docker_key
+          chmod 600 ~/.ssh/docker_key
+          
+          # Add SSH key to agent
+          eval $(ssh-agent -s)
+          ssh-add ~/.ssh/docker_key
+
+      - name: Terraform Validate
+        run: |
+          cd terraform
+          terraform validate
+
+      - name: Terraform Plan
+        run: |
+          cd terraform
+          terraform plan -detailed-exitcode -var-file=terraform.tfvars.json
+
+      - name: Terraform Apply
+        run: |
+          cd terraform
+          terraform apply -auto-approve -var-file=terraform.tfvars.json
+
+  deployment-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, build-components, deploy-infrastructure]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "🚀 Deployment Summary"
+          echo "===================="
+          echo "Environment: ${{ needs.prepare-deployment.outputs.environment }}"
+          echo "Version: ${{ needs.prepare-deployment.outputs.version }}"
+          echo "Components: ${{ needs.prepare-deployment.outputs.components }}"
+          echo ""
+          echo "Build Status: ${{ needs.build-components.result }}"
+          echo "Infrastructure Status: ${{ needs.deploy-infrastructure.result }}"
+          
+          if [[ "${{ needs.deploy-infrastructure.result }}" == "success" ]]; then
+            echo "✅ Deployment completed successfully!"
+          else
+            echo "❌ Deployment failed!"
+            exit 1
+          fi

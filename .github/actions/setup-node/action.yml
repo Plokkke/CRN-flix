@@ -1,0 +1,21 @@
+name: 'Setup Node.js'
+description: 'Setup Node.js with caching for component or root'
+inputs:
+  working-directory:
+    description: 'Working directory for package.json (optional)'
+    required: false
+    default: '.'
+  component:
+    description: 'Component name for cache path (optional)'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ inputs.working-directory }}/.nvmrc
+        cache: 'npm'
+        cache-dependency-path: ${{ inputs.component && format('components/{0}/package-lock.json', inputs.component) || 'package-lock.json' }}
