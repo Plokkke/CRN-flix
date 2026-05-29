@@ -24,8 +24,8 @@ export type RequestEntity = {
   createdAt: Date;
   updatedAt: Date;
   discordMessageId: string | null;
-  darkiworldTitleId: number | null;
-  darkiworldUrl: string | null;
+  indexerName: string | null;
+  indexerLink: string | null;
   media?: MediaEntity;
   userRequests?: RequestUserEntity[];
 };
@@ -51,8 +51,8 @@ type RequestRecord = {
   media_id: string;
   status: RequestStatus;
   discord_message_id: string | null;
-  darkiworld_title_id: number | null;
-  darkiworld_url: string | null;
+  indexer_name: string | null;
+  indexer_link: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -70,8 +70,8 @@ function fromRequestRecord(record: RequestRecord): RequestEntity {
     mediaId: record.media_id,
     status: record.status,
     discordMessageId: record.discord_message_id,
-    darkiworldTitleId: record.darkiworld_title_id,
-    darkiworldUrl: record.darkiworld_url,
+    indexerName: record.indexer_name,
+    indexerLink: record.indexer_link,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -168,20 +168,17 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
   async upsert(
     mediaId: string,
     status: RequestStatus = RequestStatus.Pending,
-    darkiworldTitleId: number | null = null,
-    darkiworldUrl: string | null = null,
     downloadJobId: string | null = null,
   ): Promise<RequestEntity> {
     const query = `
-      INSERT INTO media_requests (media_id, status, darkiworld_title_id, darkiworld_url, download_job_id)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO media_requests (media_id, status, download_job_id)
+      VALUES ($1, $2, $3)
       ON CONFLICT (media_id) DO NOTHING
       RETURNING *
     `;
-    const { rows } = await withDbRetry(
-      () => this.pool.query<RequestRecord>(query, [mediaId, status, darkiworldTitleId, darkiworldUrl, downloadJobId]),
-      { label: 'requests.upsert' },
-    );
+    const { rows } = await withDbRetry(() => this.pool.query<RequestRecord>(query, [mediaId, status, downloadJobId]), {
+      label: 'requests.upsert',
+    });
     if (!rows.length) {
       return (await this.get(mediaId))!;
     }
@@ -226,13 +223,13 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
 
   async get(id: string): Promise<RequestEntity | null> {
     const query = `
-            SELECT 
+            SELECT
                 json_build_object(
                     'mediaId', request.media_id,
                     'status', request.status,
                     'discordMessageId', request.discord_message_id,
-                    'darkiworldTitleId', request.darkiworld_title_id,
-                    'darkiworldUrl', request.darkiworld_url,
+                    'indexerName', request.indexer_name,
+                    'indexerLink', request.indexer_link,
                     'createdAt', request.created_at,
                     'updatedAt', request.updated_at,
                     'media', json_build_object(
@@ -244,6 +241,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                         'year', media.year,
                         'seasonNumber', media.season_number,
                         'episodeNumber', media.episode_number,
+                        'runtimeMinutes', media.runtime_minutes,
                         'createdAt', media.created_at,
                         'updatedAt', media.updated_at
                     ),
@@ -386,8 +384,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
           'mediaId', request.media_id,
           'status', request.status,
           'discordMessageId', request.discord_message_id,
-          'darkiworldTitleId', request.darkiworld_title_id,
-          'darkiworldUrl', request.darkiworld_url,
+          'indexerName', request.indexer_name,
+          'indexerLink', request.indexer_link,
           'createdAt', request.created_at,
           'updatedAt', request.updated_at,
           'media', json_build_object(
@@ -399,6 +397,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'year', media.year,
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,
+            'runtimeMinutes', media.runtime_minutes,
             'createdAt', media.created_at,
             'updatedAt', media.updated_at
           ),
@@ -500,6 +499,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         m.year,
         m.season_number,
         m.episode_number,
+        m.runtime_minutes,
         m.created_at as media_created_at,
         m.updated_at as media_updated_at,
         COALESCE(
@@ -528,8 +528,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       LEFT JOIN request_users ru ON mr.media_id = ru.request_media_id
       LEFT JOIN users u ON ru.user_id = u.id
       WHERE mr.discord_message_id IS NULL AND mr.status = 'pending'
-      GROUP BY mr.media_id, mr.status, mr.discord_message_id, mr.darkiworld_title_id, mr.darkiworld_url, mr.created_at, mr.updated_at,
-               m.id, m.imdb_id, m.type, m.title, m.original_title, m.year, m.season_number, m.episode_number, m.created_at, m.updated_at
+      GROUP BY mr.media_id, mr.status, mr.discord_message_id, mr.indexer_name, mr.indexer_link, mr.created_at, mr.updated_at,
+               m.id, m.imdb_id, m.type, m.title, m.original_title, m.year, m.season_number, m.episode_number, m.runtime_minutes, m.created_at, m.updated_at
       ORDER BY mr.created_at DESC
     `;
 
@@ -539,8 +539,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
       mediaId: row.media_id,
       status: row.status,
       discordMessageId: row.discord_message_id,
-      darkiworldTitleId: row.darkiworld_title_id,
-      darkiworldUrl: row.darkiworld_url,
+      indexerName: row.indexer_name,
+      indexerLink: row.indexer_link,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       media: {
@@ -552,6 +552,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         year: row.year,
         seasonNumber: row.season_number,
         episodeNumber: row.episode_number,
+        runtimeMinutes: row.runtime_minutes,
         createdAt: row.media_created_at,
         updatedAt: row.media_updated_at,
       },
@@ -559,19 +560,19 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     }));
   }
 
-  async setDarkiworldInfo(mediaId: string, titleId: number, url: string | null): Promise<void> {
+  async setIndexerInfo(mediaId: string, indexerName: string, link: string): Promise<void> {
     const query = `
       UPDATE media_requests
-      SET darkiworld_title_id = $2, darkiworld_url = $3
+      SET indexer_name = $2, indexer_link = $3, updated_at = NOW()
       WHERE media_id = $1
     `;
-    await this.pool.query(query, [mediaId, titleId, url]);
+    await this.pool.query(query, [mediaId, indexerName, link]);
   }
 
-  async clearDarkiworldUrl(mediaId: string): Promise<void> {
+  async clearIndexerInfo(mediaId: string): Promise<void> {
     const query = `
       UPDATE media_requests
-      SET darkiworld_url = NULL
+      SET indexer_name = NULL, indexer_link = NULL, updated_at = NOW()
       WHERE media_id = $1
     `;
     await this.pool.query(query, [mediaId]);
@@ -584,8 +585,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
           'mediaId', request.media_id,
           'status', request.status,
           'discordMessageId', request.discord_message_id,
-          'darkiworldTitleId', request.darkiworld_title_id,
-          'darkiworldUrl', request.darkiworld_url,
+          'indexerName', request.indexer_name,
+          'indexerLink', request.indexer_link,
           'createdAt', request.created_at,
           'updatedAt', request.updated_at,
           'media', json_build_object(
@@ -597,6 +598,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'year', media.year,
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,
+            'runtimeMinutes', media.runtime_minutes,
             'createdAt', media.created_at,
             'updatedAt', media.updated_at
           )

@@ -41,6 +41,11 @@ const RECONNECT_MAX_MS = 60000;
 const HEARTBEAT_INTERVAL_MS = 30000;
 const HEARTBEAT_TIMEOUT_MS = 10000;
 const MAX_MISSED_PONGS = 2;
+const PLUGINS_CACHE_TTL_MS = 5 * 60 * 1000;
+const PLUGINS_REQUEST_TIMEOUT_MS = 5000;
+
+type FetchrPluginInfo = { name: string; urlPattern: string };
+type CompiledPlugin = { name: string; pattern: RegExp };
 
 @Injectable()
 export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
@@ -54,6 +59,7 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
   private missedPongs = 0;
   private shuttingDown = false;
   private readonly fetchrApiUrl: string;
+  private pluginsCache: { fetchedAt: number; plugins: CompiledPlugin[] } | null = null;
 
   constructor(
     private readonly downloadJobs: DownloadJobsRepository,
@@ -222,6 +228,39 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
 
   download(url: string, metadata?: Record<string, string>): void {
     this.send({ topic: 'download::register', payload: { url, metadata } });
+  }
+
+  async canHandle(url: string): Promise<boolean> {
+    const plugins = await this.getPlugins();
+    return plugins.some((p) => p.pattern.test(url));
+  }
+
+  private async getPlugins(): Promise<CompiledPlugin[]> {
+    const now = Date.now();
+    if (this.pluginsCache && now - this.pluginsCache.fetchedAt < PLUGINS_CACHE_TTL_MS) {
+      return this.pluginsCache.plugins;
+    }
+
+    try {
+      const headers = this.fetchrApiKey ? { 'x-api-key': this.fetchrApiKey } : undefined;
+      const response = await axios.get<{ hosts?: FetchrPluginInfo[] }>(`${this.fetchrApiUrl}/plugins`, {
+        headers,
+        timeout: PLUGINS_REQUEST_TIMEOUT_MS,
+      });
+      const compiled = (response.data?.hosts ?? []).flatMap((info) => {
+        try {
+          return [{ name: info.name, pattern: new RegExp(info.urlPattern) }];
+        } catch {
+          FetchrSyncService.logger.debug(`Invalid Fetchr plugin urlPattern: ${info.urlPattern}`);
+          return [];
+        }
+      });
+      this.pluginsCache = { fetchedAt: now, plugins: compiled };
+      return compiled;
+    } catch (err) {
+      FetchrSyncService.logger.warn(`Failed to fetch Fetchr plugins: ${(err as Error).message}`);
+      return this.pluginsCache?.plugins ?? [];
+    }
   }
 
   private mapPath(fetchrPath: string): string {

@@ -4,8 +4,6 @@ import { DateTime } from 'luxon';
 import { z } from 'zod';
 
 import { concurrent } from '@/helpers/concurrent';
-import { appendQueryParams } from '@/helpers/url';
-import { DarkiworldService } from '@/modules/darkiworld/service';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
 import { Episode, Media, ProgressShow, Show, UserAuthCtxt } from '@/modules/trakt/types';
@@ -13,6 +11,7 @@ import { MediaInfos, MediasRepository, MediaType } from '@/services/database/med
 import { RequestsRepository, RequestStatus, SyncRequestSnapshot } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { UsersRepository, type UserEntity } from '@/services/database/users';
+import { IndexerOrchestrator } from '@/services/indexer-orchestrator';
 
 export const syncConfigSchema = z.object({
   ratingThreshold: z.number().int().optional().default(10),
@@ -45,7 +44,7 @@ function compositeKey(media: Pick<MediaInfos, 'imdbId' | 'seasonNumber' | 'episo
   return `${media.imdbId}:${media.seasonNumber ?? -1}:${media.episodeNumber ?? -1}`;
 }
 
-const DARKIWORLD_CONCURRENCY = 5;
+const NEW_REQUEST_CONCURRENCY = 5;
 
 // --- Per-media types ---
 
@@ -64,7 +63,7 @@ type GatheredData = {
 
 // --- Helpers ---
 
-function mapEpisodeToRequest(episode: Episode, show: Show): MediaInfos {
+function mapEpisodeToRequest(episode: Episode, show: Show, runtimeMinutes: number | null): MediaInfos {
   return {
     type: MediaType.Episode,
     title: show.title,
@@ -73,6 +72,7 @@ function mapEpisodeToRequest(episode: Episode, show: Show): MediaInfos {
     imdbId: show.ids.imdb ?? '',
     seasonNumber: episode.season,
     episodeNumber: episode.number,
+    runtimeMinutes,
   };
 }
 
@@ -118,7 +118,7 @@ export class TraktSyncService {
     private readonly userActivitiesRepository: UserActivitiesRepository,
     private readonly mediasRepository: MediasRepository,
     private readonly requestsRepository: RequestsRepository,
-    private readonly darkiworldService: DarkiworldService,
+    private readonly indexerOrchestrator: IndexerOrchestrator,
   ) {}
 
   async sync(): Promise<void> {
@@ -133,13 +133,13 @@ export class TraktSyncService {
       await this.syncRequestReasons(snapshot, desiredKindsByUserId, gathered.syncedKindsByUserId);
     }
 
-    // New requests: compute + apply concurrently (Darkiworld calls)
+    // New requests: persist + query indexers concurrently
     const newMediaRequests = Object.entries(gathered.desiredMediaByKey).filter(([key]) => !mediaRequestByKey[key]);
     TraktSyncService.logger.log(
-      `Processing ${newMediaRequests.length} new medias (concurrency: ${DARKIWORLD_CONCURRENCY})`,
+      `Processing ${newMediaRequests.length} new medias (concurrency: ${NEW_REQUEST_CONCURRENCY})`,
     );
 
-    await concurrent(newMediaRequests, DARKIWORLD_CONCURRENCY, ([, desired]) => this.processNewRequest(desired));
+    await concurrent(newMediaRequests, NEW_REQUEST_CONCURRENCY, ([, desired]) => this.processNewRequest(desired));
 
     // Update activity timestamps
     for (const [userId, kinds] of Object.entries(gathered.syncedKindsByUserId)) {
@@ -218,41 +218,20 @@ export class TraktSyncService {
   }
 
   private async processNewRequest(desiredMedia: DesiredMedia): Promise<void> {
-    let finalStatus: RequestStatus = RequestStatus.Missing;
-    let darkiworldTitleId: number | null = null;
-    let darkiworldUrl: string | null = null;
-
-    if (desiredMedia.mediaInfos.imdbId) {
-      try {
-        const result = await this.darkiworldService.find(desiredMedia.mediaInfos);
-        if (result.status === 'available') {
-          darkiworldTitleId = result.title.id;
-          darkiworldUrl = result.downloadUrl;
-          finalStatus = RequestStatus.Pending;
-        } else if (result.status === 'unknown') {
-          TraktSyncService.logger.warn(
-            `Darkiworld inconclusive for new request "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${result.reason}`,
-          );
-        }
-      } catch (error) {
-        TraktSyncService.logger.error(
-          `Darkiworld check failed for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
-        );
-      }
-    }
-
     try {
       const media = await this.mediasRepository.upsert(desiredMedia.mediaInfos);
-      if (darkiworldUrl && media.imdbId) {
-        darkiworldUrl = appendQueryParams(darkiworldUrl, {
-          'crn-flix-request-id': media.id,
-          imdbid: media.imdbId,
-        });
-      }
-      await this.requestsRepository.upsert(media.id, finalStatus, darkiworldTitleId, darkiworldUrl);
+      const request = await this.requestsRepository.upsert(media.id, RequestStatus.Missing);
 
       for (const [userId, reasons] of Object.entries(desiredMedia.requestKindsByUserId)) {
         await this.requestsRepository.setUserRequestReasons(media.id, userId, reasons);
+      }
+
+      try {
+        await this.indexerOrchestrator.runForRequest({ ...request, media });
+      } catch (error) {
+        TraktSyncService.logger.warn(
+          `Indexer orchestration failed for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
+        );
       }
     } catch (error) {
       TraktSyncService.logger.error(
@@ -358,6 +337,7 @@ export class TraktSyncService {
         year: m.movie.year,
         seasonNumber: null,
         episodeNumber: null,
+        runtimeMinutes: null,
       }));
     const episodes: MediaInfos[] = medias
       .filter((media) => media.type === 'episode')
@@ -369,6 +349,7 @@ export class TraktSyncService {
         year: m.show.year,
         seasonNumber: m.episode.season,
         episodeNumber: m.episode.number,
+        runtimeMinutes: null,
       }));
 
     const showExpender = buffering ? this.bufferedExpansion.bind(this) : this.expandShow.bind(this);
@@ -387,7 +368,7 @@ export class TraktSyncService {
     const episodes = seasons.flatMap((season) => (season.number > 0 ? season.episodes : []));
 
     return filterAiredEpisodes(episodes, showDetails.aired_episodes, 0).map((episode) =>
-      mapEpisodeToRequest(episode, show),
+      mapEpisodeToRequest(episode, show, showDetails.runtime),
     );
   }
 
@@ -404,7 +385,7 @@ export class TraktSyncService {
       .reduce((acc, s) => acc + s.episodes.length, 0);
 
     return filterAiredEpisodes(season.episodes, showDetails.aired_episodes, startIndex).map((episode) =>
-      mapEpisodeToRequest(episode, show),
+      mapEpisodeToRequest(episode, show, showDetails.runtime),
     );
   }
 
@@ -430,6 +411,6 @@ export class TraktSyncService {
 
     return episodes
       .slice(episodeIndex, Math.min(episodeIndex + count, showDetails.aired_episodes ?? Infinity))
-      .map((episode) => mapEpisodeToRequest(episode, show));
+      .map((episode) => mapEpisodeToRequest(episode, show, showDetails.runtime));
   }
 }

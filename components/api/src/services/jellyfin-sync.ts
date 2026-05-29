@@ -25,6 +25,7 @@ function jellyfinMediaToInfos(m: JellyfinMedia, seriesImdbById: Map<string, stri
     year: m.ProductionYear,
     seasonNumber: m.ParentIndexNumber ?? null,
     episodeNumber: m.IndexNumber ?? null,
+    runtimeMinutes: null,
   };
 }
 

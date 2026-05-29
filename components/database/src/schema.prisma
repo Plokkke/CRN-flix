@@ -38,16 +38,17 @@ model UserActivity {
 }
 
 model Media {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  imdbId        String   @map("imdb_id") @db.VarChar(32)
-  type          MediaType
-  title         String   @db.VarChar(255)
-  originalTitle String?  @map("original_title") @db.VarChar(255)
-  year          Int?
-  seasonNumber  Int?     @map("season_number")
-  episodeNumber Int?     @map("episode_number")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  imdbId         String   @map("imdb_id") @db.VarChar(32)
+  type           MediaType
+  title          String   @db.VarChar(255)
+  originalTitle  String?  @map("original_title") @db.VarChar(255)
+  year           Int?
+  seasonNumber   Int?     @map("season_number")
+  episodeNumber  Int?     @map("episode_number")
+  runtimeMinutes Int?     @map("runtime_minutes")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   mediaRequest  MediaRequest?
 
@@ -59,8 +60,8 @@ model MediaRequest {
   mediaId            String              @id @map("media_id") @db.Uuid
   status             MediaRequestStatus  @default(missing)
   discordMessageId   String?             @map("discord_message_id") @db.VarChar(50)
-  darkiworldTitleId  Int?                @map("darkiworld_title_id")
-  darkiworldUrl      String?             @map("darkiworld_url")
+  indexerName        String?             @map("indexer_name")
+  indexerLink        String?             @map("indexer_link")
   downloadJobId      String?             @map("download_job_id") @db.Uuid
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

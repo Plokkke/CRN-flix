@@ -222,9 +222,10 @@ export class MediaIdentifierService {
       year: identification.year,
       seasonNumber,
       episodeNumber,
+      runtimeMinutes: null,
     });
 
-    const request = await this.requests.upsert(media.id, RequestStatus.Fulfilled, null, null, downloadJobId);
+    const request = await this.requests.upsert(media.id, RequestStatus.Fulfilled, downloadJobId);
     MediaIdentifierService.logger.log(
       `Created spontaneous media+request for "${identification.title}" (${identification.imdbId})`,
     );

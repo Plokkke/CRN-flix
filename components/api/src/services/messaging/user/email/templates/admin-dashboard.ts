@@ -97,7 +97,7 @@ const getRequestsSection = (requests: RequestEntity[]): string => {
       const users = request.userRequests?.map((ur) => ur.user?.name ?? 'Unknown').join(', ') ?? '-';
       return `
     <tr data-status="${request.status}" data-users="${users}">
-      <td>${request.darkiworldUrl ? `<a href="${request.darkiworldUrl}" target="_blank" rel="noopener">${getMediaLabel(request)}</a>` : getMediaLabel(request)}</td>
+      <td>${request.indexerLink ? `<a href="${request.indexerLink}" target="_blank" rel="noopener">${getMediaLabel(request)}</a>` : getMediaLabel(request)}</td>
       <td>${request.media?.type ?? '-'}</td>
       <td><code>${request.media?.imdbId ?? '-'}</code></td>
       <td>${users}</td>

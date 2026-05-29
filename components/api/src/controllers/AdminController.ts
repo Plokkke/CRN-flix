@@ -2,10 +2,10 @@ import { Body, Controller, Get, Header, Logger, Param, Post, Query, Res } from '
 import { Response } from 'express';
 
 import { ContextService } from '@/services/context';
-import { DarkiworldSyncService } from '@/services/darkiworld-sync';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
 import { RequestsRepository } from '@/services/database/requests';
 import { DiscordSyncService } from '@/services/discord-sync';
+import { IndexerSyncService } from '@/services/indexer-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
 import { adminNamingAuditTemplate } from '@/services/messaging/user/email/templates/admin-naming-audit';
@@ -14,7 +14,7 @@ import { TraktSyncService } from '@/services/trakt-sync';
 
 const JOBS = [
   { name: 'trakt-sync', schedule: 'Every 5 minutes' },
-  { name: 'darkiworld-sync', schedule: 'Every hour' },
+  { name: 'indexer-sync', schedule: 'Every hour' },
   { name: 'jellyfin-sync', schedule: 'Every 15 minutes' },
   { name: 'discord-sync', schedule: 'Every 5 minutes' },
   { name: 'naming-audit', schedule: 'Manual only' },
@@ -32,7 +32,7 @@ export class AdminController {
     private readonly contextService: ContextService,
     private readonly traktSync: TraktSyncService,
     private readonly jellyfinSync: JellyfinSyncService,
-    private readonly darkiworldSync: DarkiworldSyncService,
+    private readonly indexerSync: IndexerSyncService,
     private readonly discordSync: DiscordSyncService,
     private readonly requestsRepository: RequestsRepository,
     private readonly namingAudit: NamingAuditService,
@@ -40,7 +40,7 @@ export class AdminController {
   ) {
     this.jobHandlers = {
       'trakt-sync': () => this.traktSync.sync(),
-      'darkiworld-sync': () => this.darkiworldSync.sync(),
+      'indexer-sync': () => this.indexerSync.sync(),
       'jellyfin-sync': () => this.jellyfinSync.sync(),
       'discord-sync': () => this.discordSync.sync(),
       'naming-audit': async () => {

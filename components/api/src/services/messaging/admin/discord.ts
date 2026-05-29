@@ -125,8 +125,8 @@ function buildRequestEmbed(request: RequestEntity, color: number): EmbedBuilder 
     embed.addFields({ name: 'IMDb', value: media.imdbId, inline: true });
   }
 
-  if (request.darkiworldUrl) {
-    embed.addFields({ name: 'Darkiworld', value: `[Telecharger](${request.darkiworldUrl})`, inline: true });
+  if (request.indexerLink) {
+    embed.addFields({ name: 'Lien', value: `[Telecharger](${request.indexerLink})`, inline: true });
   }
 
   return embed;

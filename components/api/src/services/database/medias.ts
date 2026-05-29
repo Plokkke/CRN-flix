@@ -15,6 +15,7 @@ export type MediaEntity = {
   year: number | null;
   seasonNumber: number | null;
   episodeNumber: number | null;
+  runtimeMinutes: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -30,6 +31,7 @@ type MediaRecord = {
   year: number | null;
   season_number: number | null;
   episode_number: number | null;
+  runtime_minutes: number | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -44,6 +46,7 @@ function fromMediaRecord(record: MediaRecord): MediaEntity {
     year: record.year,
     seasonNumber: record.season_number,
     episodeNumber: record.episode_number,
+    runtimeMinutes: record.runtime_minutes,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -98,10 +101,14 @@ export class MediasRepository {
 
   async upsert(infos: MediaInfos): Promise<MediaEntity> {
     const query = `
-      INSERT INTO medias (imdb_id, type, title, original_title, year, season_number, episode_number)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO medias (imdb_id, type, title, original_title, year, season_number, episode_number, runtime_minutes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (imdb_id, COALESCE(season_number, -1), COALESCE(episode_number, -1))
-      DO UPDATE SET title = $3, original_title = COALESCE($4, medias.original_title), year = $5
+      DO UPDATE SET
+        title = $3,
+        original_title = COALESCE($4, medias.original_title),
+        year = $5,
+        runtime_minutes = COALESCE($8, medias.runtime_minutes)
       RETURNING *
     `;
     const { rows } = await this.pool.query<MediaRecord>(query, [
@@ -112,6 +119,7 @@ export class MediasRepository {
       infos.year,
       infos.seasonNumber,
       infos.episodeNumber,
+      infos.runtimeMinutes,
     ]);
 
     if (rows.length) {

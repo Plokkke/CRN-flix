@@ -180,7 +180,7 @@ export class JellyfinMediaService {
           ...(requireImdbId && { hasImdbId: true }),
           // Series are included so we can resolve each episode's owning show
           // IMDb id (ProviderIds.Imdb on an Episode is the EPISODE's imdb,
-          // not the series' — which breaks Darkiworld/TMDB show lookups).
+          // not the series' — which breaks indexer/TMDB show lookups).
           includeItemTypes: 'Movie,Series,Episode',
         },
       });

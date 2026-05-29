@@ -7,7 +7,6 @@ import { CronJob } from 'cron';
 import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
 import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
-import { DarkiworldSyncService } from '@/services/darkiworld-sync';
 import {
   DownloadJobEvents,
   DownloadJobsRepository,
@@ -26,6 +25,7 @@ import {
 } from '@/services/database/requests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
 import { FetchrSyncService } from '@/services/fetchr-sync';
+import { IndexerSyncService } from '@/services/indexer-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import {
@@ -58,7 +58,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly traktSync: TraktSyncService,
     private readonly jellyfinSync: JellyfinSyncService,
-    private readonly darkiworldSync: DarkiworldSyncService,
+    private readonly indexerSync: IndexerSyncService,
     private readonly discordSync: DiscordSyncService,
     private readonly jellyfin: JellyfinMediaService,
     private readonly messaging: AllUserMessaging,
@@ -77,7 +77,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
     if (process.env.NODE_ENV === 'production') {
       this.registerCronJob('trakt-sync-job', '*/5 * * * *', () => this.runSync());
-      this.registerCronJob('darkiworld-sync-job', '0 * * * *', () => this.darkiworldSync.sync());
+      this.registerCronJob('indexer-sync-job', '0 * * * *', () => this.indexerSync.sync());
       this.registerCronJob('jellyfin-sync-job', '*/15 * * * *', () => this.jellyfinSync.sync());
       this.registerCronJob('discord-sync-job', '*/5 * * * *', () => this.discordSync.sync());
     }
@@ -381,6 +381,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       year: identification.year,
       seasonNumber: null,
       episodeNumber: null,
+      runtimeMinutes: null,
     });
 
     await this.requestsRepository.upsert(media.id, RequestStatus.Pending);

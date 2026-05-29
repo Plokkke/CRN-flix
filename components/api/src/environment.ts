@@ -2,7 +2,37 @@ import * as path from 'path';
 
 import { z } from 'zod';
 
+import { Host, Language, Quality, SizePolicy } from '@/modules/indexer/preferences';
 import { logger } from '@/services/logger';
+
+function parseCsv<T extends string>(value: string, allowed: readonly T[]): T[] {
+  if (!value.trim()) {
+    return [];
+  }
+  const allowedSet = new Set<string>(allowed);
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && allowedSet.has(s)) as T[];
+}
+
+function parseBytesPerMinute(json: string): SizePolicy['bytesPerMinute'] {
+  if (!json.trim()) {
+    return {};
+  }
+  const parsed: unknown = JSON.parse(json);
+  if (typeof parsed !== 'object' || parsed === null) {
+    return {};
+  }
+  const result: SizePolicy['bytesPerMinute'] = {};
+  const validQualities = new Set<string>(Object.values(Quality));
+  for (const [key, value] of Object.entries(parsed)) {
+    if (validQualities.has(key) && typeof value === 'number' && value > 0) {
+      result[key as Quality] = value;
+    }
+  }
+  return result;
+}
 
 export const environmentVariablesSchema = z
   .object({
@@ -24,8 +54,11 @@ export const environmentVariablesSchema = z
     DATABASE_NAME: z.string(),
     DATABASE_USERNAME: z.string(),
     DATABASE_PASSWORD: z.string(),
-    DARKIWORLD_API_KEY: z.string(),
-    DARKIWORLD_HOST: z.string().default('https://darkiworld.com'),
+    INDEXER_ALLOWED_QUALITIES: z.string().default(''),
+    INDEXER_ALLOWED_LANGUAGES: z.string().default(''),
+    INDEXER_ALLOWED_HOSTS: z.string().default(''),
+    INDEXER_SIZE_TOLERANCE: z.coerce.number().default(1),
+    INDEXER_BYTES_PER_MIN_JSON: z.string().default(''),
     FETCHR_URL: z.string(),
     FETCHR_API_KEY: z.string().optional(),
     FETCHR_DOWNLOADS_PREFIX: z.string().default('/downloads'),
@@ -71,9 +104,16 @@ export const environmentVariablesSchema = z
       username: env.DATABASE_USERNAME,
       password: env.DATABASE_PASSWORD,
     },
-    darkiworld: {
-      apiKey: env.DARKIWORLD_API_KEY,
-      host: env.DARKIWORLD_HOST,
+    indexer: {
+      preferences: {
+        allowedQualities: parseCsv(env.INDEXER_ALLOWED_QUALITIES, Object.values(Quality)),
+        allowedLanguages: parseCsv(env.INDEXER_ALLOWED_LANGUAGES, Object.values(Language)),
+        allowedHosts: parseCsv(env.INDEXER_ALLOWED_HOSTS, Object.values(Host)),
+        sizePolicy: {
+          bytesPerMinute: parseBytesPerMinute(env.INDEXER_BYTES_PER_MIN_JSON),
+          tolerance: env.INDEXER_SIZE_TOLERANCE,
+        },
+      },
     },
     fetchr: {
       url: env.FETCHR_URL,

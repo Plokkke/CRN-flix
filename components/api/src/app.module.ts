@@ -11,18 +11,18 @@ import { MailingController } from '@/controllers/MailingController';
 import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
-import { configSchema as darkiworldConfigSchema } from '@/modules/darkiworld/api';
 import { discordConfigSchema } from '@/modules/discord/discord';
+import { Host, Language, Quality } from '@/modules/indexer/preferences';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
 import { tmdbConfigSchema } from '@/modules/tmdb/tmdb';
 import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
 import { contextProvider } from '@/providers/context';
-import { darkiworldProvider } from '@/providers/darkiworld';
-import { darkiworldSyncProvider } from '@/providers/darkiworld-sync';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
 import { discordSyncProvider } from '@/providers/discord-sync';
 import { fetchrSyncProvider } from '@/providers/fetchr-sync';
+import { indexerOrchestratorProvider, indexersRegistryProvider } from '@/providers/indexer-orchestrator';
+import { indexerSyncProvider } from '@/providers/indexer-sync';
 import { jellyfinProvider } from '@/providers/jellyfin';
 import { jellyfinSyncProvider } from '@/providers/jellyfin-sync';
 import { adminMessagingProvider } from '@/providers/messaging/admin';
@@ -54,7 +54,17 @@ export const configSchema = z.object({
   jellyfin: jellyfinConfigSchema,
   mailing: mailingConfigSchema,
   discord: discordConfigSchema,
-  darkiworld: darkiworldConfigSchema,
+  indexer: z.object({
+    preferences: z.object({
+      allowedQualities: z.array(z.nativeEnum(Quality)),
+      allowedLanguages: z.array(z.nativeEnum(Language)),
+      allowedHosts: z.array(z.nativeEnum(Host)),
+      sizePolicy: z.object({
+        bytesPerMinute: z.record(z.nativeEnum(Quality), z.number().positive()),
+        tolerance: z.number().positive(),
+      }),
+    }),
+  }),
   fetchr: z.object({
     url: z.string(),
     apiKey: z.string().optional(),
@@ -89,7 +99,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
     },
     jellyfin: env.jellyfin,
     discord: env.discord,
-    darkiworld: env.darkiworld,
+    indexer: env.indexer,
     fetchr: env.fetchr,
     tmdb: env.tmdb,
     mediaPaths: env.mediaPaths,
@@ -115,12 +125,13 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       ...repositoryProviders,
       traktSyncProvider,
       jellyfinSyncProvider,
-      darkiworldSyncProvider,
+      indexersRegistryProvider,
+      indexerOrchestratorProvider,
+      indexerSyncProvider,
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
       discordSyncProvider,
-      darkiworldProvider,
       ...userMessagingProviders,
       allUserMessagingProvider,
       adminMessagingProvider,
