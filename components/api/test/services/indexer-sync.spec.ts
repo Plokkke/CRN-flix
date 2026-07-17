@@ -4,6 +4,7 @@ import { MediaEntity, MediaType } from '@/services/database/medias';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { IndexerOrchestrator } from '@/services/indexer-orchestrator';
 import { IndexerSyncService } from '@/services/indexer-sync';
+import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
 
 const MEDIA: MediaEntity = {
   id: 'media-1',
@@ -35,11 +36,18 @@ function buildRequest(overrides: Partial<RequestEntity> = {}): RequestEntity {
 
 function buildRepo(
   requests: RequestEntity[],
-): jest.Mocked<Pick<RequestsRepository, 'listByStatuses' | 'clearIndexerInfo' | 'updateStatus'>> {
+): jest.Mocked<Pick<RequestsRepository, 'listByStatuses' | 'clearIndexerInfo' | 'updateStatus' | 'get'>> {
   return {
     listByStatuses: jest.fn().mockResolvedValue(requests),
     clearIndexerInfo: jest.fn().mockResolvedValue(undefined),
     updateStatus: jest.fn().mockResolvedValue(undefined),
+    get: jest.fn().mockResolvedValue(null),
+  };
+}
+
+function buildAdminsMessaging(): jest.Mocked<Pick<DiscordAdminMessaging, 'refreshRequestMessage'>> {
+  return {
+    refreshRequestMessage: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -52,8 +60,13 @@ function buildOrchestrator(returns: IndexerCandidate | null): jest.Mocked<Pick<I
 function buildService(
   repo: ReturnType<typeof buildRepo>,
   orchestrator: ReturnType<typeof buildOrchestrator>,
+  adminsMessaging: ReturnType<typeof buildAdminsMessaging> = buildAdminsMessaging(),
 ): IndexerSyncService {
-  return new IndexerSyncService(repo as unknown as RequestsRepository, orchestrator as unknown as IndexerOrchestrator);
+  return new IndexerSyncService(
+    repo as unknown as RequestsRepository,
+    orchestrator as unknown as IndexerOrchestrator,
+    adminsMessaging as unknown as DiscordAdminMessaging,
+  );
 }
 
 describe('IndexerSyncService', () => {
@@ -100,6 +113,51 @@ describe('IndexerSyncService', () => {
 
     expect(repo.clearIndexerInfo).not.toHaveBeenCalled();
     expect(repo.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the Discord message when a new link is found for an already-posted request', async () => {
+    const request = buildRequest({
+      status: RequestStatus.Pending,
+      discordMessageId: 'msg-1',
+      indexerLink: 'https://old-link.example',
+    });
+    const repo = buildRepo([request]);
+    const updated = buildRequest({ discordMessageId: 'msg-1' });
+    repo.get.mockResolvedValue(updated);
+    const candidate: IndexerCandidate = {
+      indexerName: 'mock',
+      url: 'https://1fichier.com/?abc',
+      quality: Quality.HD_1080P,
+      language: Language.TRUEFRENCH,
+      host: Host.ONE_FICHIER,
+      sizeBytes: null,
+    };
+    const adminsMessaging = buildAdminsMessaging();
+    const service = buildService(repo, buildOrchestrator(candidate), adminsMessaging);
+
+    await service.sync();
+
+    expect(repo.get).toHaveBeenCalledWith(MEDIA.id);
+    expect(adminsMessaging.refreshRequestMessage).toHaveBeenCalledWith(updated);
+  });
+
+  it('does not refresh the Discord message when the link is unchanged', async () => {
+    const request = buildRequest({ status: RequestStatus.Pending, discordMessageId: 'msg-1' });
+    const repo = buildRepo([request]);
+    const candidate: IndexerCandidate = {
+      indexerName: 'mock',
+      url: request.indexerLink!,
+      quality: Quality.HD_1080P,
+      language: Language.TRUEFRENCH,
+      host: Host.ONE_FICHIER,
+      sizeBytes: null,
+    };
+    const adminsMessaging = buildAdminsMessaging();
+    const service = buildService(repo, buildOrchestrator(candidate), adminsMessaging);
+
+    await service.sync();
+
+    expect(adminsMessaging.refreshRequestMessage).not.toHaveBeenCalled();
   });
 
   it('skips requests without an imdbId', async () => {

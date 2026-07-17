@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { concurrent } from '@/helpers/concurrent';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { IndexerOrchestrator } from '@/services/indexer-orchestrator';
+import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
 
 const INDEXER_CONCURRENCY = 5;
 
@@ -12,6 +13,7 @@ export class IndexerSyncService {
   constructor(
     private readonly requestsRepository: RequestsRepository,
     private readonly orchestrator: IndexerOrchestrator,
+    private readonly adminsMessaging: DiscordAdminMessaging,
   ) {}
 
   async sync(): Promise<void> {
@@ -32,6 +34,14 @@ export class IndexerSyncService {
 
     try {
       const winner = await this.orchestrator.runForRequest(request);
+
+      if (winner && winner.url !== request.indexerLink && request.discordMessageId) {
+        const updated = await this.requestsRepository.get(request.mediaId);
+        if (updated) {
+          await this.adminsMessaging.refreshRequestMessage(updated);
+          IndexerSyncService.logger.log(`Refreshed Discord message for "${request.media.title}" with new link`);
+        }
+      }
 
       if (winner === null && request.status === RequestStatus.Pending) {
         await this.requestsRepository.clearIndexerInfo(request.mediaId);

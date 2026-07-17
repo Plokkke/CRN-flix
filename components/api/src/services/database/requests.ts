@@ -485,10 +485,12 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
 
   async findRequestsWithoutDiscordMessage(): Promise<RequestEntity[]> {
     const query = `
-      SELECT 
+      SELECT
         mr.media_id,
         mr.status,
         mr.discord_message_id,
+        mr.indexer_name,
+        mr.indexer_link,
         mr.created_at,
         mr.updated_at,
         m.id as media_id,

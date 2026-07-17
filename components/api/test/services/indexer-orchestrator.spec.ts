@@ -138,6 +138,9 @@ describe('IndexerOrchestrator', () => {
     expect(fetchr.download).toHaveBeenCalledWith(candidate.url, {
       'crn-flix-request-id': MEDIA.id,
       imdbid: MEDIA.imdbId,
+      type: MEDIA.type,
+      title: MEDIA.title,
+      year: String(MEDIA.year),
     });
   });
 

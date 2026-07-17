@@ -3,7 +3,7 @@ import { Inject, Logger } from '@nestjs/common';
 import { Indexer, INDEXERS, IndexerCandidate, passesPreferences } from '@/modules/indexer/contract';
 import { EnginePreferences } from '@/modules/indexer/preferences';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
-import { FetchrSyncService } from '@/services/fetchr-sync';
+import { buildDownloadMetadata, FetchrSyncService } from '@/services/fetchr-sync';
 import { scoreOf } from '@/services/indexer-scoring';
 
 export class IndexerOrchestrator {
@@ -59,10 +59,7 @@ export class IndexerOrchestrator {
     }
 
     if (winner.autoTriggerable) {
-      this.fetchr.download(candidate.url, {
-        'crn-flix-request-id': request.mediaId,
-        imdbid: request.media.imdbId,
-      });
+      this.fetchr.download(candidate.url, buildDownloadMetadata(request.mediaId, request.media));
     }
 
     return candidate;

@@ -54,6 +54,8 @@ export const environmentVariablesSchema = z
     DATABASE_NAME: z.string(),
     DATABASE_USERNAME: z.string(),
     DATABASE_PASSWORD: z.string(),
+    HYDRACKER_API_KEY: z.string().optional(),
+    HYDRACKER_HOST: z.string().optional(),
     INDEXER_ALLOWED_QUALITIES: z.string().default(''),
     INDEXER_ALLOWED_LANGUAGES: z.string().default(''),
     INDEXER_ALLOWED_HOSTS: z.string().default(''),
@@ -105,6 +107,10 @@ export const environmentVariablesSchema = z
       password: env.DATABASE_PASSWORD,
     },
     indexer: {
+      hydracker:
+        env.HYDRACKER_API_KEY && env.HYDRACKER_HOST
+          ? { apiKey: env.HYDRACKER_API_KEY, host: env.HYDRACKER_HOST }
+          : null,
       preferences: {
         allowedQualities: parseCsv(env.INDEXER_ALLOWED_QUALITIES, Object.values(Quality)),
         allowedLanguages: parseCsv(env.INDEXER_ALLOWED_LANGUAGES, Object.values(Language)),

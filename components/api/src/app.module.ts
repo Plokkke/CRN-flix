@@ -12,6 +12,7 @@ import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
 import { discordConfigSchema } from '@/modules/discord/discord';
+import { configSchema as hydrackerConfigSchema } from '@/modules/indexer/hydracker/api';
 import { Host, Language, Quality } from '@/modules/indexer/preferences';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
 import { tmdbConfigSchema } from '@/modules/tmdb/tmdb';
@@ -55,12 +56,13 @@ export const configSchema = z.object({
   mailing: mailingConfigSchema,
   discord: discordConfigSchema,
   indexer: z.object({
+    hydracker: hydrackerConfigSchema.nullable(),
     preferences: z.object({
       allowedQualities: z.array(z.nativeEnum(Quality)),
       allowedLanguages: z.array(z.nativeEnum(Language)),
       allowedHosts: z.array(z.nativeEnum(Host)),
       sizePolicy: z.object({
-        bytesPerMinute: z.record(z.nativeEnum(Quality), z.number().positive()),
+        bytesPerMinute: z.partialRecord(z.nativeEnum(Quality), z.number().positive()),
         tolerance: z.number().positive(),
       }),
     }),

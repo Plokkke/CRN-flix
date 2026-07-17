@@ -18,6 +18,7 @@ import { DownloadJobEntity, DownloadJobsRepository } from '@/services/database/d
 import { MediaEntity } from '@/services/database/medias';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
+import { indexerDisplayLink } from '@/services/indexer-link';
 import { truthy } from '@/utils';
 
 export type Config = {
@@ -50,6 +51,7 @@ export enum AdminEventType {
   ImdbResolve = 'imdbResolve',
   LinkSubmitted = 'linkSubmitted',
   LinkRetry = 'linkRetry',
+  RequestLinkSubmitted = 'requestLinkSubmitted',
 }
 
 enum ButtonId {
@@ -90,6 +92,7 @@ export type AdminIdentificationRetryEvent = { job: DownloadJobEntity; imdbId: st
 export type AdminImdbResolveEvent = { request: RequestEntity; imdbId: string; replyMessageId: string };
 export type AdminLinkSubmittedEvent = { url: string; messageId: string };
 export type AdminLinkRetryEvent = { url: string; imdbId: string; originalMessageId: string; replyMessageId: string };
+export type AdminRequestLinkSubmittedEvent = { request: RequestEntity; url: string; replyMessageId: string };
 
 export type AdminEventMap = {
   [AdminEventType.UserAccepted]: AdminUserAcceptedEvent;
@@ -98,6 +101,7 @@ export type AdminEventMap = {
   [AdminEventType.ImdbResolve]: AdminImdbResolveEvent;
   [AdminEventType.LinkSubmitted]: AdminLinkSubmittedEvent;
   [AdminEventType.LinkRetry]: AdminLinkRetryEvent;
+  [AdminEventType.RequestLinkSubmitted]: AdminRequestLinkSubmittedEvent;
 };
 
 function mediaName(media: MediaEntity): string {
@@ -125,8 +129,9 @@ function buildRequestEmbed(request: RequestEntity, color: number): EmbedBuilder 
     embed.addFields({ name: 'IMDb', value: media.imdbId, inline: true });
   }
 
-  if (request.indexerLink) {
-    embed.addFields({ name: 'Lien', value: `[Telecharger](${request.indexerLink})`, inline: true });
+  const displayLink = indexerDisplayLink(request);
+  if (displayLink) {
+    embed.addFields({ name: 'Lien', value: `[Telecharger](${displayLink})`, inline: true });
   }
 
   return embed;
@@ -234,6 +239,16 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
       });
     },
     [DiscordEntityType.Request]: async (result, message) => {
+      const urlMatch = message.content.match(/https?:\/\/\S+/);
+      if (urlMatch && !urlMatch[0].includes('imdb.com')) {
+        this.emit(AdminEventType.RequestLinkSubmitted, {
+          request: result.entity,
+          url: urlMatch[0],
+          replyMessageId: message.id,
+        });
+        return;
+      }
+
       const imdbMatch = message.content.match(/tt\d{7,}/);
       if (!imdbMatch) {
         return;
@@ -524,7 +539,7 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
     }
   }
 
-  async updateRequestUsers(request: RequestEntity): Promise<void> {
+  async refreshRequestMessage(request: RequestEntity): Promise<void> {
     if (!request.discordMessageId) {
       return;
     }
@@ -536,7 +551,7 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
       await message.edit({ embeds: [embed] });
     } catch (error) {
       DiscordAdminMessaging.logger.error(
-        `Failed to update users on Discord message ${request.discordMessageId}: ${error instanceof Error ? error.message : error}`,
+        `Failed to refresh Discord message ${request.discordMessageId}: ${error instanceof Error ? error.message : error}`,
       );
     }
   }

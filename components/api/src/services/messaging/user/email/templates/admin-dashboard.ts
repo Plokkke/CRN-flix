@@ -1,4 +1,5 @@
 import { RequestEntity } from '@/services/database/requests';
+import { indexerDisplayLink } from '@/services/indexer-link';
 
 import { COLORS, getWebTemplate } from './email-styles';
 
@@ -95,9 +96,10 @@ const getRequestsSection = (requests: RequestEntity[]): string => {
   const rows = sorted
     .map((request) => {
       const users = request.userRequests?.map((ur) => ur.user?.name ?? 'Unknown').join(', ') ?? '-';
+      const displayLink = indexerDisplayLink(request);
       return `
     <tr data-status="${request.status}" data-users="${users}">
-      <td>${request.indexerLink ? `<a href="${request.indexerLink}" target="_blank" rel="noopener">${getMediaLabel(request)}</a>` : getMediaLabel(request)}</td>
+      <td>${displayLink ? `<a href="${displayLink}" target="_blank" rel="noopener">${getMediaLabel(request)}</a>` : getMediaLabel(request)}</td>
       <td>${request.media?.type ?? '-'}</td>
       <td><code>${request.media?.imdbId ?? '-'}</code></td>
       <td>${users}</td>

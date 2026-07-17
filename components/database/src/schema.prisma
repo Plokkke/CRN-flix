@@ -73,6 +73,16 @@ model MediaRequest {
   @@map("media_requests")
 }
 
+model UserNotification {
+  userId  String   @map("user_id") @db.Uuid
+  mediaId String   @map("media_id") @db.Uuid
+  status  String   @db.VarChar(32)
+  sentAt  DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  @@id([userId, mediaId, status])
+  @@map("user_notifications")
+}
+
 model RequestUser {
   requestMediaId String             @map("request_media_id") @db.Uuid
   userId         String             @map("user_id") @db.Uuid

@@ -7,6 +7,7 @@ import { MediasRepository } from '@/services/database/medias';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
 import { RequestsRepository } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
+import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UsersRepository } from '@/services/database/users';
 
 const REPOSITORIES = [
@@ -16,6 +17,7 @@ const REPOSITORIES = [
   RequestsRepository,
   DownloadJobsRepository,
   NamingAuditRepository,
+  UserNotificationsRepository,
 ];
 
 export const repositoryProviders: Provider[] = [

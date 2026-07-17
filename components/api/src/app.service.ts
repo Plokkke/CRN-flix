@@ -23,8 +23,9 @@ import {
   UserJoinedRequestEvent,
   UserLeftRequestEvent,
 } from '@/services/database/requests';
+import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UserEntity, UsersRepository } from '@/services/database/users';
-import { FetchrSyncService } from '@/services/fetchr-sync';
+import { buildDownloadMetadata, FetchrSyncService } from '@/services/fetchr-sync';
 import { IndexerSyncService } from '@/services/indexer-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { MediaIdentifierService } from '@/services/media-identifier';
@@ -35,6 +36,7 @@ import {
   AdminImdbResolveEvent,
   AdminLinkRetryEvent,
   AdminLinkSubmittedEvent,
+  AdminRequestLinkSubmittedEvent,
   DiscordAdminMessaging,
 } from '@/services/messaging/admin/discord';
 import { AllUserMessaging } from '@/services/messaging/user/all';
@@ -66,6 +68,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
     private readonly mediasRepository: MediasRepository,
+    private readonly userNotifications: UserNotificationsRepository,
     private readonly fetchrSync: FetchrSyncService,
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
@@ -148,7 +151,11 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          await this.adminsMessaging.updateRequestStatus(request);
+          if (!request.discordMessageId && request.status === RequestStatus.Pending) {
+            await this.adminsMessaging.registerRequest(request);
+          } else {
+            await this.adminsMessaging.updateRequestStatus(request);
+          }
 
           const userNotifiableStatuses: RequestStatus[] = [RequestStatus.Fulfilled, RequestStatus.Rejected];
           if (!userNotifiableStatuses.includes(request.status)) {
@@ -162,15 +169,21 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           AppService.logger.log(`Notifying ${userIds.length} users for request ${event.requestId}`);
           for (const userId of userIds) {
             const user = await this.usersRepository.get(userId);
-            if (user) {
-              AppService.logger.debug(
-                `Sending notification to user ${user.name} (${user.messagingKey}:${user.messagingId})`,
-              );
-              const userCtxt = { key: user.messagingKey, id: user.messagingId };
-              await this.messaging.requestUpdated(userCtxt, request);
-            } else {
+            if (!user) {
               AppService.logger.warn(`User ${userId} not found for notification`);
+              continue;
             }
+
+            if (!(await this.userNotifications.claim(userId, request.mediaId, request.status))) {
+              AppService.logger.debug(`User ${user.name} already notified for ${request.mediaId} (${request.status})`);
+              continue;
+            }
+
+            AppService.logger.debug(
+              `Sending notification to user ${user.name} (${user.messagingKey}:${user.messagingId})`,
+            );
+            const userCtxt = { key: user.messagingKey, id: user.messagingId };
+            await this.messaging.requestUpdated(userCtxt, request);
           }
         }),
       userJoined: (event: UserJoinedRequestEvent) =>
@@ -178,6 +191,11 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           const user = await this.usersRepository.get(event.userId);
           const request = await this.requestsRepository.get(event.requestId);
           if (!request || !user) {
+            return;
+          }
+
+          if (!(await this.userNotifications.claim(event.userId, request.mediaId, request.status))) {
+            AppService.logger.debug(`User ${user.name} already notified for ${request.mediaId} (${request.status})`);
             return;
           }
 
@@ -251,6 +269,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       [AdminEventType.ImdbResolve]: (event) => this.trackEvent(() => this.onImdbResolve(event)),
       [AdminEventType.LinkSubmitted]: (event) => this.trackEvent(() => this.onLinkSubmitted(event)),
       [AdminEventType.LinkRetry]: (event) => this.trackEvent(() => this.onLinkRetry(event)),
+      [AdminEventType.RequestLinkSubmitted]: (event) => this.trackEvent(() => this.onRequestLinkSubmitted(event)),
     });
   }
 
@@ -310,6 +329,25 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     AppService.logger.log(`Resolving IMDb ID for media "${request.media.title}" → ${imdbId}`);
     await this.mediasRepository.updateImdbId(request.media.id, imdbId);
     await this.adminsMessaging.reactToMessage(replyMessageId, '✅');
+  }
+
+  private async onRequestLinkSubmitted({
+    request,
+    url,
+    replyMessageId,
+  }: AdminRequestLinkSubmittedEvent): Promise<void> {
+    AppService.logger.log(`Download link submitted for request ${request.mediaId}: ${url}`);
+
+    if (!(await this.fetchrSync.canHandle(url))) {
+      AppService.logger.warn(`No fetchr plugin can handle submitted link: ${url}`);
+      await this.adminsMessaging.reactToMessage(replyMessageId, '❌');
+      return;
+    }
+
+    this.fetchrSync.download(url, buildDownloadMetadata(request.mediaId, request.media));
+    await this.adminsMessaging.reactToMessage(replyMessageId, '✅');
+
+    AppService.logger.log(`Download launched for "${request.media?.title}" with request ${request.mediaId}`);
   }
 
   private async onLinkSubmitted({ url, messageId }: AdminLinkSubmittedEvent): Promise<void> {
@@ -395,11 +433,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     );
     await this.requestsRepository.attachDiscordMessageId(media.id, resolvedMessageId);
 
-    const metadata: Record<string, string> = { 'crn-flix-request-id': media.id };
-    if (identification.imdbId) {
-      metadata.imdbid = identification.imdbId;
-    }
-    this.fetchrSync.download(url, metadata);
+    this.fetchrSync.download(url, buildDownloadMetadata(media.id, media));
 
     AppService.logger.log(`Download launched for "${identification.title}" with request ${media.id}`);
   }
