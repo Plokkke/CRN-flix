@@ -3,12 +3,22 @@ import axios, { AxiosInstance } from 'axios';
 import { z } from 'zod';
 
 import { logAxiosError, logAxiosRequest, logAxiosResponse } from '@/helpers/axios-logger';
+import { applyAxiosRetry } from '@/helpers/axios-retry';
+import { RateLimiter } from '@/helpers/rate-limiter';
 
 import { hydrackerSearchResponseSchema, HydrackerTitle } from './schemas';
+
+/** Hydracker caps at 1 request per second per bearer token, with no burst allowance. */
+const MIN_REQUEST_INTERVAL_MS = 1_000;
 
 export const configSchema = z.object({
   apiKey: z.string(),
   host: z.string().min(1),
+  /**
+   * Hydracker's WAF answers generic clients (axios/*, curl/*, …) with a login page instead of
+   * JSON, so a descriptive User-Agent is mandatory rather than merely polite.
+   */
+  userAgent: z.string().min(1),
 });
 
 export type HydrackerConfig = z.infer<typeof configSchema>;
@@ -32,6 +42,7 @@ export class HydrackerApi {
   private static readonly logger = new Logger(HydrackerApi.name);
 
   private readonly client: AxiosInstance;
+  private readonly limiter = new RateLimiter(MIN_REQUEST_INTERVAL_MS);
 
   constructor(config: HydrackerConfig) {
     const parsedConfig = configSchema.parse(config);
@@ -39,10 +50,14 @@ export class HydrackerApi {
     const baseHost = parsedConfig.host.replace(/\/+$/, '');
     this.client = axios.create({
       baseURL: `${baseHost}/api/v1`,
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': parsedConfig.userAgent,
+      },
     });
 
-    this.client.interceptors.request.use((request) => {
+    this.client.interceptors.request.use(async (request) => {
+      await this.limiter.acquire();
       request.headers.Authorization = `Bearer ${parsedConfig.apiKey}`;
       logAxiosRequest(HydrackerApi.logger, request);
       return request;
@@ -58,6 +73,10 @@ export class HydrackerApi {
         throw error;
       },
     );
+
+    // Registered last so it wraps the logging interceptor: a 429 is retried after the
+    // Retry-After the server asks for, not after our own guess.
+    applyAxiosRetry(this.client, 'hydracker');
   }
 
   async search(query: string, limit: number = 20): Promise<HydrackerTitle[]> {

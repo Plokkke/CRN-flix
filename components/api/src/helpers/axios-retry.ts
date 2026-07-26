@@ -19,6 +19,24 @@ export type AxiosRetryOptions = {
   retryNonIdempotent?: boolean;
 };
 
+/** RFC 9110 allows either a delay in seconds or an HTTP date; servers under load send both. */
+export function parseRetryAfter(header: unknown, now: number = Date.now()): number | null {
+  if (typeof header !== 'string' || !header.trim()) {
+    return null;
+  }
+
+  const seconds = Number(header.trim());
+  if (Number.isFinite(seconds)) {
+    return seconds >= 0 ? seconds * 1000 : null;
+  }
+
+  const date = Date.parse(header);
+  if (Number.isNaN(date)) {
+    return null;
+  }
+  return Math.max(0, date - now);
+}
+
 function shouldRetry(error: AxiosError, retryNonIdempotent: boolean): boolean {
   const method = (error.config?.method ?? 'GET').toUpperCase();
   if (!retryNonIdempotent && !IDEMPOTENT_METHODS.has(method)) {
@@ -55,7 +73,9 @@ export function applyAxiosRetry(instance: AxiosInstance, label: string, opts: Ax
       throw error;
     }
 
-    const delay = Math.min(maxMs, baseMs * 2 ** (config.__retryCount - 1)) * (0.5 + Math.random());
+    // An explicit Retry-After wins over our backoff: the server knows its own cooldown.
+    const retryAfter = parseRetryAfter(error.response?.headers?.['retry-after']);
+    const delay = retryAfter ?? Math.min(maxMs, baseMs * 2 ** (config.__retryCount - 1)) * (0.5 + Math.random());
     const status = error.response?.status ?? error.code ?? 'unknown';
     log.warn(`retry ${config.__retryCount}/${retries} after ${Math.round(delay)}ms (${status}): ${error.message}`);
     await new Promise((r) => setTimeout(r, delay));

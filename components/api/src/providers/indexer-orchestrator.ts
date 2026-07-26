@@ -16,7 +16,9 @@ export const indexersRegistryProvider = {
     if (!hydracker) {
       return [];
     }
-    return [new HydrackerIndexer(new HydrackerApi(hydracker), hydracker.host)];
+
+    const userAgent = `${configService.get('name')} (+${configService.get('server', { infer: true }).url})`;
+    return [new HydrackerIndexer(new HydrackerApi({ ...hydracker, userAgent }), hydracker.host)];
   },
 };
 
