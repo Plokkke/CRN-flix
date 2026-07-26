@@ -38,6 +38,7 @@ import { traktProvider } from '@/providers/trakt';
 import { traktSyncProvider } from '@/providers/trakt-sync';
 import { traktPluginProvider } from '@/providers/traktPlugin';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
+import { DownloadProgressService } from '@/services/download-progress';
 import { HealthChecksService } from '@/services/health-checks';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
@@ -140,6 +141,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       allUserMessagingProvider,
       adminMessagingProvider,
       fetchrSyncProvider,
+      DownloadProgressService,
       tmdbProvider,
       ...postDownloadProviders,
       ...namingAuditProviders,

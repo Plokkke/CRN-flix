@@ -7,6 +7,7 @@ import {
   ChannelType,
   EmbedBuilder,
   Message,
+  MessageFlags,
   TextChannel,
 } from 'discord.js';
 import * as _ from 'lodash';
@@ -18,6 +19,8 @@ import { DownloadJobEntity, DownloadJobsRepository } from '@/services/database/d
 import { MediaEntity } from '@/services/database/medias';
 import { RequestEntity, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { UserEntity, UsersRepository } from '@/services/database/users';
+import { countActive, downloadLabel, downloadStatusLine, sortForDisplay } from '@/services/download-format';
+import { LiveDownload } from '@/services/download-live-state';
 import { indexerDisplayLink } from '@/services/indexer-link';
 import { truthy } from '@/utils';
 
@@ -84,7 +87,38 @@ const EMBED_COLORS = {
   pending: 0xe67e22,
   rejected: 0xe74c3c,
   missing: 0x95a5a6,
+  downloadsActive: 0x3498db,
+  downloadsIdle: 0x95a5a6,
 } as const;
+
+/** Identifies the single pinned progress message across restarts — no state to persist. */
+const DOWNLOADS_TITLE = '📥 Téléchargements';
+const MAX_DOWNLOAD_FIELDS = 10;
+
+function buildDownloadsEmbed(downloads: LiveDownload[]): EmbedBuilder {
+  const active = countActive(downloads);
+  const embed = new EmbedBuilder()
+    .setColor(active > 0 ? EMBED_COLORS.downloadsActive : EMBED_COLORS.downloadsIdle)
+    .setTitle(`${DOWNLOADS_TITLE} — ${active > 0 ? `${active} en cours` : 'aucun en cours'}`)
+    .setTimestamp(new Date());
+
+  const ordered = sortForDisplay(downloads);
+  if (ordered.length === 0) {
+    return embed.setDescription('Rien en file.');
+  }
+
+  for (const download of ordered.slice(0, MAX_DOWNLOAD_FIELDS)) {
+    embed.addFields({
+      name: downloadLabel(download).slice(0, 256),
+      value: downloadStatusLine(download).slice(0, 1024),
+    });
+  }
+
+  if (ordered.length > MAX_DOWNLOAD_FIELDS) {
+    embed.setFooter({ text: `+ ${ordered.length - MAX_DOWNLOAD_FIELDS} autre(s)` });
+  }
+  return embed;
+}
 
 export type AdminUserAcceptedEvent = { user: UserEntity };
 export type AdminUserRejectedEvent = { user: UserEntity };
@@ -139,6 +173,8 @@ function buildRequestEmbed(request: RequestEntity, color: number): EmbedBuilder 
 
 export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnModuleInit {
   private static readonly logger = new Logger(DiscordAdminMessaging.name);
+
+  private downloadsMessage: Message | null = null;
 
   static async create(
     config: Config,
@@ -537,6 +573,60 @@ export class DiscordAdminMessaging extends Emitter<AdminEventMap> implements OnM
         `Failed to react to message ${messageId}: ${error instanceof Error ? error.message : error}`,
       );
     }
+  }
+
+  // --- Live download progress ---
+
+  /**
+   * Rewrites the single pinned progress message. Editing never notifies on Discord, so this
+   * can run on a timer without ever pinging the admins on mobile.
+   */
+  async refreshDownloadsMessage(downloads: LiveDownload[]): Promise<void> {
+    const embed = buildDownloadsEmbed(downloads);
+
+    try {
+      const message = await this.resolveDownloadsMessage();
+      await message.edit({ embeds: [embed] });
+    } catch (error) {
+      // The message was most likely deleted by hand; drop the cache and rebuild it next tick.
+      this.downloadsMessage = null;
+      DiscordAdminMessaging.logger.error(
+        `Failed to refresh the downloads message: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
+
+  private async resolveDownloadsMessage(): Promise<Message> {
+    if (this.downloadsMessage) {
+      return this.downloadsMessage;
+    }
+
+    const { items } = await this.channel.messages.fetchPins();
+    const existing = items.find(
+      ({ message }) =>
+        message.author.id === this.channel.client.user.id && !!message.embeds[0]?.title?.startsWith(DOWNLOADS_TITLE),
+    )?.message;
+
+    this.downloadsMessage = existing ?? (await this.createDownloadsMessage());
+    return this.downloadsMessage;
+  }
+
+  private async createDownloadsMessage(): Promise<Message> {
+    const message = await this.channel.send({
+      embeds: [buildDownloadsEmbed([])],
+      flags: MessageFlags.SuppressNotifications,
+    });
+
+    try {
+      await message.pin();
+    } catch (error) {
+      DiscordAdminMessaging.logger.warn(
+        `Downloads message created but could not be pinned (ManageMessages permission?): ${error instanceof Error ? error.message : error}`,
+      );
+    }
+
+    DiscordAdminMessaging.logger.log(`Downloads progress message created (${message.id})`);
+    return message;
   }
 
   async refreshRequestMessage(request: RequestEntity): Promise<void> {
