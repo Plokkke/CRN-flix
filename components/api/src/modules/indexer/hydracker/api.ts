@@ -14,11 +14,8 @@ const MIN_REQUEST_INTERVAL_MS = 1_000;
 export const configSchema = z.object({
   apiKey: z.string(),
   host: z.string().min(1),
-  /**
-   * Hydracker's WAF answers generic clients (axios/*, curl/*, …) with a login page instead of
-   * JSON, so a descriptive User-Agent is mandatory rather than merely polite.
-   */
-  userAgent: z.string().min(1),
+  /** Optional contact appended to the User-Agent so Hydracker can reach us about our usage. */
+  contactEmail: z.string().min(1).optional(),
 });
 
 export type HydrackerConfig = z.infer<typeof configSchema>;
@@ -41,10 +38,18 @@ export class HydrackerUnparseableResponseError extends Error {
 export class HydrackerApi {
   private static readonly logger = new Logger(HydrackerApi.name);
 
+  /**
+   * Hydracker's WAF answers generic clients (axios/*, curl/*, …) with a login page instead of
+   * JSON, so identifying ourselves is mandatory rather than merely polite.
+   */
+  static buildUserAgent(serviceName: string, contactEmail?: string): string {
+    return contactEmail ? `${serviceName} (${contactEmail})` : serviceName;
+  }
+
   private readonly client: AxiosInstance;
   private readonly limiter = new RateLimiter(MIN_REQUEST_INTERVAL_MS);
 
-  constructor(config: HydrackerConfig) {
+  constructor(config: HydrackerConfig, serviceName: string) {
     const parsedConfig = configSchema.parse(config);
 
     const baseHost = parsedConfig.host.replace(/\/+$/, '');
@@ -52,7 +57,7 @@ export class HydrackerApi {
       baseURL: `${baseHost}/api/v1`,
       headers: {
         Accept: 'application/json',
-        'User-Agent': parsedConfig.userAgent,
+        'User-Agent': HydrackerApi.buildUserAgent(serviceName, parsedConfig.contactEmail),
       },
     });
 
