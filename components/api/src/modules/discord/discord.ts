@@ -120,6 +120,11 @@ export class DiscordService implements OnModuleDestroy {
     return user;
   }
 
+  async sendDirectMessage(userId: string, content: string): Promise<void> {
+    const user = await this.getUser(userId);
+    await user.send(content);
+  }
+
   onDirectMessage(callback: (message: Message) => Promise<void> | void): () => void {
     return registerListener(this.client, Events.MessageCreate, (message: Message): void => {
       if (!message.guild && !message.author.bot) {

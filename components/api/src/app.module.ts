@@ -17,6 +17,7 @@ import { Host, Language, Quality } from '@/modules/indexer/preferences';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
 import { tmdbConfigSchema } from '@/modules/tmdb/tmdb';
 import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
+import { adminAuthProvider } from '@/providers/admin-auth';
 import { contextProvider } from '@/providers/context';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
@@ -121,6 +122,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
     providers: [
       MemoryCacheService,
       AppService,
+      adminAuthProvider,
       contextProvider,
       traktProvider,
       syncDataSourceProvider,

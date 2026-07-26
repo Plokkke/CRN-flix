@@ -1,6 +1,6 @@
 import { NamingAuditItemEntity } from '@/services/database/naming-audit';
 
-import { COLORS, getWebTemplate } from './email-styles';
+import { COLORS, escapeHtml, getWebTemplate } from './email-styles';
 
 interface AdminNamingAuditParams {
   serviceName: string;
@@ -8,14 +8,6 @@ interface AdminNamingAuditParams {
   items: NamingAuditItemEntity[];
   flashMessage?: string;
 }
-
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 
 const isFixable = (item: NamingAuditItemEntity): boolean =>
   item.status === 'pending' && !item.reasons.includes('missing-imdb') && !item.reasons.includes('tmdb-not-found');

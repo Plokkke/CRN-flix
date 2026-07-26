@@ -1,7 +1,7 @@
 import { RequestEntity } from '@/services/database/requests';
 import { indexerDisplayLink } from '@/services/indexer-link';
 
-import { COLORS, getWebTemplate } from './email-styles';
+import { COLORS, escapeHtml, getWebTemplate } from './email-styles';
 
 interface JobDefinition {
   name: string;
@@ -130,16 +130,33 @@ const getRequestsSection = (requests: RequestEntity[]): string => {
 export const adminDashboardTemplate = (params: AdminDashboardParams): string => {
   const { serviceName, requests, jobs, flashMessage } = params;
 
-  const flashHtml = flashMessage ? `<div class="flash-message">${flashMessage}</div>` : '';
+  const flashHtml = flashMessage ? `<div class="flash-message">${escapeHtml(flashMessage)}</div>` : '';
 
   const content = `
     ${flashHtml}
     ${getJobsSection(jobs)}
     ${getRequestsSection(requests)}
+    <form method="POST" action="/admin/logout" class="logout-form">
+      <button type="submit">Se déconnecter</button>
+    </form>
   `;
 
   const additionalCSS = `
     .container { max-width: 900px; background-color: #1a1a2e; color: #e0e0e0; }
+
+    .logout-form {
+      margin-top: 40px;
+      text-align: right;
+    }
+
+    .logout-form button {
+      background-color: transparent;
+      border: 1px solid #555;
+      color: #888;
+      width: auto;
+      padding: 8px 16px;
+      font-size: 13px;
+    }
 
     body { background-color: #0f0f1a; color: #e0e0e0; }
 

@@ -1,6 +1,23 @@
-import { Body, Controller, Get, Header, Logger, Param, Post, Query, Res } from '@nestjs/common';
-import { Response } from 'express';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Logger,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
 
+import { AdminAuthRedirectFilter } from '@/filters/admin-auth-redirect.filter';
+import { AdminSessionGuard, SkipAdminAuth } from '@/guards/admin-session.guard';
+import { readCookie } from '@/helpers/cookies';
+import { ADMIN_SESSION_COOKIE, AdminAuthService, CodeRequestOutcome } from '@/services/admin-auth';
 import { ContextService } from '@/services/context';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
 import { RequestsRepository } from '@/services/database/requests';
@@ -8,6 +25,7 @@ import { DiscordSyncService } from '@/services/discord-sync';
 import { IndexerSyncService } from '@/services/indexer-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
+import { adminLoginTemplate } from '@/services/messaging/user/email/templates/admin-login';
 import { adminNamingAuditTemplate } from '@/services/messaging/user/email/templates/admin-naming-audit';
 import { NamingAuditService } from '@/services/naming-audit';
 import { TraktSyncService } from '@/services/trakt-sync';
@@ -22,13 +40,22 @@ const JOBS = [
 
 type JobName = (typeof JOBS)[number]['name'];
 
+const CODE_REQUEST_MESSAGES: Record<CodeRequestOutcome, string> = {
+  sent: 'Code envoyé sur Discord.',
+  throttled: 'Un code vient déjà d’être envoyé, patientez 30 secondes.',
+  'delivery-failed': 'Impossible d’envoyer le code sur Discord.',
+};
+
 @Controller('admin')
+@UseGuards(AdminSessionGuard)
+@UseFilters(AdminAuthRedirectFilter)
 export class AdminController {
   private static readonly logger = new Logger(AdminController.name);
 
   private readonly jobHandlers: Record<JobName, () => Promise<void>>;
 
   constructor(
+    private readonly adminAuth: AdminAuthService,
     private readonly contextService: ContextService,
     private readonly traktSync: TraktSyncService,
     private readonly jellyfinSync: JellyfinSyncService,
@@ -47,6 +74,64 @@ export class AdminController {
         await this.namingAudit.run();
       },
     };
+  }
+
+  @Get('login')
+  @SkipAdminAuth()
+  async getLogin(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('step') step?: string,
+    @Query('message') message?: string,
+  ): Promise<void> {
+    const token = readCookie(req.headers.cookie, ADMIN_SESSION_COOKIE);
+    if (token && (await this.adminAuth.validateSession(token))) {
+      res.redirect('/admin');
+      return;
+    }
+
+    res.type('html').send(
+      adminLoginTemplate({
+        serviceName: this.contextService.name,
+        step: step === 'code' ? 'code' : 'request',
+        message,
+      }),
+    );
+  }
+
+  @Post('login/request')
+  @SkipAdminAuth()
+  async requestLoginCode(@Res() res: Response): Promise<void> {
+    const outcome = await this.adminAuth.requestCode();
+    const step = outcome === 'delivery-failed' ? 'request' : 'code';
+    res.redirect(`/admin/login?step=${step}&message=${encodeURIComponent(CODE_REQUEST_MESSAGES[outcome])}`);
+  }
+
+  @Post('login/verify')
+  @SkipAdminAuth()
+  async verifyLoginCode(
+    @Body('code') code: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const token = code ? await this.adminAuth.verifyCode(code, req.headers['user-agent'] ?? null) : null;
+    if (!token) {
+      res.redirect(`/admin/login?step=code&message=${encodeURIComponent('Code invalide ou expiré.')}`);
+      return;
+    }
+
+    res.cookie(ADMIN_SESSION_COOKIE, token, this.adminAuth.cookieOptions);
+    res.redirect('/admin');
+  }
+
+  @Post('logout')
+  async logout(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const token = readCookie(req.headers.cookie, ADMIN_SESSION_COOKIE);
+    if (token) {
+      await this.adminAuth.revokeSession(token);
+    }
+    res.clearCookie(ADMIN_SESSION_COOKIE, this.adminAuth.cookieOptions);
+    res.redirect('/admin/login');
   }
 
   @Get()

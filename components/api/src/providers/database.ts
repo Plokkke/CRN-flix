@@ -2,6 +2,7 @@ import { Provider } from '@nestjs/common';
 import { Pool } from 'pg';
 
 import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
+import { AdminSessionsRepository } from '@/services/database/admin-sessions';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
@@ -18,6 +19,7 @@ const REPOSITORIES = [
   DownloadJobsRepository,
   NamingAuditRepository,
   UserNotificationsRepository,
+  AdminSessionsRepository,
 ];
 
 export const repositoryProviders: Provider[] = [

@@ -27,6 +27,15 @@ export const COLORS = {
   footerText: '#777777',
 } as const;
 
+// Escapes untrusted values before interpolation into a template
+export const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 // Typography styles (inline)
 export const TYPOGRAPHY = {
   h1: 'font-size: 24px; font-weight: bold; color: #1e1e2a; margin: 0 0 20px 0; line-height: 1.2;',
