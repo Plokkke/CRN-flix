@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 
 import { RequestEntity } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
-import { UserMessaging } from '@/services/messaging/user';
+import { isUserNotifiableStatus, UserMessaging } from '@/services/messaging/user';
 
 export type UserMessagingCtxt = {
   key: string;
@@ -35,6 +35,11 @@ export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
   }
 
   async requestUpdated(ctxt: UserMessagingCtxt, request: RequestEntity): Promise<void> {
+    if (!isUserNotifiableStatus(request.status)) {
+      AllUserMessaging.logger.debug(`Skipping requestUpdated to ${ctxt.id} (status ${request.status} is transient)`);
+      return;
+    }
+
     try {
       AllUserMessaging.logger.debug(`Dispatching requestUpdated via "${ctxt.key}" to ${ctxt.id}`);
       const messaging = this.getMessaging(ctxt.key);

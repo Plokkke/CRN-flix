@@ -3,9 +3,9 @@ import * as nodemailer from 'nodemailer';
 import { z } from 'zod';
 
 import { ContextService } from '@/services/context';
-import { RequestEntity, RequestStatus } from '@/services/database/requests';
+import { RequestEntity } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
-import { UserMessaging } from '@/services/messaging/user';
+import { isUserNotifiableStatus, UserMessaging } from '@/services/messaging/user';
 import { errorTemplate, registeredTemplate, requestUpdateTemplate } from '@/services/messaging/user/email/templates';
 
 import { EmailQueue } from './queue';
@@ -17,13 +17,6 @@ export const configSchema = z.object({
 });
 
 export type Config = z.infer<typeof configSchema>;
-
-const ALLOWED_STATUS_UPDATE: RequestStatus[] = [
-  RequestStatus.Pending,
-  RequestStatus.Fulfilled,
-  RequestStatus.Missing,
-  RequestStatus.Rejected,
-];
 
 export class EmailUserMessaging extends UserMessaging<string> implements OnModuleInit, OnModuleDestroy {
   private static logger = new Logger(EmailUserMessaging.name);
@@ -113,8 +106,8 @@ export class EmailUserMessaging extends UserMessaging<string> implements OnModul
     if (!request.media) {
       throw new InternalServerErrorException('Request media not loaded');
     }
-    if (!ALLOWED_STATUS_UPDATE.includes(request.status)) {
-      EmailUserMessaging.logger.debug(`Skipping email to ${email} for media request update`);
+    if (!isUserNotifiableStatus(request.status)) {
+      EmailUserMessaging.logger.debug(`Skipping email to ${email} for media request update (${request.status})`);
       return;
     }
 

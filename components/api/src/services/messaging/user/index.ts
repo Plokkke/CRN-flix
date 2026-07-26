@@ -1,7 +1,15 @@
-import { RequestEntity } from '@/services/database/requests';
+import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
 export const USER_MESSAGING_TYPES = ['discord', 'whatsapp', 'email'] as const;
 export type UserMessagingType = (typeof USER_MESSAGING_TYPES)[number];
+
+/**
+ * Missing et Pending sont volontairement exclus : une request oscille entre les deux
+ * au fil des syncs (Trakt, indexers) et chaque bascule générerait une notification.
+ */
+export const USER_NOTIFIABLE_STATUSES: RequestStatus[] = [RequestStatus.Fulfilled, RequestStatus.Rejected];
+
+export const isUserNotifiableStatus = (status: RequestStatus): boolean => USER_NOTIFIABLE_STATUSES.includes(status);
 
 export type Config = {
   jellyfin: {

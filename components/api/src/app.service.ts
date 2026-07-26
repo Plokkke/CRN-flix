@@ -39,6 +39,7 @@ import {
   AdminRequestLinkSubmittedEvent,
   DiscordAdminMessaging,
 } from '@/services/messaging/admin/discord';
+import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { TraktSyncService } from '@/services/trakt-sync';
@@ -157,8 +158,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             await this.adminsMessaging.updateRequestStatus(request);
           }
 
-          const userNotifiableStatuses: RequestStatus[] = [RequestStatus.Fulfilled, RequestStatus.Rejected];
-          if (!userNotifiableStatuses.includes(request.status)) {
+          if (!isUserNotifiableStatus(request.status)) {
             AppService.logger.debug(
               `Skipping user notifications for request ${event.requestId} (status ${request.status} is transient)`,
             );
@@ -191,6 +191,13 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           const user = await this.usersRepository.get(event.userId);
           const request = await this.requestsRepository.get(event.requestId);
           if (!request || !user) {
+            return;
+          }
+
+          if (!isUserNotifiableStatus(request.status)) {
+            AppService.logger.debug(
+              `Skipping user notifications for request ${event.requestId} (status ${request.status} is transient)`,
+            );
             return;
           }
 
