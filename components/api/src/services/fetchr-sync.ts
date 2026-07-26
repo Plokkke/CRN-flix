@@ -243,10 +243,13 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
     if (this.fetchrApiKey) {
       headers['x-api-key'] = this.fetchrApiKey;
     }
-    const response = await axios.get<{ fileName: string; size: number | null }>(`${this.fetchrApiUrl}/infos`, {
-      params: { url },
-      headers,
-    });
+    const response = await axios.get<{ fileName: string; size: number | null }>(
+      `${this.fetchrApiUrl}/downloads/resolve`,
+      {
+        params: { url },
+        headers,
+      },
+    );
     return response.data;
   }
 
