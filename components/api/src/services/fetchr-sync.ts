@@ -5,6 +5,8 @@ import axios from 'axios';
 import { WebSocket } from 'ws';
 
 import { withDbRetry } from '@/helpers/db-retry';
+import { Emitter } from '@/helpers/events';
+import { applyFetchrEvent, LiveDownload } from '@/services/download-live-state';
 
 import { DownloadJobsRepository } from './database/download-jobs';
 import { MediaEntity } from './database/medias';
@@ -43,22 +45,26 @@ type FetchrCompletedEvent = {
   completedAt: string;
 };
 
-type FetchrListItem = {
-  id: string;
-  status: string;
-  fileName: string;
-  filePaths: string[];
-  size: number | null;
-  source: string;
-  metadata?: Record<string, string>;
-  downloadedAt: string | null;
-  completedAt: string | null;
-};
-
 type FetchrMessage =
   | { topic: 'download::completed'; payload: FetchrCompletedEvent }
-  | { topic: 'download::list'; payload: FetchrListItem[] }
+  | { topic: 'download::list'; payload: LiveDownload[] }
   | { topic: string; payload: unknown };
+
+export type FetchrSyncEvents = {
+  /** Any change to the live download set; consumers pull the current state from `liveDownloads()`. */
+  liveChanged: void;
+};
+
+/** Topics carrying live state, on top of the ones driving the post-download pipeline. */
+const SUBSCRIBED_TOPICS = [
+  'download::completed',
+  'download::list',
+  'download::registered',
+  'download::progress',
+  'download::failed',
+  'download::canceled',
+  'download::removed',
+];
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 60000;
@@ -72,8 +78,10 @@ type FetchrPluginInfo = { name: string; urlPattern: string };
 type CompiledPlugin = { name: string; pattern: RegExp };
 
 @Injectable()
-export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
+export class FetchrSyncService extends Emitter<FetchrSyncEvents> implements OnModuleInit, OnModuleDestroy {
   private static readonly logger = new Logger(FetchrSyncService.name);
+
+  private readonly live = new Map<string, LiveDownload>();
 
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -92,7 +100,13 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
     private readonly localPrefix: string,
     private readonly fetchrApiKey?: string,
   ) {
+    super();
     this.fetchrApiUrl = fetchrUrl.replace(/^ws/, 'http');
+  }
+
+  /** Snapshot of everything Fetchr currently holds, freshest first. */
+  liveDownloads(): LiveDownload[] {
+    return [...this.live.values()];
   }
 
   onModuleInit(): void {
@@ -220,7 +234,7 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
   private subscribe(): void {
     this.send({
       topic: 'subscribe',
-      payload: { topics: ['download::completed', 'download::list'] },
+      payload: { topics: SUBSCRIBED_TOPICS },
     });
   }
 
@@ -298,12 +312,16 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleMessage(msg: FetchrMessage): Promise<void> {
+    if (applyFetchrEvent(this.live, msg)) {
+      this.emit('liveChanged', undefined);
+    }
+
     if (msg.topic === 'download::completed') {
       await this.handleCompleted(msg.payload as FetchrCompletedEvent);
       return;
     }
     if (msg.topic === 'download::list') {
-      await this.handleList(msg.payload as FetchrListItem[]);
+      await this.handleList(msg.payload as LiveDownload[]);
       return;
     }
   }
@@ -335,7 +353,7 @@ export class FetchrSyncService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async handleList(items: FetchrListItem[]): Promise<void> {
+  private async handleList(items: LiveDownload[]): Promise<void> {
     const completed = items.filter((i) => i.status === 'completed');
     if (completed.length === 0) {
       return;
