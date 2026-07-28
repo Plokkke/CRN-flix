@@ -1,8 +1,8 @@
 import { Logger } from '@nestjs/common';
 
-import { Indexer, IndexerCandidate } from '@/modules/indexer/contract';
+import { Indexer, IndexerCandidate, IndexerMedia } from '@/modules/indexer/contract';
 import { Host, Language, Quality } from '@/modules/indexer/preferences';
-import { MediaInfos } from '@/services/database/medias';
+import { buildSearchQueries } from '@/modules/indexer/query';
 
 import { HydrackerApi } from './api';
 import { HydrackerTitle } from './schemas';
@@ -33,15 +33,6 @@ const QUALITY_IDS: number[] = [
 const LANG_TRUEFRENCH = 8;
 const HOST_1FICHIER = 5;
 
-function sanitizeForSearch(str: string): string {
-  return str
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function buildFiltersBase64(quality: number, episodeNumber: number | null): string {
   const filters: Record<string, unknown>[] = [
     { key: 'id_host', value: HOST_1FICHIER, valueKey: HOST_1FICHIER, isInactive: false },
@@ -68,7 +59,7 @@ export class HydrackerIndexer implements Indexer {
     this.siteHost = siteHost.replace(/\/+$/, '');
   }
 
-  async find(media: MediaInfos): Promise<IndexerCandidate[]> {
+  async find(media: IndexerMedia): Promise<IndexerCandidate[]> {
     if (!media.imdbId) {
       return [];
     }
@@ -100,8 +91,8 @@ export class HydrackerIndexer implements Indexer {
     ];
   }
 
-  private async findTitle(media: MediaInfos): Promise<HydrackerTitle | null> {
-    const queries = this.buildSearchQueries(media);
+  private async findTitle(media: IndexerMedia): Promise<HydrackerTitle | null> {
+    const queries = buildSearchQueries(media);
 
     for (const query of queries) {
       const candidates = await this.searchAndFilter(query, media);
@@ -114,35 +105,7 @@ export class HydrackerIndexer implements Indexer {
     return null;
   }
 
-  private buildSearchQueries(media: MediaInfos): string[] {
-    const seen = new Set<string>();
-    const queries: string[] = [];
-
-    const addQuery = (raw: string | null | undefined): void => {
-      if (!raw) {
-        return;
-      }
-      const sanitized = sanitizeForSearch(raw);
-      if (sanitized && !seen.has(sanitized)) {
-        seen.add(sanitized);
-        queries.push(sanitized);
-      }
-    };
-
-    addQuery(media.title);
-    addQuery(media.originalTitle);
-
-    if (media.year) {
-      addQuery(`${media.title} ${media.year}`);
-      if (media.originalTitle) {
-        addQuery(`${media.originalTitle} ${media.year}`);
-      }
-    }
-
-    return queries;
-  }
-
-  private async searchAndFilter(query: string, media: MediaInfos): Promise<HydrackerTitle[]> {
+  private async searchAndFilter(query: string, media: IndexerMedia): Promise<HydrackerTitle[]> {
     const results = await this.api.search(query);
     const expectedSeries = media.type === 'episode';
 
@@ -151,7 +114,7 @@ export class HydrackerIndexer implements Indexer {
     );
   }
 
-  private async checkAvailability(titleId: number, media: MediaInfos): Promise<string | null> {
+  private async checkAvailability(titleId: number, media: IndexerMedia): Promise<string | null> {
     const baseOptions = {
       lang: LANG_TRUEFRENCH,
       host: HOST_1FICHIER,
@@ -173,7 +136,7 @@ export class HydrackerIndexer implements Indexer {
     return null;
   }
 
-  private buildDownloadUrl(titleId: number, quality: number, media: MediaInfos): string {
+  private buildDownloadUrl(titleId: number, quality: number, media: IndexerMedia): string {
     const isEpisode = media.type === 'episode' && media.seasonNumber !== null && media.episodeNumber !== null;
     const filters = buildFiltersBase64(quality, isEpisode ? media.episodeNumber : null);
     const basePath = `${this.siteHost}/titles/${titleId}`;

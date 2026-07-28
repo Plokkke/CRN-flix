@@ -1,6 +1,24 @@
-import { MediaInfos } from '@/services/database/medias';
-
 import { EnginePreferences, Host, Language, Quality, maxSizeBytes } from './preferences';
+
+export enum MediaType {
+  Movie = 'movie',
+  Episode = 'episode',
+}
+
+/**
+ * The media description handed to indexers. Owned by the contract so that
+ * indexer implementations never depend on the engine's persistence layer.
+ */
+export type IndexerMedia = {
+  imdbId: string;
+  type: MediaType;
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  runtimeMinutes: number | null;
+};
 
 export type IndexerCandidate = {
   indexerName: string;
@@ -13,10 +31,10 @@ export type IndexerCandidate = {
 
 export interface Indexer {
   readonly name: string;
-  find(media: MediaInfos, prefs: EnginePreferences): Promise<IndexerCandidate[]>;
+  find(media: IndexerMedia, prefs: EnginePreferences): Promise<IndexerCandidate[]>;
 }
 
-export function passesPreferences(candidate: IndexerCandidate, media: MediaInfos, prefs: EnginePreferences): boolean {
+export function passesPreferences(candidate: IndexerCandidate, media: IndexerMedia, prefs: EnginePreferences): boolean {
   if (prefs.allowedQualities.length > 0 && !prefs.allowedQualities.includes(candidate.quality)) {
     return false;
   }

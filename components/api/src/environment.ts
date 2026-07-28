@@ -57,6 +57,8 @@ export const environmentVariablesSchema = z
     HYDRACKER_API_KEY: z.string().optional(),
     HYDRACKER_HOST: z.string().optional(),
     HYDRACKER_CONTACT_EMAIL: z.string().optional(),
+    LOADIX_API_HOST: z.string().optional(),
+    LOADIX_SITE_HOST: z.string().optional(),
     INDEXER_ALLOWED_QUALITIES: z.string().default(''),
     INDEXER_ALLOWED_LANGUAGES: z.string().default(''),
     INDEXER_ALLOWED_HOSTS: z.string().default(''),
@@ -114,6 +116,13 @@ export const environmentVariablesSchema = z
               apiKey: env.HYDRACKER_API_KEY,
               host: env.HYDRACKER_HOST,
               ...(env.HYDRACKER_CONTACT_EMAIL && { contactEmail: env.HYDRACKER_CONTACT_EMAIL }),
+            }
+          : null,
+      loadix:
+        env.LOADIX_API_HOST && env.LOADIX_SITE_HOST
+          ? {
+              apiHost: env.LOADIX_API_HOST,
+              siteHost: env.LOADIX_SITE_HOST,
             }
           : null,
       preferences: {

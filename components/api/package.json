@@ -19,6 +19,7 @@
     "start:debug": "npm run start:dev -- --debug",
     "start:prod": "node dist/main",
     "once": "nest start --env-file .env -- --once",
+    "indexer:find": "node --env-file .env -r ts-node/register/transpile-only -r tsconfig-paths/register src/modules/indexer/dev-cli.ts",
     "test": "npm run test:unit",
     "test:cov": "npm run test:unit:cov && npm run test:mut",
     "test:unit": "jest --passWithNoTests --config ./test/jest-unit.js",

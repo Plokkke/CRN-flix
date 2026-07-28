@@ -1,26 +1,17 @@
 import { Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 
-export enum MediaType {
-  Movie = 'movie',
-  Episode = 'episode',
-}
+import { IndexerMedia, MediaType } from '@/modules/indexer/contract';
 
-export type MediaEntity = {
+export { MediaType };
+
+export type MediaEntity = IndexerMedia & {
   id: string;
-  imdbId: string;
-  type: MediaType;
-  title: string;
-  originalTitle: string | null;
-  year: number | null;
-  seasonNumber: number | null;
-  episodeNumber: number | null;
-  runtimeMinutes: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
-export type MediaInfos = Omit<MediaEntity, 'id' | 'createdAt' | 'updatedAt'>;
+export type MediaInfos = IndexerMedia;
 
 type MediaRecord = {
   id: string;
