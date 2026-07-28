@@ -1,4 +1,4 @@
-import { EnginePreferences, Host, Language, Quality, maxSizeBytes } from './preferences';
+import { EnginePreferences, Host, isAllowed, Language, maxSizeBytes, Quality } from './preferences';
 
 export enum MediaType {
   Movie = 'movie',
@@ -35,13 +35,11 @@ export interface Indexer {
 }
 
 export function passesPreferences(candidate: IndexerCandidate, media: IndexerMedia, prefs: EnginePreferences): boolean {
-  if (prefs.allowedQualities.length > 0 && !prefs.allowedQualities.includes(candidate.quality)) {
-    return false;
-  }
-  if (prefs.allowedHosts.length > 0 && !prefs.allowedHosts.includes(candidate.host)) {
-    return false;
-  }
-  if (prefs.allowedLanguages.length > 0 && !prefs.allowedLanguages.includes(candidate.language)) {
+  if (
+    !isAllowed(prefs.allowedQualities, candidate.quality) ||
+    !isAllowed(prefs.allowedHosts, candidate.host) ||
+    !isAllowed(prefs.allowedLanguages, candidate.language)
+  ) {
     return false;
   }
   if (candidate.sizeBytes !== null && media.runtimeMinutes !== null) {

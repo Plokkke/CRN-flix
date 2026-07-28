@@ -1,10 +1,17 @@
 import { HydrackerApi, HydrackerUnparseableResponseError } from '@/modules/indexer/hydracker/api';
 import { HydrackerIndexer } from '@/modules/indexer/hydracker/indexer';
 import { HydrackerTitle } from '@/modules/indexer/hydracker/schemas';
-import { Host, Language, Quality } from '@/modules/indexer/preferences';
+import { EnginePreferences, Host, Language, Quality } from '@/modules/indexer/preferences';
 import { MediaInfos, MediaType } from '@/services/database/medias';
 
 type ApiStub = Pick<HydrackerApi, 'search' | 'listLinks'>;
+
+const ALLOW_ALL: EnginePreferences = {
+  allowedQualities: [],
+  allowedLanguages: [],
+  allowedHosts: [],
+  sizePolicy: { bytesPerMinute: {}, tolerance: 1 },
+};
 
 const SITE_HOST = 'https://hydracker.test';
 
@@ -39,7 +46,16 @@ describe('HydrackerIndexer', () => {
       const search = jest.fn();
       const indexer = buildIndexer({ search });
 
-      await expect(indexer.find({ ...baseMedia, imdbId: '' })).resolves.toEqual([]);
+      await expect(indexer.find({ ...baseMedia, imdbId: '' }, ALLOW_ALL)).resolves.toEqual([]);
+      expect(search).not.toHaveBeenCalled();
+    });
+
+    it('skips entirely when preferences exclude what hydracker can produce', async () => {
+      const search = jest.fn();
+      const indexer = buildIndexer({ search });
+
+      await expect(indexer.find(baseMedia, { ...ALLOW_ALL, allowedQualities: [Quality.HD_720P] })).resolves.toEqual([]);
+      await expect(indexer.find(baseMedia, { ...ALLOW_ALL, allowedLanguages: [Language.VOSTFR] })).resolves.toEqual([]);
       expect(search).not.toHaveBeenCalled();
     });
 
@@ -47,7 +63,7 @@ describe('HydrackerIndexer', () => {
       const search = jest.fn().mockResolvedValue([]);
       const indexer = buildIndexer({ search });
 
-      await expect(indexer.find(baseMedia)).resolves.toEqual([]);
+      await expect(indexer.find(baseMedia, ALLOW_ALL)).resolves.toEqual([]);
       expect(search).toHaveBeenCalled();
     });
 
@@ -55,23 +71,33 @@ describe('HydrackerIndexer', () => {
       const search = jest.fn().mockRejectedValue(new HydrackerUnparseableResponseError('q', '<html>'));
       const indexer = buildIndexer({ search });
 
-      await expect(indexer.find(baseMedia)).rejects.toThrow('Unparseable Hydracker response');
+      await expect(indexer.find(baseMedia, ALLOW_ALL)).rejects.toThrow('Unparseable Hydracker response');
     });
 
     it('propagates generic API errors', async () => {
       const search = jest.fn().mockRejectedValue(new Error('socket hang up'));
       const indexer = buildIndexer({ search });
 
-      await expect(indexer.find(baseMedia)).rejects.toThrow('socket hang up');
+      await expect(indexer.find(baseMedia, ALLOW_ALL)).rejects.toThrow('socket hang up');
     });
 
-    it('returns no candidate when title is found but listLinks returns false for every quality', async () => {
+    it('probes once without quality and stops when nothing is available at all', async () => {
       const search = jest.fn().mockResolvedValue([matchingTitle]);
       const listLinks = jest.fn().mockResolvedValue(false);
       const indexer = buildIndexer({ search, listLinks });
 
-      await expect(indexer.find(baseMedia)).resolves.toEqual([]);
-      expect(listLinks).toHaveBeenCalled();
+      await expect(indexer.find(baseMedia, ALLOW_ALL)).resolves.toEqual([]);
+      expect(listLinks).toHaveBeenCalledTimes(1);
+      expect(listLinks.mock.calls[0][1].quality).toBeUndefined();
+    });
+
+    it('returns no candidate when the probe passes but no listed quality has links', async () => {
+      const search = jest.fn().mockResolvedValue([matchingTitle]);
+      const listLinks = jest.fn().mockImplementation((_id, options) => Promise.resolve(options.quality === undefined));
+      const indexer = buildIndexer({ search, listLinks });
+
+      await expect(indexer.find(baseMedia, ALLOW_ALL)).resolves.toEqual([]);
+      expect(listLinks.mock.calls.length).toBeGreaterThan(1);
     });
 
     it('returns a 1080p truefrench 1fichier candidate when links are available', async () => {
@@ -79,7 +105,7 @@ describe('HydrackerIndexer', () => {
       const listLinks = jest.fn().mockResolvedValue(true);
       const indexer = buildIndexer({ search, listLinks });
 
-      const candidates = await indexer.find(baseMedia);
+      const candidates = await indexer.find(baseMedia, ALLOW_ALL);
 
       expect(candidates).toHaveLength(1);
       expect(candidates[0]).toMatchObject({
@@ -104,7 +130,7 @@ describe('HydrackerIndexer', () => {
       const listLinks = jest.fn().mockResolvedValue(true);
       const indexer = buildIndexer({ search, listLinks });
 
-      const candidates = await indexer.find(episodeMedia);
+      const candidates = await indexer.find(episodeMedia, ALLOW_ALL);
 
       expect(candidates).toHaveLength(1);
       expect(candidates[0].url).toContain('/titles/42/season/2/episode/5/download');
@@ -116,7 +142,7 @@ describe('HydrackerIndexer', () => {
       const listLinks = jest.fn().mockRejectedValue(new Error('boom'));
       const indexer = buildIndexer({ search, listLinks });
 
-      await expect(indexer.find(baseMedia)).rejects.toThrow('boom');
+      await expect(indexer.find(baseMedia, ALLOW_ALL)).rejects.toThrow('boom');
     });
 
     it('ignores search results whose type is filtered or whose series flag mismatches', async () => {
@@ -126,7 +152,7 @@ describe('HydrackerIndexer', () => {
       ]);
       const indexer = buildIndexer({ search });
 
-      await expect(indexer.find(baseMedia)).resolves.toEqual([]);
+      await expect(indexer.find(baseMedia, ALLOW_ALL)).resolves.toEqual([]);
     });
   });
 });

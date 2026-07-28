@@ -27,6 +27,14 @@ export const configSchema = z.object({
 
 export type LoadixConfig = z.infer<typeof configSchema>;
 
+/** Empty filter arrays mean "do not filter on that dimension". */
+export type ListLinksOptions = {
+  seasonId?: string;
+  qualities?: string[];
+  languages?: string[];
+  providers?: string[];
+};
+
 export class LoadixUnparseableResponseError extends Error {
   constructor(context: string, preview: string) {
     super(`Unparseable Loadix response for ${context}: ${preview}`);
@@ -98,15 +106,21 @@ export class LoadixApi {
     return this.parse(loadixMediaDetailSchema, response.data, `media ${id}`);
   }
 
-  async listLinks(mediaId: string, options: { seasonId?: string } = {}): Promise<LoadixLink[]> {
-    const response = await this.client.get(`/media/${mediaId}/links`, {
-      params: {
-        page: 1,
-        perPage: LINKS_PER_PAGE,
-        sort: 'scope_asc',
-        ...(options.seasonId && { seasonId: options.seasonId }),
-      },
+  async listLinks(mediaId: string, options: ListLinksOptions = {}): Promise<LoadixLink[]> {
+    const params = new URLSearchParams({
+      page: '1',
+      perPage: String(LINKS_PER_PAGE),
+      sort: 'scope_asc',
+      linkType: 'ddl_url',
     });
+    if (options.seasonId) {
+      params.append('seasonId', options.seasonId);
+    }
+    (options.qualities ?? []).forEach((quality) => params.append('quality', quality));
+    (options.languages ?? []).forEach((language) => params.append('language', language));
+    (options.providers ?? []).forEach((provider) => params.append('provider', provider));
+
+    const response = await this.client.get(`/media/${mediaId}/links`, { params });
 
     const parsed = this.parse(loadixLinksResponseSchema, response.data, `links of ${mediaId}`);
     if (parsed.total > parsed.items.length) {

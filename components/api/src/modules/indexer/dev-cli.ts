@@ -10,15 +10,8 @@ import { parseArgs } from 'node:util';
 import { Logger } from '@nestjs/common';
 
 import { IndexerMedia, MediaType, passesPreferences } from './contract';
-import { EnginePreferences } from './preferences';
+import { preferencesFromEnv } from './preferences';
 import { createIndexers, IndexersConfig } from './registry';
-
-const ALLOW_ALL_PREFERENCES: EnginePreferences = {
-  allowedQualities: [],
-  allowedLanguages: [],
-  allowedHosts: [],
-  sizePolicy: { bytesPerMinute: {}, tolerance: 1 },
-};
 
 const USAGE = `Usage: npm run indexer:find -- [indexer] --imdb <tt...> --title <title> [options]
 
@@ -126,14 +119,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const prefs = preferencesFromEnv(process.env);
+  console.log(`Preferences (from INDEXER_* env, empty = allow all): ${JSON.stringify(prefs)}`);
+
   for (const indexer of indexers) {
     console.log(`\n▶ ${indexer.name} — ${media.title} (${media.imdbId}, ${media.type})`);
     const startedAt = Date.now();
-    const candidates = await indexer.find(media, ALLOW_ALL_PREFERENCES);
+    const candidates = await indexer.find(media, prefs);
     console.log(`  ${candidates.length} candidate(s) in ${Date.now() - startedAt}ms`);
 
     for (const candidate of candidates) {
-      const eligible = passesPreferences(candidate, media, ALLOW_ALL_PREFERENCES);
+      const eligible = passesPreferences(candidate, media, prefs);
       console.log(`  ${eligible ? '✔' : '✘'} ${JSON.stringify(candidate, null, 2)}`);
     }
   }

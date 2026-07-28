@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 
 import { Indexer, IndexerCandidate, IndexerMedia } from '@/modules/indexer/contract';
-import { Host, Language, Quality } from '@/modules/indexer/preferences';
+import { EnginePreferences, Host, isAllowed, Language, Quality } from '@/modules/indexer/preferences';
 import { buildSearchQueries } from '@/modules/indexer/query';
 
 import { HydrackerApi } from './api';
@@ -59,8 +59,8 @@ export class HydrackerIndexer implements Indexer {
     this.siteHost = siteHost.replace(/\/+$/, '');
   }
 
-  async find(media: IndexerMedia): Promise<IndexerCandidate[]> {
-    if (!media.imdbId) {
+  async find(media: IndexerMedia, prefs: EnginePreferences): Promise<IndexerCandidate[]> {
+    if (!media.imdbId || !HydrackerIndexer.canSatisfy(prefs)) {
       return [];
     }
 
@@ -114,6 +114,15 @@ export class HydrackerIndexer implements Indexer {
     );
   }
 
+  /** Hydracker only ever yields 1080p truefrench 1fichier candidates: skip everything when excluded. */
+  private static canSatisfy(prefs: EnginePreferences): boolean {
+    return (
+      isAllowed(prefs.allowedQualities, Quality.HD_1080P) &&
+      isAllowed(prefs.allowedLanguages, Language.TRUEFRENCH) &&
+      isAllowed(prefs.allowedHosts, Host.ONE_FICHIER)
+    );
+  }
+
   private async checkAvailability(titleId: number, media: IndexerMedia): Promise<string | null> {
     const baseOptions = {
       lang: LANG_TRUEFRENCH,
@@ -125,6 +134,13 @@ export class HydrackerIndexer implements Indexer {
           episode: media.episodeNumber,
         }),
     };
+
+    // One unfiltered probe first: when nothing exists at all (the common case),
+    // it saves the whole quality-by-quality refinement below.
+    const anyAvailable = await this.api.listLinks(titleId, baseOptions);
+    if (!anyAvailable) {
+      return null;
+    }
 
     for (const quality of QUALITY_IDS) {
       const available = await this.api.listLinks(titleId, { ...baseOptions, quality });

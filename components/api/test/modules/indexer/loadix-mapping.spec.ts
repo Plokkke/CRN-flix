@@ -1,4 +1,11 @@
-import { mapHost, mapLanguage, mapQuality } from '@/modules/indexer/loadix/mapping';
+import {
+  loadixLanguageLabels,
+  loadixProviderLabels,
+  loadixQualityLabels,
+  mapHost,
+  mapLanguage,
+  mapQuality,
+} from '@/modules/indexer/loadix/mapping';
 import { Host, Language, Quality } from '@/modules/indexer/preferences';
 
 describe('loadix mapping', () => {
@@ -9,25 +16,49 @@ describe('loadix mapping', () => {
       ['HDLight 1080p', Quality.HD_1080P],
       ['HDLight 1080p (x265)', Quality.HD_1080P],
       ['WEB 1080p (x265)', Quality.HD_1080P],
+      ['WEB 1080p Light', Quality.HD_1080P],
+      ['HDTV 1080p', Quality.HD_1080P],
+      ['HD 1080p', Quality.HD_1080P],
+      ['REMUX BLURAY', Quality.HD_1080P],
       ['WEB 720p', Quality.HD_720P],
-      ['4K UHD', Quality.UHD_4K],
-      ['REMUX 2160p', Quality.UHD_4K],
+      ['HDLight 720p', Quality.HD_720P],
+      ['Blu-Ray 720p', Quality.HD_720P],
+      ['4K', Quality.UHD_4K],
+      ['4K HDR', Quality.UHD_4K],
+      ['UHD', Quality.UHD_4K],
+      ['ULTRA HD (x265)', Quality.UHD_4K],
+      ['Ultra HDLight (x265)', Quality.UHD_4K],
+      ['REMUX UHD', Quality.UHD_4K],
       ['DVDRIP', Quality.SD],
-    ])('maps "%s" from the quality label alone', (raw, expected) => {
-      expect(mapQuality(raw, null)).toBe(expected);
+      ['DVDRIP MKV', Quality.SD],
+      ['DVD-R', Quality.SD],
+      ['Full-DVD', Quality.SD],
+      ['TVrip', Quality.SD],
+      ['REMUX DVD', Quality.SD],
+    ])('maps "%s"', (raw, expected) => {
+      expect(mapQuality(raw)).toBe(expected);
     });
 
-    it('falls back to the release filename when the label has no resolution', () => {
-      expect(mapQuality('REMUX BLURAY', 'Taxi.1998.FRENCH.1080p.BluRay.REMUX.AVC-A.H.mkv')).toBe(Quality.HD_1080P);
-    });
-
-    it('prefers the label resolution over the filename', () => {
-      expect(mapQuality('WEB 720p', 'Show.S01E01.1080p.mkv')).toBe(Quality.HD_720P);
-    });
-
-    it('returns unknown when no resolution is found anywhere', () => {
-      expect(mapQuality('REMUX BLURAY', null)).toBe(Quality.UNKNOWN);
-      expect(mapQuality('REMUX BLURAY', 'no-resolution-here.mkv')).toBe(Quality.UNKNOWN);
+    it.each([
+      ['CAM'],
+      ['TS'],
+      ['TC'],
+      ['DVDSCR'],
+      ['R5'],
+      ['DVDRIP MD'],
+      ['BDRIP LD'],
+      ['HDRiP MD'],
+      ['BRRIP MD'],
+      ['WEB'],
+      ['WEBRIP'],
+      ['WEB-DL'],
+      ['HDRip'],
+      ['HDTV'],
+      ['BDRIP'],
+      ['BRRIP'],
+      ['Autre'],
+    ])('maps junk or resolution-less label "%s" to unknown', (raw) => {
+      expect(mapQuality(raw)).toBe(Quality.UNKNOWN);
     });
   });
 
@@ -35,17 +66,47 @@ describe('loadix mapping', () => {
     it.each([
       ['VFF', Language.TRUEFRENCH],
       ['TRUEFRENCH', Language.TRUEFRENCH],
+      ['VFF+VOSTFR', Language.TRUEFRENCH],
+      ['VFF+VOA', Language.TRUEFRENCH],
       ['MULTi VFF', Language.MULTI],
+      ['MULTi TRUEFRENCH', Language.MULTI],
+      ['MULTi VOA', Language.MULTI],
       ['MULTI', Language.MULTI],
       ['VOSTFR', Language.VOSTFR],
+      ['VOSTFR HC', Language.VOSTFR],
+      ['VOSTFR HD', Language.VOSTFR],
+      ['VOST', Language.VOSTFR],
       ['VFQ', Language.FRENCH],
-      ['FRENCH', Language.FRENCH],
-      ['VF', Language.FRENCH],
+      ['VFI', Language.FRENCH],
+      ['VFB', Language.FRENCH],
+      ['French', Language.FRENCH],
+      ['French (Canada)', Language.FRENCH],
       ['VO', Language.ENGLISH],
-      ['ENGLISH', Language.ENGLISH],
-      ['KLINGON', Language.UNKNOWN],
+      ['VOA', Language.ENGLISH],
+      ['English', Language.ENGLISH],
+      ['Spanish', Language.UNKNOWN],
+      ['Japanese', Language.UNKNOWN],
     ])('maps "%s"', (raw, expected) => {
       expect(mapLanguage(raw)).toBe(expected);
+    });
+  });
+
+  describe('reverse label lookups (server-side search filters)', () => {
+    it('expands allowed enums into every matching Loadix label', () => {
+      const labels = loadixQualityLabels([Quality.HD_1080P]);
+      expect(labels).toEqual(expect.arrayContaining(['HDLight 1080p', 'REMUX BLURAY', 'Blu-Ray 1080p (x265)']));
+      expect(labels).not.toEqual(expect.arrayContaining(['CAM', 'WEB 720p', '4K']));
+
+      expect(loadixLanguageLabels([Language.TRUEFRENCH])).toEqual(
+        expect.arrayContaining(['VFF', 'TRUEFRENCH', 'VFF+VOSTFR']),
+      );
+      expect(loadixProviderLabels([Host.ONE_FICHIER])).toEqual(['1fichier']);
+    });
+
+    it('returns no filter when everything is allowed or unknown is allowed', () => {
+      expect(loadixQualityLabels([])).toEqual([]);
+      expect(loadixQualityLabels([Quality.HD_1080P, Quality.UNKNOWN])).toEqual([]);
+      expect(loadixLanguageLabels([Language.UNKNOWN])).toEqual([]);
     });
   });
 

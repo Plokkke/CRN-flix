@@ -1,10 +1,18 @@
 import { Logger } from '@nestjs/common';
 
 import { Indexer, IndexerCandidate, IndexerMedia, MediaType } from '@/modules/indexer/contract';
+import { EnginePreferences } from '@/modules/indexer/preferences';
 import { buildSearchQueries } from '@/modules/indexer/query';
 
 import { LoadixApi } from './api';
-import { mapHost, mapLanguage, mapQuality } from './mapping';
+import {
+  loadixLanguageLabels,
+  loadixProviderLabels,
+  loadixQualityLabels,
+  mapHost,
+  mapLanguage,
+  mapQuality,
+} from './mapping';
 import { LoadixLink, LoadixMediaDetail, LoadixSearchHit } from './schemas';
 
 /** Matching costs one detail fetch per plausible hit; cap them so one find() stays cheap. */
@@ -24,7 +32,7 @@ export class LoadixIndexer implements Indexer {
     this.siteHost = siteHost.replace(/\/+$/, '');
   }
 
-  async find(media: IndexerMedia): Promise<IndexerCandidate[]> {
+  async find(media: IndexerMedia, prefs: EnginePreferences): Promise<IndexerCandidate[]> {
     if (!media.imdbId) {
       return [];
     }
@@ -35,7 +43,7 @@ export class LoadixIndexer implements Indexer {
       return [];
     }
 
-    const links = await this.findLinks(match, media);
+    const links = await this.findLinks(match, media, prefs);
     LoadixIndexer.logger.log(`Loadix "${match.media.title}" (${match.media.id}): ${links.length} usable link(s)`);
 
     return links.map((link) => this.toCandidate(link, match.media.id));
@@ -68,7 +76,11 @@ export class LoadixIndexer implements Indexer {
     return null;
   }
 
-  private async findLinks(detail: LoadixMediaDetail, media: IndexerMedia): Promise<LoadixLink[]> {
+  private async findLinks(
+    detail: LoadixMediaDetail,
+    media: IndexerMedia,
+    prefs: EnginePreferences,
+  ): Promise<LoadixLink[]> {
     const isEpisode = media.type === MediaType.Episode;
 
     let seasonId: string | undefined;
@@ -79,7 +91,12 @@ export class LoadixIndexer implements Indexer {
       }
     }
 
-    const links = await this.api.listLinks(detail.media.id, { seasonId });
+    const links = await this.api.listLinks(detail.media.id, {
+      seasonId,
+      qualities: loadixQualityLabels(prefs.allowedQualities),
+      languages: loadixLanguageLabels(prefs.allowedLanguages),
+      providers: loadixProviderLabels(prefs.allowedHosts),
+    });
     return links.filter(
       (link) =>
         link.status === 'validated' &&
@@ -94,7 +111,7 @@ export class LoadixIndexer implements Indexer {
     return {
       indexerName: this.name,
       url: `${this.siteHost}/media/${mediaId}`,
-      quality: mapQuality(link.quality, link.releaseGroup ?? null),
+      quality: mapQuality(link.quality),
       language: mapLanguage(link.language),
       host: mapHost(link.provider),
       sizeBytes: Number.isFinite(sizeBytes) ? sizeBytes : null,

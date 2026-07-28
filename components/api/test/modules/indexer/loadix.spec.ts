@@ -2,9 +2,18 @@ import { IndexerMedia, MediaType } from '@/modules/indexer/contract';
 import { LoadixApi } from '@/modules/indexer/loadix/api';
 import { LoadixIndexer } from '@/modules/indexer/loadix/indexer';
 import { LoadixLink, LoadixMediaDetail, LoadixSearchHit } from '@/modules/indexer/loadix/schemas';
-import { Host, Language, Quality } from '@/modules/indexer/preferences';
+import { EnginePreferences, Host, Language, Quality } from '@/modules/indexer/preferences';
 
 type ApiStub = Pick<LoadixApi, 'search' | 'getMedia' | 'listLinks'>;
+
+const ALLOW_ALL: EnginePreferences = {
+  allowedQualities: [],
+  allowedLanguages: [],
+  allowedHosts: [],
+  sizePolicy: { bytesPerMinute: {}, tolerance: 1 },
+};
+
+const NO_SERVER_FILTERS = { qualities: [], languages: [], providers: [] };
 
 const SITE_HOST = 'https://loadix.test';
 const MEDIA_ID = '78b22d3e-00d5-40b6-85c2-714c22d43f90';
@@ -67,7 +76,7 @@ describe('LoadixIndexer', () => {
     const search = jest.fn();
     const indexer = buildIndexer({ search });
 
-    await expect(indexer.find({ ...movieMedia, imdbId: '' })).resolves.toEqual([]);
+    await expect(indexer.find({ ...movieMedia, imdbId: '' }, ALLOW_ALL)).resolves.toEqual([]);
     expect(search).not.toHaveBeenCalled();
   });
 
@@ -79,7 +88,7 @@ describe('LoadixIndexer', () => {
     });
     const indexer = buildIndexer({ search, getMedia });
 
-    await expect(indexer.find(movieMedia)).resolves.toEqual([]);
+    await expect(indexer.find(movieMedia, ALLOW_ALL)).resolves.toEqual([]);
   });
 
   it('maps movie links into candidates pointing at the media page', async () => {
@@ -88,7 +97,7 @@ describe('LoadixIndexer', () => {
     const listLinks = jest.fn().mockResolvedValue([movieLink]);
     const indexer = buildIndexer({ search, getMedia, listLinks });
 
-    const candidates = await indexer.find(movieMedia);
+    const candidates = await indexer.find(movieMedia, ALLOW_ALL);
 
     expect(candidates).toEqual([
       {
@@ -100,7 +109,39 @@ describe('LoadixIndexer', () => {
         sizeBytes: 2988241207,
       },
     ]);
-    expect(listLinks).toHaveBeenCalledWith(MEDIA_ID, { seasonId: undefined });
+    expect(listLinks).toHaveBeenCalledWith(MEDIA_ID, { seasonId: undefined, ...NO_SERVER_FILTERS });
+  });
+
+  it('forwards the allowed preferences as Loadix search filters', async () => {
+    const search = jest.fn().mockResolvedValue([movieHit]);
+    const getMedia = jest.fn().mockResolvedValue(movieDetail);
+    const listLinks = jest.fn().mockResolvedValue([movieLink]);
+    const indexer = buildIndexer({ search, getMedia, listLinks });
+
+    await indexer.find(movieMedia, {
+      ...ALLOW_ALL,
+      allowedQualities: [Quality.HD_1080P],
+      allowedLanguages: [Language.TRUEFRENCH, Language.MULTI],
+      allowedHosts: [Host.ONE_FICHIER],
+    });
+
+    const options = listLinks.mock.calls[0][1];
+    expect(options.qualities).toEqual(expect.arrayContaining(['HDLight 1080p', 'REMUX BLURAY', 'WEB 1080p (x265)']));
+    expect(options.qualities).not.toEqual(expect.arrayContaining(['CAM', 'WEB 720p']));
+    expect(options.languages).toEqual(expect.arrayContaining(['VFF', 'TRUEFRENCH', 'MULTi VFF']));
+    expect(options.languages).not.toEqual(expect.arrayContaining(['VOSTFR', 'English']));
+    expect(options.providers).toEqual(['1fichier']);
+  });
+
+  it('sends no server filter for a dimension that allows unknown', async () => {
+    const search = jest.fn().mockResolvedValue([movieHit]);
+    const getMedia = jest.fn().mockResolvedValue(movieDetail);
+    const listLinks = jest.fn().mockResolvedValue([movieLink]);
+    const indexer = buildIndexer({ search, getMedia, listLinks });
+
+    await indexer.find(movieMedia, { ...ALLOW_ALL, allowedQualities: [Quality.HD_1080P, Quality.UNKNOWN] });
+
+    expect(listLinks.mock.calls[0][1].qualities).toEqual([]);
   });
 
   it('excludes links that are not validated ddl urls', async () => {
@@ -112,7 +153,7 @@ describe('LoadixIndexer', () => {
     ]);
     const indexer = buildIndexer({ search, getMedia, listLinks });
 
-    await expect(indexer.find(movieMedia)).resolves.toEqual([]);
+    await expect(indexer.find(movieMedia, ALLOW_ALL)).resolves.toEqual([]);
   });
 
   it('ignores hits with the wrong type, no links, or a far-off year', async () => {
@@ -124,7 +165,7 @@ describe('LoadixIndexer', () => {
     const getMedia = jest.fn();
     const indexer = buildIndexer({ search, getMedia });
 
-    await expect(indexer.find(movieMedia)).resolves.toEqual([]);
+    await expect(indexer.find(movieMedia, ALLOW_ALL)).resolves.toEqual([]);
     expect(getMedia).not.toHaveBeenCalled();
   });
 
@@ -137,7 +178,7 @@ describe('LoadixIndexer', () => {
     });
     const indexer = buildIndexer({ search, getMedia });
 
-    await expect(indexer.find(movieMedia)).resolves.toEqual([]);
+    await expect(indexer.find(movieMedia, ALLOW_ALL)).resolves.toEqual([]);
     expect(getMedia).toHaveBeenCalledTimes(5);
   });
 
@@ -164,9 +205,9 @@ describe('LoadixIndexer', () => {
     const listLinks = jest.fn().mockResolvedValue([episodeLink, { ...episodeLink, episodeNumber: 3 }]);
     const indexer = buildIndexer({ search, getMedia, listLinks });
 
-    const candidates = await indexer.find(episodeMedia);
+    const candidates = await indexer.find(episodeMedia, ALLOW_ALL);
 
-    expect(listLinks).toHaveBeenCalledWith('series-id', { seasonId: 'season-3' });
+    expect(listLinks).toHaveBeenCalledWith('series-id', { seasonId: 'season-3', ...NO_SERVER_FILTERS });
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toMatchObject({
       quality: Quality.HD_1080P,
@@ -185,7 +226,7 @@ describe('LoadixIndexer', () => {
     const listLinks = jest.fn();
     const indexer = buildIndexer({ search, getMedia, listLinks });
 
-    await expect(indexer.find(episodeMedia)).resolves.toEqual([]);
+    await expect(indexer.find(episodeMedia, ALLOW_ALL)).resolves.toEqual([]);
     expect(listLinks).not.toHaveBeenCalled();
   });
 
@@ -193,6 +234,6 @@ describe('LoadixIndexer', () => {
     const search = jest.fn().mockRejectedValue(new Error('boom'));
     const indexer = buildIndexer({ search });
 
-    await expect(indexer.find(movieMedia)).rejects.toThrow('boom');
+    await expect(indexer.find(movieMedia, ALLOW_ALL)).rejects.toThrow('boom');
   });
 });
