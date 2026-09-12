@@ -9,6 +9,7 @@ import {
   GuildMember,
   Interaction,
   Message,
+  MessageCreateOptions,
   MessageReaction,
   PartialMessageReaction,
   Partials,
@@ -72,6 +73,23 @@ export class DiscordService implements OnModuleDestroy {
       throw new Error(`Message with ID ${threadId} not found`);
     }
     return message;
+  }
+
+  static async startThread(message: Message, name: string): Promise<ThreadChannel> {
+    return message.startThread({ name: name.slice(0, 100), autoArchiveDuration: 10080 });
+  }
+
+  static async sendInThread(channel: TextChannel, threadId: string, content: MessageCreateOptions): Promise<Message> {
+    const thread = await this.getThread(channel, threadId);
+    if (thread.archived) {
+      await thread.setArchived(false);
+    }
+    return thread.send(content);
+  }
+
+  static async setThreadArchived(channel: TextChannel, threadId: string, archived: boolean): Promise<void> {
+    const thread = await this.getThread(channel, threadId);
+    await thread.setArchived(archived);
   }
 
   private readonly client: Client;

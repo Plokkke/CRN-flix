@@ -1,4 +1,8 @@
-import { IndexerMedia } from './contract';
+export type SearchableTitle = {
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+};
 
 export function sanitizeForSearch(str: string): string {
   return str
@@ -10,7 +14,7 @@ export function sanitizeForSearch(str: string): string {
 }
 
 /** Deduplicated search queries derived from titles and year, most specific last. */
-export function buildSearchQueries(media: IndexerMedia): string[] {
+export function buildSearchQueries(media: SearchableTitle): string[] {
   const seen = new Set<string>();
   const queries: string[] = [];
 

@@ -6,8 +6,9 @@ import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
 import { ContextService } from '@/services/context';
 import { UsersRepository } from '@/services/database/users';
-import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
 import { registrationFormTemplate } from '@/services/messaging/user/email/templates';
+import { TicketCategory } from '@/services/tickets/model';
+import { TicketService } from '@/services/tickets/ticket.service';
 
 const registrationSchema = z.object({
   email: z.email('Email invalide'),
@@ -21,7 +22,7 @@ export class UsersController {
   constructor(
     private readonly contextService: ContextService,
     private readonly usersRepository: UsersRepository,
-    private readonly discordAdminMessaging: DiscordAdminMessaging,
+    private readonly ticketService: TicketService,
     private readonly trakt: TraktApi,
     private readonly traktPlugin: TraktPlugin,
   ) {}
@@ -50,7 +51,12 @@ export class UsersController {
         validatedData.username,
       );
 
-      await this.discordAdminMessaging.newRegistrationRequest(user);
+      await this.ticketService.open(
+        TicketCategory.UserApproval,
+        { type: 'user', id: user.id },
+        { userId: user.id },
+        { title: `Nouvelle demande d'inscription: ${user.name}` },
+      );
 
       return { success: true, message: "Votre demande d'inscription a été envoyée avec succès." };
     } catch (error) {

@@ -1,7 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 
-import { DiscordWired } from './discord-wired';
+export enum UserStatus {
+  Pending = 'pending',
+  Active = 'active',
+}
 
 export type UserEntity = {
   id: string;
@@ -9,7 +12,7 @@ export type UserEntity = {
   jellyfinId: string | null;
   messagingKey: string;
   messagingId: string;
-  discordMessageId: string | null;
+  status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -20,7 +23,7 @@ type UserRecord = {
   jellyfin_id: string | null;
   messaging_key: string;
   messaging_id: string;
-  discord_message_id: string | null;
+  status: UserStatus;
   created_at: Date;
   updated_at: Date;
 };
@@ -32,13 +35,13 @@ function fromUserRecord(record: UserRecord): UserEntity {
     jellyfinId: record.jellyfin_id,
     messagingKey: record.messaging_key,
     messagingId: record.messaging_id,
-    discordMessageId: record.discord_message_id,
+    status: record.status,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
 }
 
-export class UsersRepository implements DiscordWired<UserEntity> {
+export class UsersRepository {
   static readonly logger = new Logger(UsersRepository.name);
 
   constructor(private readonly pool: Pool) {}
@@ -62,16 +65,6 @@ export class UsersRepository implements DiscordWired<UserEntity> {
     return rows.length ? fromUserRecord(rows[0]) : null;
   }
 
-  async getByDiscordMessageId(discordMessageId: string): Promise<UserEntity | null> {
-    const query = `
-      SELECT *
-      FROM users
-      WHERE discord_message_id = $1
-    `;
-    const { rows } = await this.pool.query<UserRecord>(query, [discordMessageId]);
-    return rows.length ? fromUserRecord(rows[0]) : null;
-  }
-
   async getByMessagingInfos(messagingKey: string, messagingId: string): Promise<UserEntity | null> {
     const query = `
       SELECT *
@@ -79,6 +72,12 @@ export class UsersRepository implements DiscordWired<UserEntity> {
       WHERE messaging_key = $1 AND messaging_id = $2
     `;
     const { rows } = await this.pool.query<UserRecord>(query, [messagingKey, messagingId]);
+    return rows.length ? fromUserRecord(rows[0]) : null;
+  }
+
+  async getByName(name: string): Promise<UserEntity | null> {
+    const query = `SELECT * FROM users WHERE LOWER(name) = LOWER($1) LIMIT 1`;
+    const { rows } = await this.pool.query<UserRecord>(query, [name]);
     return rows.length ? fromUserRecord(rows[0]) : null;
   }
 
@@ -98,15 +97,6 @@ export class UsersRepository implements DiscordWired<UserEntity> {
     return fromUserRecord(rows[0]);
   }
 
-  async linkDiscordMessageId(userId: string, discordMessageId: string): Promise<void> {
-    const query = `
-      UPDATE users
-      SET discord_message_id = $2
-      WHERE id = $1
-    `;
-    await this.pool.query(query, [userId, discordMessageId]);
-  }
-
   async remove(userId: string): Promise<void> {
     await this.pool.query(`DELETE FROM users WHERE id = $1`, [userId]);
   }
@@ -118,5 +108,9 @@ export class UsersRepository implements DiscordWired<UserEntity> {
       WHERE id = $1
     `;
     await this.pool.query(query, [userId, jellyfinId]);
+  }
+
+  async setStatus(userId: string, status: UserStatus): Promise<void> {
+    await this.pool.query(`UPDATE users SET status = $2 WHERE id = $1`, [userId, status]);
   }
 }

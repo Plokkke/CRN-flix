@@ -4,8 +4,10 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 
 import { DownloadJobEntity, DownloadJobsRepository, DownloadJobStatus } from './database/download-jobs';
+import { TicketsRepository } from './database/tickets';
 import { MediaIdentifierService } from './media-identifier';
 import { MediaLabelizerService } from './media-labelizer';
+import { TICKET_ID_METADATA_KEY, TicketCategory, TicketPayloadMap } from './tickets/model';
 
 const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.m4v', '.wmv', '.flv', '.mov', '.webm']);
 
@@ -16,6 +18,7 @@ export class PostDownloadPipeline {
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly identification: MediaIdentifierService,
     private readonly placement: MediaLabelizerService,
+    private readonly tickets: TicketsRepository,
   ) {}
 
   async processJob(jobId: string): Promise<void> {
@@ -65,7 +68,7 @@ export class PostDownloadPipeline {
   }
 
   private async resolveIdentity(videoFile: string, job: DownloadJobEntity) {
-    const requestId = job.metadata?.['crn-flix-request-id'];
+    const requestId = (await this.ticketRequestId(job)) ?? job.metadata?.['crn-flix-request-id'];
     if (requestId) {
       PostDownloadPipeline.logger.log(`Job ${job.id} — resolving via metadata request ID: ${requestId}`);
       const identity = await this.identification.identifyFromRequest(videoFile, requestId, job.id);
@@ -85,6 +88,19 @@ export class PostDownloadPipeline {
 
     PostDownloadPipeline.logger.log(`Job ${job.id} — resolving via filename identification`);
     return this.identification.identify(videoFile, job.id);
+  }
+
+  /** Metadata is frozen when Fetchr registers the download; the ticket carries later corrections. */
+  private async ticketRequestId(job: DownloadJobEntity): Promise<string | undefined> {
+    const ticketId = job.metadata?.[TICKET_ID_METADATA_KEY];
+    if (!ticketId) {
+      return undefined;
+    }
+    const ticket = await this.tickets.get(ticketId);
+    if (ticket?.category !== TicketCategory.ManualDownload) {
+      return undefined;
+    }
+    return (ticket.payload as TicketPayloadMap[TicketCategory.ManualDownload]).requestId;
   }
 
   async retryWithImdbId(jobId: string, imdbId: string): Promise<void> {

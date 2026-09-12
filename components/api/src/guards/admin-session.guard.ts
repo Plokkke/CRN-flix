@@ -1,40 +1,21 @@
-import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable, SetMetadata } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Request } from 'express';
 
-import { readCookie } from '@/helpers/cookies';
+import { SessionGuard, SessionGuardOptions } from '@/guards/session.guard';
 import { ADMIN_SESSION_COOKIE, AdminAuthService } from '@/services/admin-auth';
 
-const SKIP_ADMIN_AUTH = 'skipAdminAuth';
+export { SkipSessionAuth as SkipAdminAuth } from '@/guards/session.guard';
 
-/** Marks a route as reachable without an admin session (the login flow itself). */
-export const SkipAdminAuth = (): MethodDecorator & ClassDecorator => SetMetadata(SKIP_ADMIN_AUTH, true);
-
-/** Thrown when no valid session cookie is present; the filter turns it into a redirect. */
-export class AdminAuthRequiredException extends HttpException {
-  constructor() {
-    super('Admin session required', HttpStatus.UNAUTHORIZED);
-  }
-}
-
+/** Sets `request.adminUserId` to the admin's Discord id. */
 @Injectable()
-export class AdminSessionGuard implements CanActivate {
-  constructor(
-    private readonly adminAuth: AdminAuthService,
-    private readonly reflector: Reflector,
-  ) {}
+export class AdminSessionGuard extends SessionGuard {
+  protected readonly options: SessionGuardOptions = {
+    cookieName: ADMIN_SESSION_COOKIE,
+    loginPath: '/admin/login',
+    requestKey: 'adminUserId',
+  };
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_ADMIN_AUTH, [context.getHandler(), context.getClass()]);
-    if (skip) {
-      return true;
-    }
-
-    const request = context.switchToHttp().getRequest<Request>();
-    const token = readCookie(request.headers.cookie, ADMIN_SESSION_COOKIE);
-    if (!token || !(await this.adminAuth.validateSession(token))) {
-      throw new AdminAuthRequiredException();
-    }
-    return true;
+  constructor(adminAuth: AdminAuthService, reflector: Reflector) {
+    super(adminAuth, reflector);
   }
 }

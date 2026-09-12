@@ -36,6 +36,19 @@ export const escapeHtml = (value: string): string =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+const MARKDOWN_LINK = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+const BARE_URL = /(^|[^"'>=])(https?:\/\/[^\s<]+)/g;
+
+const anchor = (href: string, label: string): string =>
+  `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+
+// Escapes a value, then turns markdown links `[label](url)` and bare URLs into anchors.
+// Ticket views share Discord's markdown for links; the web adapter needs real anchors.
+export const renderRichText = (value: string): string =>
+  escapeHtml(value)
+    .replace(MARKDOWN_LINK, (_match, label: string, href: string) => anchor(href, label))
+    .replace(BARE_URL, (_match, prefix: string, href: string) => `${prefix}${anchor(href, href)}`);
+
 // Typography styles (inline)
 export const TYPOGRAPHY = {
   h1: 'font-size: 24px; font-weight: bold; color: #1e1e2a; margin: 0 0 20px 0; line-height: 1.2;',

@@ -23,9 +23,6 @@ export type RequestEntity = {
   status: RequestStatus;
   createdAt: Date;
   updatedAt: Date;
-  discordMessageId: string | null;
-  indexerName: string | null;
-  indexerLink: string | null;
   media?: MediaEntity;
   userRequests?: RequestUserEntity[];
 };
@@ -47,12 +44,23 @@ export type SyncRequestSnapshot = {
   userReasons: { userId: string; reasons: string[] }[];
 };
 
+/** One media of a show (or a movie) as the planner loads it: intent, availability, users. */
+export type PlannerStateRow = {
+  mediaId: string;
+  imdbId: string;
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  runtimeMinutes: number | null;
+  status: RequestStatus | null;
+  userIds: string[];
+};
+
 type RequestRecord = {
   media_id: string;
   status: RequestStatus;
-  discord_message_id: string | null;
-  indexer_name: string | null;
-  indexer_link: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -69,9 +77,6 @@ function fromRequestRecord(record: RequestRecord): RequestEntity {
   return {
     mediaId: record.media_id,
     status: record.status,
-    discordMessageId: record.discord_message_id,
-    indexerName: record.indexer_name,
-    indexerLink: record.indexer_link,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -227,9 +232,6 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                 json_build_object(
                     'mediaId', request.media_id,
                     'status', request.status,
-                    'discordMessageId', request.discord_message_id,
-                    'indexerName', request.indexer_name,
-                    'indexerLink', request.indexer_link,
                     'createdAt', request.created_at,
                     'updatedAt', request.updated_at,
                     'media', json_build_object(
@@ -242,11 +244,12 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                         'seasonNumber', media.season_number,
                         'episodeNumber', media.episode_number,
                         'runtimeMinutes', media.runtime_minutes,
+            'traktSlug', media.trakt_slug,
                         'createdAt', media.created_at,
                         'updatedAt', media.updated_at
                     ),
                     'userRequests', (
-                        SELECT json_agg(
+                        SELECT COALESCE(json_agg(
                             json_build_object(
                                 'requestId', ru.request_media_id,
                                 'userId', ru.user_id,
@@ -259,12 +262,12 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                                     'jellyfinId', u.jellyfin_id,
                                     'messagingKey', u.messaging_key,
                                     'messagingId', u.messaging_id,
-                                    'discordMessageId', u.discord_message_id,
+                                    'status', u.status,
                                     'createdAt', u.created_at,
                                     'updatedAt', u.updated_at
                                 )
                             ) ORDER BY ru.created_at DESC -- Order users within the request
-                        )
+                        ), '[]'::json)
                         FROM request_users ru
                         LEFT JOIN users u ON u.id = ru.user_id
                         WHERE ru.request_media_id = request.media_id
@@ -307,17 +310,6 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     `;
     const { rows } = await this.pool.query<RequestUserRecord>(query, [mediaId]);
     return rows.map(fromRequestUserRecord);
-  }
-
-  async getByDiscordMessageId(discordMessageId: string): Promise<RequestEntity | null> {
-    const { rows } = await this.pool.query<{ media_id: string }>(
-      `SELECT media_id FROM media_requests WHERE discord_message_id = $1`,
-      [discordMessageId],
-    );
-    if (!rows.length) {
-      return null;
-    }
-    return this.get(rows[0].media_id);
   }
 
   async getByMediaId(mediaId: string): Promise<RequestEntity | null> {
@@ -378,14 +370,23 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
   }
 
   async listAllWithDetails(): Promise<RequestEntity[]> {
+    return this.listWithDetails('', []);
+  }
+
+  /** Every request the user takes part in, with media and co-requesters. */
+  async listByUserWithDetails(userId: string): Promise<RequestEntity[]> {
+    return this.listWithDetails(
+      `WHERE EXISTS (SELECT 1 FROM request_users mine WHERE mine.request_media_id = request.media_id AND mine.user_id = $1)`,
+      [userId],
+    );
+  }
+
+  private async listWithDetails(whereClause: string, params: unknown[]): Promise<RequestEntity[]> {
     const query = `
       SELECT
         json_build_object(
           'mediaId', request.media_id,
           'status', request.status,
-          'discordMessageId', request.discord_message_id,
-          'indexerName', request.indexer_name,
-          'indexerLink', request.indexer_link,
           'createdAt', request.created_at,
           'updatedAt', request.updated_at,
           'media', json_build_object(
@@ -398,6 +399,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,
             'runtimeMinutes', media.runtime_minutes,
+            'traktSlug', media.trakt_slug,
             'createdAt', media.created_at,
             'updatedAt', media.updated_at
           ),
@@ -415,7 +417,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                   'jellyfinId', u.jellyfin_id,
                   'messagingKey', u.messaging_key,
                   'messagingId', u.messaging_id,
-                  'discordMessageId', u.discord_message_id,
+                  'status', u.status,
                   'createdAt', u.created_at,
                   'updatedAt', u.updated_at
                 )
@@ -428,9 +430,10 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         ) as request
       FROM media_requests request
       JOIN medias media ON media.id = request.media_id
+      ${whereClause}
       ORDER BY request.created_at DESC
     `;
-    const { rows } = await this.pool.query<{ request: RequestEntity }>(query);
+    const { rows } = await this.pool.query<{ request: RequestEntity }>(query, params);
     return rows.map((row) => row.request);
   }
 
@@ -474,110 +477,90 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows;
   }
 
-  async attachDiscordMessageId(mediaId: string, discordMessageId: string): Promise<void> {
-    const query = `
-      UPDATE media_requests
-      SET discord_message_id = $2
-      WHERE media_id = $1
-    `;
-    await this.pool.query(query, [mediaId, discordMessageId]);
+  // --- Planner state queries ---
+
+  /** Shows (imdb ids) having at least one open (missing/pending) episode request. */
+  async listPlannerShowImdbIds(): Promise<string[]> {
+    const { rows } = await this.pool.query<{ imdb_id: string }>(
+      `SELECT DISTINCT m.imdb_id
+       FROM media_requests mr
+       JOIN medias m ON m.id = mr.media_id
+       WHERE m.type = 'episode' AND m.imdb_id != '' AND mr.status = ANY($1)`,
+      [[RequestStatus.Missing, RequestStatus.Pending]],
+    );
+    return rows.map((row) => row.imdb_id);
   }
 
-  async findRequestsWithoutDiscordMessage(): Promise<RequestEntity[]> {
-    const query = `
-      SELECT
-        mr.media_id,
-        mr.status,
-        mr.discord_message_id,
-        mr.indexer_name,
-        mr.indexer_link,
-        mr.created_at,
-        mr.updated_at,
-        m.id as media_id,
-        m.imdb_id,
-        m.type,
-        m.title,
-        m.original_title,
-        m.year,
-        m.season_number,
-        m.episode_number,
-        m.runtime_minutes,
-        m.created_at as media_created_at,
-        m.updated_at as media_updated_at,
-        COALESCE(
-          json_agg(
-            json_build_object(
-              'requestId', ru.request_media_id,
-              'userId', ru.user_id,
-              'reasons', ru.reasons,
-              'createdAt', ru.created_at,
-              'updatedAt', ru.updated_at,
-              'user', json_build_object(
-                'id', u.id,
-                'name', u.name,
-                'jellyfinId', u.jellyfin_id,
-                'messagingKey', u.messaging_key,
-                'messagingId', u.messaging_id,
-                'createdAt', u.created_at,
-                'updatedAt', u.updated_at
-              )
-            )
-          ) FILTER (WHERE ru.user_id IS NOT NULL),
-          '[]'::json
-        ) as user_requests
-      FROM media_requests mr
-      JOIN medias m ON mr.media_id = m.id
-      LEFT JOIN request_users ru ON mr.media_id = ru.request_media_id
-      LEFT JOIN users u ON ru.user_id = u.id
-      WHERE mr.discord_message_id IS NULL AND mr.status = 'pending'
-      GROUP BY mr.media_id, mr.status, mr.discord_message_id, mr.indexer_name, mr.indexer_link, mr.created_at, mr.updated_at,
-               m.id, m.imdb_id, m.type, m.title, m.original_title, m.year, m.season_number, m.episode_number, m.runtime_minutes, m.created_at, m.updated_at
-      ORDER BY mr.created_at DESC
-    `;
-
-    const { rows } = await this.pool.query(query);
-
-    return rows.map((row) => ({
-      mediaId: row.media_id,
-      status: row.status,
-      discordMessageId: row.discord_message_id,
-      indexerName: row.indexer_name,
-      indexerLink: row.indexer_link,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      media: {
-        id: row.media_id,
-        imdbId: row.imdb_id,
-        type: row.type,
-        title: row.title,
-        originalTitle: row.original_title,
-        year: row.year,
-        seasonNumber: row.season_number,
-        episodeNumber: row.episode_number,
-        runtimeMinutes: row.runtime_minutes,
-        createdAt: row.media_created_at,
-        updatedAt: row.media_updated_at,
-      },
-      userRequests: row.user_requests || [],
-    }));
+  /** Movies (media ids) having an open (missing/pending) request. */
+  async listPlannerMovieMediaIds(): Promise<string[]> {
+    const { rows } = await this.pool.query<{ media_id: string }>(
+      `SELECT mr.media_id
+       FROM media_requests mr
+       JOIN medias m ON m.id = mr.media_id
+       WHERE m.type = 'movie' AND mr.status = ANY($1)`,
+      [[RequestStatus.Missing, RequestStatus.Pending]],
+    );
+    return rows.map((row) => row.media_id);
   }
 
-  async setIndexerInfo(mediaId: string, indexerName: string, link: string): Promise<void> {
-    const query = `
-      UPDATE media_requests
-      SET indexer_name = $2, indexer_link = $3, updated_at = NOW()
-      WHERE media_id = $1
-    `;
-    await this.pool.query(query, [mediaId, indexerName, link]);
+  /** Every known episode of a show with its request status and requesting users. */
+  async getShowPlannerState(imdbId: string): Promise<PlannerStateRow[]> {
+    const { rows } = await this.pool.query<PlannerStateRow>(
+      `SELECT
+         m.id as "mediaId",
+         m.imdb_id as "imdbId",
+         m.title,
+         m.original_title as "originalTitle",
+         m.year,
+         m.season_number as "seasonNumber",
+         m.episode_number as "episodeNumber",
+         m.runtime_minutes as "runtimeMinutes",
+         mr.status,
+         COALESCE(
+           (SELECT array_agg(ru.user_id) FROM request_users ru WHERE ru.request_media_id = m.id),
+           '{}'
+         ) as "userIds"
+       FROM medias m
+       LEFT JOIN media_requests mr ON mr.media_id = m.id
+       WHERE m.imdb_id = $1 AND m.type = 'episode'
+       ORDER BY m.season_number, m.episode_number`,
+      [imdbId],
+    );
+    return rows;
   }
 
-  async clearIndexerInfo(mediaId: string): Promise<void> {
-    const query = `
-      UPDATE media_requests
-      SET indexer_name = NULL, indexer_link = NULL, updated_at = NOW()
-      WHERE media_id = $1
-    `;
-    await this.pool.query(query, [mediaId]);
+  async getMoviePlannerState(mediaId: string): Promise<PlannerStateRow | null> {
+    const { rows } = await this.pool.query<PlannerStateRow>(
+      `SELECT
+         m.id as "mediaId",
+         m.imdb_id as "imdbId",
+         m.title,
+         m.original_title as "originalTitle",
+         m.year,
+         m.season_number as "seasonNumber",
+         m.episode_number as "episodeNumber",
+         m.runtime_minutes as "runtimeMinutes",
+         mr.status,
+         COALESCE(
+           (SELECT array_agg(ru.user_id) FROM request_users ru WHERE ru.request_media_id = m.id),
+           '{}'
+         ) as "userIds"
+       FROM medias m
+       LEFT JOIN media_requests mr ON mr.media_id = m.id
+       WHERE m.id = $1 AND m.type = 'movie'`,
+      [mediaId],
+    );
+    return rows[0] ?? null;
+  }
+
+  async updateStatusesBulk(mediaIds: string[], status: RequestStatus): Promise<void> {
+    if (mediaIds.length === 0) {
+      return;
+    }
+    await this.pool.query(
+      `UPDATE media_requests SET status = $2, updated_at = NOW() WHERE media_id = ANY($1) AND status != $2`,
+      [mediaIds, status],
+    );
   }
 
   async listByStatuses(statuses: RequestStatus[]): Promise<RequestEntity[]> {
@@ -586,9 +569,6 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
         json_build_object(
           'mediaId', request.media_id,
           'status', request.status,
-          'discordMessageId', request.discord_message_id,
-          'indexerName', request.indexer_name,
-          'indexerLink', request.indexer_link,
           'createdAt', request.created_at,
           'updatedAt', request.updated_at,
           'media', json_build_object(
@@ -601,6 +581,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,
             'runtimeMinutes', media.runtime_minutes,
+            'traktSlug', media.trakt_slug,
             'createdAt', media.created_at,
             'updatedAt', media.updated_at
           )

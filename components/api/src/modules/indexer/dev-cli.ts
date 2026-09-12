@@ -4,12 +4,13 @@
  * description, without booting Nest, the database or Discord.
  *
  *   npm run indexer:find -- --imdb tt0133093 --title "The Matrix" --year 1999
+ *   npm run indexer:find -- --imdb tt14688458 --title "Silo" --type show --episodes "1:1-10,2:1-6" --runtime 50
  */
 import { parseArgs } from 'node:util';
 
 import { Logger } from '@nestjs/common';
 
-import { IndexerMedia, MediaType, passesPreferences } from './contract';
+import { assessCandidate, IndexerBookmark, IndexerShowEpisode, IndexerTarget, MediaType } from './contract';
 import { preferencesFromEnv } from './preferences';
 import { createIndexers, IndexersConfig } from './registry';
 
@@ -23,13 +24,13 @@ Arguments:
 Options:
   --imdb <id>              IMDB id (required)
   --title <title>          Title (required)
-  --type <movie|episode>   Media type (default: movie)
+  --type <movie|show>      Target type (default: movie)
   --original-title <t>     Original title
   --year <n>               Release year
-  --season <n>             Season number (episode only)
-  --episode <n>            Episode number (episode only)
-  --runtime <n>            Runtime in minutes
+  --episodes <spec>        Show only: episode intent, e.g. "1:1-10,2:1-6" (season:from-to)
+  --runtime <n>            Runtime in minutes (per episode for shows)
   --indexer <name>         Same as the [indexer] positional argument
+  --bookmark <json>        Bookmark handed to the indexer, as printed by a previous run
   --verbose                Show HTTP request/response debug logs`;
 
 function parseCliArgs() {
@@ -38,13 +39,13 @@ function parseCliArgs() {
     options: {
       imdb: { type: 'string' },
       title: { type: 'string' },
-      type: { type: 'string', default: MediaType.Movie as string },
+      type: { type: 'string', default: 'movie' },
       'original-title': { type: 'string' },
       year: { type: 'string' },
-      season: { type: 'string' },
-      episode: { type: 'string' },
+      episodes: { type: 'string' },
       runtime: { type: 'string' },
       indexer: { type: 'string' },
+      bookmark: { type: 'string' },
       verbose: { type: 'boolean', default: false },
     },
   });
@@ -58,40 +59,78 @@ function toNumber(value: string | undefined): number | null {
   return value === undefined ? null : Number(value);
 }
 
-function buildMedia(values: CliValues): IndexerMedia {
+/** "1:1-10,2:1-6" → one entry per episode; a bare "1:4" means the single episode S1E4. */
+function parseEpisodesSpec(spec: string, runtimeMinutes: number | null): IndexerShowEpisode[] {
+  return spec.split(',').flatMap((part) => {
+    const match = part.trim().match(/^(\d+):(\d+)(?:-(\d+))?$/);
+    if (!match) {
+      console.error(`Invalid --episodes segment "${part}", expected "season:from-to"`);
+      process.exit(1);
+    }
+    const season = Number(match[1]);
+    const from = Number(match[2]);
+    const to = Number(match[3] ?? match[2]);
+    return Array.from({ length: to - from + 1 }, (_, i) => ({ season, episode: from + i, runtimeMinutes }));
+  });
+}
+
+function buildTarget(values: CliValues): IndexerTarget {
   if (!values.imdb || !values.title) {
     console.error(USAGE);
     process.exit(1);
   }
-  if (!Object.values(MediaType).includes(values.type as MediaType)) {
-    console.error(`Invalid --type "${values.type}", expected: ${Object.values(MediaType).join(' | ')}`);
+
+  if (values.type === 'show') {
+    if (!values.episodes) {
+      console.error('--episodes is required for --type show');
+      process.exit(1);
+    }
+    return {
+      kind: 'show',
+      imdbId: values.imdb,
+      title: values.title,
+      originalTitle: values['original-title'] ?? null,
+      year: toNumber(values.year),
+      episodes: parseEpisodesSpec(values.episodes, toNumber(values.runtime)),
+    };
+  }
+
+  if (values.type !== 'movie') {
+    console.error(`Invalid --type "${values.type}", expected: movie | show`);
     process.exit(1);
   }
 
   return {
-    imdbId: values.imdb,
-    type: values.type as MediaType,
-    title: values.title,
-    originalTitle: values['original-title'] ?? null,
-    year: toNumber(values.year),
-    seasonNumber: toNumber(values.season),
-    episodeNumber: toNumber(values.episode),
-    runtimeMinutes: toNumber(values.runtime),
+    kind: 'movie',
+    media: {
+      imdbId: values.imdb,
+      type: MediaType.Movie,
+      title: values.title,
+      originalTitle: values['original-title'] ?? null,
+      year: toNumber(values.year),
+      seasonNumber: null,
+      episodeNumber: null,
+      runtimeMinutes: toNumber(values.runtime),
+    },
   };
 }
 
+function parseBookmark(json: string | undefined): IndexerBookmark | null {
+  if (!json) {
+    return null;
+  }
+  const parsed: unknown = JSON.parse(json);
+  if (typeof parsed !== 'object' || parsed === null || !('state' in parsed)) {
+    console.error('--bookmark must be a JSON object with pageUrl, searchUrl and state');
+    process.exit(1);
+  }
+  return parsed as IndexerBookmark;
+}
+
 function configFromEnv(): IndexersConfig {
-  const { HYDRACKER_API_KEY, HYDRACKER_HOST, HYDRACKER_CONTACT_EMAIL, LOADIX_API_HOST, LOADIX_SITE_HOST } = process.env;
+  const { LOADIX_API_HOST, LOADIX_SITE_HOST } = process.env;
 
   return {
-    hydracker:
-      HYDRACKER_API_KEY && HYDRACKER_HOST
-        ? {
-            apiKey: HYDRACKER_API_KEY,
-            host: HYDRACKER_HOST,
-            ...(HYDRACKER_CONTACT_EMAIL && { contactEmail: HYDRACKER_CONTACT_EMAIL }),
-          }
-        : null,
     loadix:
       LOADIX_API_HOST && LOADIX_SITE_HOST
         ? {
@@ -106,7 +145,8 @@ async function main(): Promise<void> {
   const values = parseCliArgs();
   Logger.overrideLogger(values.verbose ? ['verbose', 'debug', 'log', 'warn', 'error'] : ['log', 'warn', 'error']);
 
-  const media = buildMedia(values);
+  const target = buildTarget(values);
+  const bookmark = parseBookmark(values.bookmark);
   const serviceName = process.env.SERVICE_NAME ?? 'crn-flix-dev-cli';
   const indexers = createIndexers(configFromEnv(), serviceName).filter(
     (indexer) => !values.indexer || indexer.name === values.indexer,
@@ -122,15 +162,23 @@ async function main(): Promise<void> {
   const prefs = preferencesFromEnv(process.env);
   console.log(`Preferences (from INDEXER_* env, empty = allow all): ${JSON.stringify(prefs)}`);
 
+  const label =
+    target.kind === 'movie'
+      ? `${target.media.title} (${target.media.imdbId}, movie)`
+      : `${target.title} (${target.imdbId}, show, ${target.episodes.length} episode(s))`;
+
   for (const indexer of indexers) {
-    console.log(`\n▶ ${indexer.name} — ${media.title} (${media.imdbId}, ${media.type})`);
+    console.log(`\n▶ ${indexer.name} — ${label}`);
     const startedAt = Date.now();
-    const candidates = await indexer.find(media, prefs);
+    const result = await indexer.find(target, prefs, bookmark);
+    const { candidates } = result;
     console.log(`  ${candidates.length} candidate(s) in ${Date.now() - startedAt}ms`);
+    console.log(`  bookmark: ${JSON.stringify(result.bookmark)}`);
 
     for (const candidate of candidates) {
-      const eligible = passesPreferences(candidate, media, prefs);
-      console.log(`  ${eligible ? '✔' : '✘'} ${JSON.stringify(candidate, null, 2)}`);
+      const reasons = assessCandidate(candidate, target, prefs);
+      const verdict = reasons.length === 0 ? '✔' : `✘ ${reasons.join(', ')}`;
+      console.log(`  ${verdict} ${JSON.stringify(candidate, null, 2)}`);
     }
   }
 }

@@ -6,19 +6,21 @@ import { z } from 'zod';
 import { concurrent } from '@/helpers/concurrent';
 import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
 import { TraktApi } from '@/modules/trakt/api';
-import { Episode, Media, ProgressShow, Show, UserAuthCtxt } from '@/modules/trakt/types';
+import { Episode, Media, Movie, MovieDetails, ProgressShow, Show, UserAuthCtxt } from '@/modules/trakt/types';
 import { MediaInfos, MediasRepository, MediaType } from '@/services/database/medias';
 import { RequestsRepository, RequestStatus, SyncRequestSnapshot } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { UsersRepository, type UserEntity } from '@/services/database/users';
-import { IndexerOrchestrator } from '@/services/indexer-orchestrator';
+import { PlannerService } from '@/services/planner/planner';
+import { TicketCategory } from '@/services/tickets/model';
+import { TicketService } from '@/services/tickets/ticket.service';
 
 export const syncConfigSchema = z.object({
   ratingThreshold: z.number().int().optional().default(10),
-  ratedLimit: z.number().int().optional().default(80),
-  wantedLimit: z.number().int().optional().default(30),
-  progressLimit: z.number().int().optional().default(10),
-  bufferDuration: z.number().int().optional().default(150),
+  /** Missing episodes within this window of unwatched viewing time are `needed`. */
+  needWindowHours: z.number().positive().optional().default(5),
+  /** Soft ceiling on the viewing hours one action may pull in. */
+  maxWindowHours: z.number().positive().optional().default(25),
   fullSyncIntervalHours: z.number().int().positive().optional().default(24),
 });
 
@@ -73,6 +75,7 @@ function mapEpisodeToRequest(episode: Episode, show: Show, runtimeMinutes: numbe
     seasonNumber: episode.season,
     episodeNumber: episode.number,
     runtimeMinutes,
+    traktSlug: show.ids.slug ?? null,
   };
 }
 
@@ -94,7 +97,7 @@ export class TraktSyncService {
   private readonly requestHandlerByKind: Record<RequestKind, (user: UserAuthCtxt) => Promise<MediaInfos[]>> = {
     WATCHLISTED: async (user) => {
       const watchlistedMedias = await this.traktClient.requestUserWatchlist(user, true);
-      return this.expand(watchlistedMedias, true);
+      return this.expand(watchlistedMedias);
     },
     // LISTED: async (user) => {
     //   const listedMedias = await this.traktClient.requestUserList(user, 'Jellyfin');
@@ -102,11 +105,11 @@ export class TraktSyncService {
     // },
     HIGH_RATED: async (user) => {
       const highRatedMedias = await this.traktClient.getHighRatedMedias(user, this.config.ratingThreshold);
-      return this.expand(highRatedMedias, false);
+      return this.expand(highRatedMedias);
     },
     PROGRESS: async (user) => {
       const progressShows = await this.traktClient.getWatchingShows(user);
-      return this.expandProgressShows(progressShows);
+      return this.expandProgressShows(user, progressShows);
     },
   };
 
@@ -118,7 +121,8 @@ export class TraktSyncService {
     private readonly userActivitiesRepository: UserActivitiesRepository,
     private readonly mediasRepository: MediasRepository,
     private readonly requestsRepository: RequestsRepository,
-    private readonly indexerOrchestrator: IndexerOrchestrator,
+    private readonly planner: PlannerService,
+    private readonly ticketService: TicketService,
   ) {}
 
   async sync(): Promise<void> {
@@ -139,7 +143,20 @@ export class TraktSyncService {
       `Processing ${newMediaRequests.length} new medias (concurrency: ${NEW_REQUEST_CONCURRENCY})`,
     );
 
-    await concurrent(newMediaRequests, NEW_REQUEST_CONCURRENCY, ([, desired]) => this.processNewRequest(desired));
+    const createdIds = await concurrent(newMediaRequests, NEW_REQUEST_CONCURRENCY, ([, desired]) =>
+      this.processNewRequest(desired),
+    );
+
+    const mediaIdByKey: Record<MediaCompositeKey, string> = {};
+    for (const snapshot of gathered.mediaRequests) {
+      mediaIdByKey[compositeKey(snapshot)] = snapshot.mediaId;
+    }
+    newMediaRequests.forEach(([key], index) => {
+      if (createdIds[index]) {
+        mediaIdByKey[key] = createdIds[index];
+      }
+    });
+    await this.openMissingImdbTickets(gathered, mediaIdByKey);
 
     // Update activity timestamps
     for (const [userId, kinds] of Object.entries(gathered.syncedKindsByUserId)) {
@@ -217,25 +234,55 @@ export class TraktSyncService {
     }
   }
 
-  private async processNewRequest(desiredMedia: DesiredMedia): Promise<void> {
+  /** Request creation only writes intent; the planner reacts to the NOTIFY events. */
+  private async processNewRequest(desiredMedia: DesiredMedia): Promise<string | null> {
     try {
       const media = await this.mediasRepository.upsert(desiredMedia.mediaInfos);
-      const request = await this.requestsRepository.upsert(media.id, RequestStatus.Missing);
+      await this.requestsRepository.upsert(media.id, RequestStatus.Missing);
 
       for (const [userId, reasons] of Object.entries(desiredMedia.requestKindsByUserId)) {
         await this.requestsRepository.setUserRequestReasons(media.id, userId, reasons);
       }
-
-      try {
-        await this.indexerOrchestrator.runForRequest({ ...request, media });
-      } catch (error) {
-        TraktSyncService.logger.warn(
-          `Indexer orchestration failed for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
-        );
-      }
+      return media.id;
     } catch (error) {
       TraktSyncService.logger.error(
         `Failed to create request for "${desiredMedia.mediaInfos.title}" (${desiredMedia.mediaInfos.imdbId}): ${error instanceof Error ? error.message : error}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Trakt sometimes has no IMDb id for a title; the planner can never search those.
+   * One ticket per title lets the admin unblock the group by replying the id.
+   */
+  private async openMissingImdbTickets(
+    gathered: GatheredData,
+    mediaIdByKey: Record<MediaCompositeKey, string>,
+  ): Promise<void> {
+    const orphanGroups = _.groupBy(
+      Object.entries(gathered.desiredMediaByKey).filter(([, d]) => d.mediaInfos.imdbId === ''),
+      ([, d]) => `${d.mediaInfos.type}:${d.mediaInfos.title}:${d.mediaInfos.year ?? ''}`,
+    );
+
+    for (const entries of Object.values(orphanGroups)) {
+      const { title, year, type } = entries[0][1].mediaInfos;
+      const mediaIds = entries.map(([key]) => mediaIdByKey[key]).filter((id): id is string => !!id);
+      if (mediaIds.length === 0) {
+        continue;
+      }
+
+      const kind = type === MediaType.Movie ? ('movie' as const) : ('show' as const);
+      const subject =
+        kind === 'movie'
+          ? { type: 'media' as const, id: mediaIds[0] }
+          : { type: 'show' as const, id: `${title}:${year ?? ''}`.toLowerCase().slice(0, 64) };
+
+      await this.ticketService.open(
+        TicketCategory.MissingImdb,
+        subject,
+        { title, year, kind, mediaIds },
+        { title: `IMDb inconnu — ${title}${year ? ` (${year})` : ''}` },
       );
     }
   }
@@ -312,13 +359,21 @@ export class TraktSyncService {
     );
   }
 
-  private async expandProgressShows(progressShows: ProgressShow[]): Promise<MediaInfos[]> {
+  /**
+   * Full show expansion: watched episodes are simply already fulfilled or not wanted.
+   * Playheads belong to Trakt (read live by the planner, never stored); this pass only
+   * runs when Trakt activities changed, so it doubles as the re-plan signal.
+   */
+  private async expandProgressShows(user: UserAuthCtxt, progressShows: ProgressShow[]): Promise<MediaInfos[]> {
     const episodes = await Promise.all(
       progressShows.map(async (p) => {
-        const expanded = await this.bufferedExpansion(p.show, p.next_episode?.season ?? 1, p.next_episode?.number ?? 1);
-        TraktSyncService.logger.log(
-          `[progress.expand] "${p.show.title}" from S${p.next_episode?.season ?? 1}E${p.next_episode?.number ?? 1} → ${expanded.length} episode(s)`,
-        );
+        const imdbId = p.show.ids.imdb;
+        if (imdbId) {
+          this.planner.schedulePass({ kind: 'show', imdbId });
+        }
+
+        const expanded = await this.expandShow(p.show);
+        TraktSyncService.logger.log(`[progress.expand] "${p.show.title}" → ${expanded.length} episode(s)`);
         return expanded;
       }),
     );
@@ -326,19 +381,22 @@ export class TraktSyncService {
     return episodes.flat();
   }
 
-  private async expand(medias: Media[], buffering: boolean = false): Promise<MediaInfos[]> {
-    const movies: MediaInfos[] = medias
-      .filter((media) => media.type === 'movie')
-      .map((m) => ({
-        type: MediaType.Movie,
-        imdbId: m.movie.ids.imdb ?? '',
-        title: m.movie.title,
-        originalTitle: m.movie.title,
-        year: m.movie.year,
-        seasonNumber: null,
-        episodeNumber: null,
-        runtimeMinutes: null,
-      }));
+  private async expand(medias: Media[]): Promise<MediaInfos[]> {
+    const movies: MediaInfos[] = await Promise.all(
+      medias
+        .filter((media) => media.type === 'movie')
+        .map(async (m) => ({
+          type: MediaType.Movie,
+          imdbId: m.movie.ids.imdb ?? '',
+          title: m.movie.title,
+          originalTitle: m.movie.title,
+          year: m.movie.year,
+          seasonNumber: null,
+          episodeNumber: null,
+          runtimeMinutes: await this.movieRuntime(m.movie),
+          traktSlug: m.movie.ids.slug ?? null,
+        })),
+    );
     const episodes: MediaInfos[] = medias
       .filter((media) => media.type === 'episode')
       .map((m) => ({
@@ -350,16 +408,33 @@ export class TraktSyncService {
         seasonNumber: m.episode.season,
         episodeNumber: m.episode.number,
         runtimeMinutes: null,
+        traktSlug: m.show.ids.slug ?? null,
       }));
 
-    const showExpender = buffering ? this.bufferedExpansion.bind(this) : this.expandShow.bind(this);
-    const seasonExpender = buffering ? this.bufferedExpansion.bind(this) : this.expandSeason.bind(this);
     const expandedMedias: Promise<MediaInfos[]>[] = [
-      ...medias.filter((media) => media.type === 'show').map((s) => showExpender(s.show)),
-      ...medias.filter((media) => media.type === 'season').map((s) => seasonExpender(s.show, s.season.number)),
+      ...medias.filter((media) => media.type === 'show').map((s) => this.expandShow(s.show)),
+      ...medias.filter((media) => media.type === 'season').map((s) => this.expandSeason(s.show, s.season.number)),
     ];
 
     return [...movies, ...episodes, ...(await Promise.all(expandedMedias)).flat()];
+  }
+
+  /**
+   * The size cap silently passes without a runtime: never store a movie without one.
+   * Watchlist items fetched with `extended=full` already carry it; other sources cost one cached call.
+   */
+  private async movieRuntime(movie: Movie | MovieDetails): Promise<number | null> {
+    if ('runtime' in movie && movie.runtime !== null) {
+      return movie.runtime;
+    }
+    try {
+      return (await this.traktClient.requestMovieDetails(movie.ids.trakt)).runtime;
+    } catch (error) {
+      TraktSyncService.logger.warn(
+        `Runtime unavailable for movie "${movie.title}": ${error instanceof Error ? error.message : error}`,
+      );
+      return null;
+    }
   }
 
   private async expandShow(show: Show): Promise<MediaInfos[]> {
@@ -387,30 +462,5 @@ export class TraktSyncService {
     return filterAiredEpisodes(season.episodes, showDetails.aired_episodes, startIndex).map((episode) =>
       mapEpisodeToRequest(episode, show, showDetails.runtime),
     );
-  }
-
-  private async bufferedExpansion(
-    show: Show,
-    startSeason: number = 1,
-    startEpisode: number = 1,
-  ): Promise<MediaInfos[]> {
-    const showDetails = await this.traktClient.requestShowDetails(show.ids.trakt);
-    const seasons = await this.traktClient.requestShowSeasonsDetails(show.ids.trakt);
-    const count = showDetails.runtime ? Math.ceil(this.config.bufferDuration / showDetails.runtime) : 3;
-
-    const episodes = seasons.flatMap((season) => {
-      if (season.number <= 0) {
-        return [];
-      }
-      return season.episodes;
-    });
-
-    const episodeIndex = episodes.findIndex(
-      (episode) => episode.season === startSeason && episode.number === startEpisode,
-    );
-
-    return episodes
-      .slice(episodeIndex, Math.min(episodeIndex + count, showDetails.aired_episodes ?? Infinity))
-      .map((episode) => mapEpisodeToRequest(episode, show, showDetails.runtime));
   }
 }

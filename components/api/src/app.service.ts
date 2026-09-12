@@ -1,19 +1,19 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
-import { AxiosError } from 'axios';
 import { CronJob } from 'cron';
 
 import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
 import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import {
+  DownloadJobEntity,
   DownloadJobEvents,
   DownloadJobsRepository,
   DownloadJobStatus,
   DownloadJobStatusChangedEvent,
 } from '@/services/database/download-jobs';
-import { MediasRepository, MediaType } from '@/services/database/medias';
+import { PlannedDownloadEvents, PlannedDownloadsRepository } from '@/services/database/planned-downloads';
 import {
   RequestCreatedEvent,
   RequestEvents,
@@ -24,27 +24,19 @@ import {
   UserLeftRequestEvent,
 } from '@/services/database/requests';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
-import { UserEntity, UsersRepository } from '@/services/database/users';
-import { buildDownloadMetadata, FetchrSyncService } from '@/services/fetchr-sync';
-import { IndexerSyncService } from '@/services/indexer-sync';
+import { UsersRepository } from '@/services/database/users';
+import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
-import { MediaIdentifierService } from '@/services/media-identifier';
-import {
-  AdminEventMap,
-  AdminEventType,
-  AdminIdentificationRetryEvent,
-  AdminImdbResolveEvent,
-  AdminLinkRetryEvent,
-  AdminLinkSubmittedEvent,
-  AdminRequestLinkSubmittedEvent,
-  DiscordAdminMessaging,
-} from '@/services/messaging/admin/discord';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { AllUserMessaging } from '@/services/messaging/user/all';
+import { PlannerService } from '@/services/planner/planner';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
+import { downloadActionResolution, isIdentificationError } from '@/services/tickets/auto-resolve';
+import { TICKET_ID_METADATA_KEY, TicketCategory } from '@/services/tickets/model';
+import { actionTitle } from '@/services/tickets/presenter';
+import { TicketReconcilerService } from '@/services/tickets/reconciler';
+import { TicketService } from '@/services/tickets/ticket.service';
 import { TraktSyncService } from '@/services/trakt-sync';
-
-import { DiscordSyncService } from './services/discord-sync';
 
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
@@ -61,29 +53,32 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly traktSync: TraktSyncService,
     private readonly jellyfinSync: JellyfinSyncService,
-    private readonly indexerSync: IndexerSyncService,
-    private readonly discordSync: DiscordSyncService,
+    private readonly planner: PlannerService,
+    private readonly ticketService: TicketService,
+    private readonly ticketReconciler: TicketReconcilerService,
     private readonly jellyfin: JellyfinMediaService,
     private readonly messaging: AllUserMessaging,
-    private readonly adminsMessaging: DiscordAdminMessaging,
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
-    private readonly mediasRepository: MediasRepository,
+    private readonly plannedDownloads: PlannedDownloadsRepository,
     private readonly userNotifications: UserNotificationsRepository,
     private readonly fetchrSync: FetchrSyncService,
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
-    private readonly mediaIdentifier: MediaIdentifierService,
   ) {}
 
   onModuleInit(): void {
-    this.listeners.push(this.listenRequestsEvents(), this.listenAdminMessages(), this.listenDownloadJobEvents());
+    this.listeners.push(
+      this.listenRequestsEvents(),
+      this.listenDownloadJobEvents(),
+      this.listenPlannedDownloadEvents(),
+    );
 
     if (process.env.NODE_ENV === 'production') {
       this.registerCronJob('trakt-sync-job', '*/5 * * * *', () => this.runSync());
-      this.registerCronJob('indexer-sync-job', '0 * * * *', () => this.indexerSync.sync());
+      this.registerCronJob('planner-job', '0 * * * *', () => this.planner.runAll());
       this.registerCronJob('jellyfin-sync-job', '*/15 * * * *', () => this.jellyfinSync.sync());
-      this.registerCronJob('discord-sync-job', '*/5 * * * *', () => this.discordSync.sync());
+      this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
     }
   }
 
@@ -122,27 +117,17 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async schedulePlannerPassForRequest(requestId: string): Promise<void> {
+    const request = await this.requestsRepository.get(requestId);
+    if (request?.media) {
+      this.planner.schedulePassForMedia(request.media);
+    }
+  }
+
   private listenRequestsEvents(): Listener<RequestEvents> {
     return this.requestsRepository.listen({
       created: (event: RequestCreatedEvent) =>
-        this.trackEvent(async () => {
-          const request = await this.requestsRepository.get(event.requestId);
-          if (
-            !request ||
-            request.discordMessageId ||
-            request.status === RequestStatus.Fulfilled ||
-            request.status === RequestStatus.Missing
-          ) {
-            return;
-          }
-
-          if (request.media && !request.media.imdbId) {
-            await this.adminsMessaging.notifyMissingImdbId(request);
-            return;
-          }
-
-          await this.adminsMessaging.registerRequest(request);
-        }),
+        this.trackEvent(() => this.schedulePlannerPassForRequest(event.requestId)),
       statusChange: (event: RequestStatusChangedEvent) =>
         this.trackEvent(async () => {
           AppService.logger.log(`Status change event: ${event.requestId} (${event.oldStatus} → ${event.newStatus})`);
@@ -152,10 +137,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          if (!request.discordMessageId && request.status === RequestStatus.Pending) {
-            await this.adminsMessaging.registerRequest(request);
-          } else {
-            await this.adminsMessaging.updateRequestStatus(request);
+          // The planner reconciles with observed reality: fulfilled and rejected are
+          // external facts; pending/missing oscillations are its own doing.
+          if (request.status === RequestStatus.Fulfilled || request.status === RequestStatus.Rejected) {
+            if (request.media) {
+              this.planner.schedulePassForMedia(request.media);
+            }
           }
 
           if (!isUserNotifiableStatus(request.status)) {
@@ -194,6 +181,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
+          if (request.media) {
+            this.planner.schedulePassForMedia(request.media);
+          }
+
           if (!isUserNotifiableStatus(request.status)) {
             AppService.logger.debug(
               `Skipping user notifications for request ${event.requestId} (status ${request.status} is transient)`,
@@ -215,11 +206,66 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
+          if (request.media) {
+            this.planner.schedulePassForMedia(request.media);
+          }
+
           const deletableStatuses = [RequestStatus.Missing, RequestStatus.Pending];
           if (request.userRequests?.length === 0 && deletableStatuses.includes(request.status)) {
-            await this.adminsMessaging.deleteRequestMessage(request);
             await this.requestsRepository.removeRequest(request.mediaId);
           }
+        }),
+    });
+  }
+
+  /** Every planner action lives as a ticket; its lifecycle drives the ticket's. */
+  private listenPlannedDownloadEvents(): Listener<PlannedDownloadEvents> {
+    return this.plannedDownloads.listen({
+      created: ({ actionId }) =>
+        this.trackEvent(async () => {
+          const action = await this.plannedDownloads.get(actionId);
+          if (action) {
+            await this.ticketService.open(
+              TicketCategory.DownloadAction,
+              { type: 'planned_download', id: actionId },
+              { actionId },
+              { title: actionTitle(action) },
+            );
+          }
+        }),
+      statusChange: ({ actionId, oldStatus, newStatus }) =>
+        this.trackEvent(async () => {
+          AppService.logger.log(`Action ${actionId}: ${oldStatus} → ${newStatus}`);
+          const action = await this.plannedDownloads.get(actionId);
+          if (!action) {
+            return;
+          }
+
+          const { close, resolution } = downloadActionResolution(action.status, action.coveredStatuses);
+          if (close) {
+            await this.ticketService.resolveBySubject(
+              TicketCategory.DownloadAction,
+              'planned_download',
+              actionId,
+              resolution ?? newStatus,
+            );
+            return;
+          }
+          await this.ticketService.recordSystemEventForSubject(
+            TicketCategory.DownloadAction,
+            'planned_download',
+            actionId,
+            `Statut : ${oldStatus} → ${newStatus}`,
+          );
+        }),
+      labelChange: ({ actionId, oldLabel, newLabel }) =>
+        this.trackEvent(async () => {
+          await this.ticketService.recordSystemEventForSubject(
+            TicketCategory.DownloadAction,
+            'planned_download',
+            actionId,
+            `Priorité : ${oldLabel} → ${newLabel}`,
+          );
         }),
     });
   }
@@ -239,210 +285,61 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           }
 
           if (event.newStatus === DownloadJobStatus.Failed) {
-            AppService.logger.warn(`Download job ${event.jobId} failed: ${event.oldStatus} → ${event.newStatus}`);
-            const failedFiles = job.sourcePaths.map((p) => p.split('/').pop()).filter(Boolean) as string[];
-            const errorMessage = job.errorMessage ?? 'Unknown error';
-
-            if (errorMessage.includes('Identification failed') || errorMessage.includes('Cannot identify')) {
-              const messageId = await this.adminsMessaging.notifyIdentificationFailure(
-                job.packageName || 'unknown',
-                failedFiles.length > 0 ? failedFiles : [job.packageName || 'unknown'],
-                errorMessage,
-              );
-              await this.downloadJobs.updateDiscordMessageId(event.jobId, messageId);
-            } else {
-              await this.adminsMessaging.notifyPipelineFailure(
-                failedFiles.join(', ') || job.packageName || 'unknown',
-                job.status.replace('_', ' '),
-                errorMessage,
-                null,
-              );
-            }
+            await this.openJobFailureTicket(job);
           } else if (event.newStatus === DownloadJobStatus.Completed) {
-            AppService.logger.log(`Download job ${event.jobId} completed`);
-            await this.jellyfin.refreshLibrary();
-            await this.requestsRepository.fulfillByJobId(event.jobId);
-            this.fetchrSync.remove(job.sourceId);
+            await this.onJobCompleted(job);
           }
         }),
     });
   }
 
-  private listenAdminMessages(): Listener<AdminEventMap> {
-    return this.adminsMessaging.listen({
-      [AdminEventType.UserAccepted]: ({ user }) => this.trackEvent(() => this.onUserAccepted(user)),
-      [AdminEventType.UserRejected]: ({ user }) => this.trackEvent(() => this.onUserRejected(user)),
-      [AdminEventType.IdentificationRetry]: (event) => this.trackEvent(() => this.onIdentificationRetry(event)),
-      [AdminEventType.ImdbResolve]: (event) => this.trackEvent(() => this.onImdbResolve(event)),
-      [AdminEventType.LinkSubmitted]: (event) => this.trackEvent(() => this.onLinkSubmitted(event)),
-      [AdminEventType.LinkRetry]: (event) => this.trackEvent(() => this.onLinkRetry(event)),
-      [AdminEventType.RequestLinkSubmitted]: (event) => this.trackEvent(() => this.onRequestLinkSubmitted(event)),
-    });
-  }
+  private async openJobFailureTicket(job: DownloadJobEntity): Promise<void> {
+    AppService.logger.warn(`Download job ${job.id} failed: ${job.errorMessage}`);
+    const failedFiles = job.sourcePaths.map((p) => p.split('/').pop()).filter(Boolean) as string[];
+    const errorMessage = job.errorMessage ?? 'Unknown error';
+    const packageName = job.packageName || 'unknown';
 
-  private async onUserAccepted(user: UserEntity): Promise<void> {
-    const messagingContext = { key: user.messagingKey, id: user.messagingId };
-    const password = Math.random().toString(36).substring(2, 15);
-
-    try {
-      if (user.jellyfinId) {
-        await this.jellyfin.resetUserPassword(user.jellyfinId, password);
-      } else {
-        const existingJellyfinUser = await this.jellyfin.findUserByName(user.name);
-        if (existingJellyfinUser) {
-          user.jellyfinId = existingJellyfinUser.Id;
-          await this.jellyfin.resetUserPassword(user.jellyfinId, password);
-        } else {
-          user.jellyfinId = await this.jellyfin.registerUser(user.name, password);
-        }
-        await this.usersRepository.setJellyfinId(user.id, user.jellyfinId);
-      }
-
-      await this.adminsMessaging.deleteUserMessage(user);
-      this.messaging.registered(messagingContext, user, password);
-    } catch (error) {
-      if (error instanceof Error && error.message === 'User already exists') {
-        this.messaging.error(messagingContext, "Ce nom d'utilisateur existe déjà merci d'en choisir un autre");
-      } else {
-        const message = error instanceof AxiosError ? error.response?.data : error;
-        AppService.logger.error(`Error registering user ${user.name}: ${message}`);
-        this.messaging.error(messagingContext, "Erreur lors de l'inscription");
-      }
-    }
-  }
-
-  private async onUserRejected(user: UserEntity): Promise<void> {
-    const messagingContext = { key: user.messagingKey, id: user.messagingId };
-    this.messaging.error(messagingContext, 'Votre inscription a été refusée');
-    await this.adminsMessaging.deleteUserMessage(user);
-    await this.usersRepository.remove(user.id);
-  }
-
-  private async onIdentificationRetry({ job, imdbId, replyMessageId }: AdminIdentificationRetryEvent): Promise<void> {
-    AppService.logger.log(`Retrying identification for job ${job.id} with IMDb ID ${imdbId}`);
-    await this.postDownloadPipeline.retryWithImdbId(job.id, imdbId);
-
-    const updatedJob = await this.downloadJobs.get(job.id);
-    const emoji = updatedJob?.status === DownloadJobStatus.Completed ? '✅' : '❌';
-    await this.adminsMessaging.reactToMessage(replyMessageId, emoji);
-  }
-
-  private async onImdbResolve({ request, imdbId, replyMessageId }: AdminImdbResolveEvent): Promise<void> {
-    if (!request.media) {
-      AppService.logger.warn(`Request ${request.mediaId} has no media attached`);
+    if (isIdentificationError(errorMessage)) {
+      await this.ticketService.open(
+        TicketCategory.IdentificationFailure,
+        { type: 'download_job', id: job.id },
+        {
+          jobId: job.id,
+          packageName,
+          failedFiles: failedFiles.length > 0 ? failedFiles : [packageName],
+          errorMessage,
+        },
+        { title: `Identification échouée — ${packageName}` },
+      );
       return;
     }
 
-    AppService.logger.log(`Resolving IMDb ID for media "${request.media.title}" → ${imdbId}`);
-    await this.mediasRepository.updateImdbId(request.media.id, imdbId);
-    await this.adminsMessaging.reactToMessage(replyMessageId, '✅');
-  }
-
-  private async onRequestLinkSubmitted({
-    request,
-    url,
-    replyMessageId,
-  }: AdminRequestLinkSubmittedEvent): Promise<void> {
-    AppService.logger.log(`Download link submitted for request ${request.mediaId}: ${url}`);
-
-    if (!(await this.fetchrSync.canHandle(url))) {
-      AppService.logger.warn(`No fetchr plugin can handle submitted link: ${url}`);
-      await this.adminsMessaging.reactToMessage(replyMessageId, '❌');
-      return;
-    }
-
-    this.fetchrSync.download(url, buildDownloadMetadata(request.mediaId, request.media));
-    await this.adminsMessaging.reactToMessage(replyMessageId, '✅');
-
-    AppService.logger.log(`Download launched for "${request.media?.title}" with request ${request.mediaId}`);
-  }
-
-  private async onLinkSubmitted({ url, messageId }: AdminLinkSubmittedEvent): Promise<void> {
-    AppService.logger.log(`Link submitted: ${url}`);
-
-    let fileName: string;
-    try {
-      const resolved = await this.fetchrSync.resolve(url);
-      fileName = resolved.fileName;
-      AppService.logger.log(`Resolved link: ${fileName}`);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      AppService.logger.warn(`Failed to resolve link: ${msg}`);
-      await this.adminsMessaging.notifyLinkResolveFailed(url, `Resolution echouee: ${msg}`, messageId);
-      return;
-    }
-
-    const parsed = this.mediaIdentifier.parseFilename(fileName);
-    const identification = await this.mediaIdentifier.identifyFromParsed(parsed);
-
-    if (!identification || !identification.imdbId) {
-      AppService.logger.warn(`Identification failed for resolved file: ${fileName}`);
-      await this.adminsMessaging.notifyLinkResolveFailed(url, `Identification echouee pour: ${fileName}`, messageId);
-      return;
-    }
-
-    await this.launchIdentifiedDownload(url, identification, messageId);
-  }
-
-  private async onLinkRetry({ url, imdbId, originalMessageId, replyMessageId }: AdminLinkRetryEvent): Promise<void> {
-    AppService.logger.log(`Link retry with IMDb ID ${imdbId} for ${url}`);
-
-    const { movies, tvShows } = await this.mediaIdentifier.tmdbFindByImdbId(imdbId);
-    const identification = movies[0]
-      ? {
-          imdbId,
-          title: movies[0].title,
-          year: movies[0].release_date ? parseInt(movies[0].release_date.substring(0, 4), 10) : null,
-          mediaType: 'movie' as const,
-        }
-      : tvShows[0]
-        ? {
-            imdbId,
-            title: tvShows[0].name,
-            year: tvShows[0].first_air_date ? parseInt(tvShows[0].first_air_date.substring(0, 4), 10) : null,
-            mediaType: 'episode' as const,
-          }
-        : null;
-
-    if (!identification) {
-      await this.adminsMessaging.reactToMessage(replyMessageId, '❌');
-      return;
-    }
-
-    await this.launchIdentifiedDownload(url, identification, originalMessageId);
-    await this.adminsMessaging.reactToMessage(replyMessageId, '✅');
-  }
-
-  private async launchIdentifiedDownload(
-    url: string,
-    identification: { imdbId: string | null; title: string; year: number | null; mediaType: 'movie' | 'episode' },
-    discordMessageId: string,
-  ): Promise<void> {
-    const media = await this.mediasRepository.upsert({
-      imdbId: identification.imdbId ?? '',
-      type: identification.mediaType === 'movie' ? MediaType.Movie : MediaType.Episode,
-      title: identification.title,
-      originalTitle: null,
-      year: identification.year,
-      seasonNumber: null,
-      episodeNumber: null,
-      runtimeMinutes: null,
-    });
-
-    await this.requestsRepository.upsert(media.id, RequestStatus.Pending);
-
-    const resolvedMessageId = await this.adminsMessaging.notifyLinkResolved(
-      identification.title,
-      identification.mediaType,
-      identification.year,
-      identification.imdbId,
-      discordMessageId,
+    // Dead-letter: no automated recovery, but at least it now has an identity and a timeline.
+    await this.ticketService.open(
+      TicketCategory.PipelineFailure,
+      { type: 'download_job', id: job.id },
+      { jobId: job.id, fileNames: failedFiles.join(', ') || packageName, failedStep: job.status, errorMessage },
+      { title: `Échec pipeline — ${packageName}` },
     );
-    await this.requestsRepository.attachDiscordMessageId(media.id, resolvedMessageId);
+  }
 
-    this.fetchrSync.download(url, buildDownloadMetadata(media.id, media));
+  private async onJobCompleted(job: DownloadJobEntity): Promise<void> {
+    AppService.logger.log(`Download job ${job.id} completed`);
+    await this.jellyfin.refreshLibrary();
+    await this.requestsRepository.fulfillByJobId(job.id);
+    this.fetchrSync.remove(job.sourceId);
 
-    AppService.logger.log(`Download launched for "${identification.title}" with request ${media.id}`);
+    await this.ticketService.resolveBySubject(
+      TicketCategory.IdentificationFailure,
+      'download_job',
+      job.id,
+      'Identification aboutie',
+    );
+
+    const ticketId = job.metadata?.[TICKET_ID_METADATA_KEY];
+    if (ticketId) {
+      await this.ticketService.resolveById(ticketId, 'Téléchargement abouti');
+    }
   }
 
   private registerCronJob(name: string, cronExpression: string, handler: () => Promise<void>): void {

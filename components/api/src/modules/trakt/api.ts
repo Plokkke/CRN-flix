@@ -17,6 +17,7 @@ import {
   lastActivitiesSchema,
   mediaDetailsSchema,
   mediaSchema,
+  movieDetailsSchema,
   progressShowSchema,
   ratedMediaSchema,
   seasonDetailsSchema,
@@ -40,6 +41,7 @@ import {
   UserAuthCtxt,
   UserSettings,
   WatchedShow,
+  MovieDetails,
 } from './types';
 
 const ACTIVITY_PATHS_BY_TYPE: Record<ActivityType, string[]> = {
@@ -51,6 +53,14 @@ const ACTIVITY_PATHS_BY_TYPE: Record<ActivityType, string[]> = {
   [ActivityType.Listed]: ['lists.liked_at'],
   [ActivityType.Watchlisted]: ['watchlist.updated_at'],
   [ActivityType.Favorited]: ['favorites.updated_at'],
+};
+
+const HIDDEN_SECTIONS = ['progress_watched', 'dropped'] as const;
+type HiddenSection = (typeof HIDDEN_SECTIONS)[number];
+
+const ACTIVITY_BY_HIDDEN_SECTION: Record<HiddenSection, ActivityType> = {
+  progress_watched: ActivityType.Hidden,
+  dropped: ActivityType.Dropped,
 };
 
 export const configSchema = z.object({
@@ -251,6 +261,20 @@ export class TraktApi {
     );
   }
 
+  /** Movie details carry the runtime the size cap needs; watchlist items already include it when `extended=full`. */
+  async requestMovieDetails(movieId: number): Promise<MovieDetails> {
+    return this.cache.withCache(
+      `movie-details-${movieId}`,
+      async () => {
+        const response = await this.api.get<unknown>(`/movies/${movieId}`, {
+          params: { extended: 'full' },
+        });
+        return movieDetailsSchema.parse(response.data);
+      },
+      60 * 60 * 24,
+    );
+  }
+
   async requestShowDetails(showId: number): Promise<ShowDetails> {
     return this.cache.withCache(
       `show-details-${showId}`,
@@ -339,18 +363,28 @@ export class TraktApi {
     });
   }
 
+  /**
+   * Trakt keeps two "not watching anymore" lists: `progress_watched` (hidden from the
+   * progress page) and `dropped` (the "Drop" button). Each is cached on its own activity.
+   */
   async requestUserHidden(
     user: UserAuthCtxt,
-    section: 'progress_watched' = 'progress_watched',
+    section: HiddenSection = 'progress_watched',
     type: MediaType = TraktMediaType.Show,
   ): Promise<HiddenShow[]> {
-    return this.withCache(user, ActivityType.Hidden, async () => {
+    return this.withCache(user, ACTIVITY_BY_HIDDEN_SECTION[section], async () => {
       const response = await this.api.get<unknown>(`/users/hidden/${section}`, {
         headers: { Authorization: getAuthorization(user) },
         params: { type, limit: 9999 },
       });
       return hiddenShowSchema.array().parse(response.data);
     });
+  }
+
+  /** Trakt ids of the shows the user hid or dropped — neither counts as "watching". */
+  async listExcludedShowIds(user: UserAuthCtxt): Promise<Set<number>> {
+    const sections = await Promise.all(HIDDEN_SECTIONS.map((section) => this.requestUserHidden(user, section)));
+    return new Set(sections.flat().map((hidden) => hidden.show.ids.trakt));
   }
 
   async requestUserWatched(user: UserAuthCtxt, type: MediaType = TraktMediaType.Show): Promise<WatchedShow[]> {
@@ -376,14 +410,13 @@ export class TraktApi {
   }
 
   async getWatchingShows(user: UserAuthCtxt): Promise<ProgressShow[]> {
-    const hiddenShows = await this.requestUserHidden(user);
-    const hiddenShowsIds = hiddenShows.map((hidden) => hidden.show.ids.trakt);
-    TraktApi.logger.log(`[progress] user ${user.id}: ${hiddenShows.length} hidden shows`);
+    const excludedShowIds = await this.listExcludedShowIds(user);
+    TraktApi.logger.log(`[progress] user ${user.id}: ${excludedShowIds.size} hidden or dropped shows`);
 
     const allWatchedShows = await this.requestUserWatched(user);
-    const watchedShows = allWatchedShows.filter((show) => !hiddenShowsIds.includes(show.show.ids.trakt));
+    const watchedShows = allWatchedShows.filter((show) => !excludedShowIds.has(show.show.ids.trakt));
     TraktApi.logger.log(
-      `[progress] user ${user.id}: ${allWatchedShows.length} watched shows (${watchedShows.length} after hidden filter)`,
+      `[progress] user ${user.id}: ${allWatchedShows.length} watched shows (${watchedShows.length} after hidden/dropped filter)`,
     );
 
     const progress = await watchedShows.reduce(

@@ -19,6 +19,8 @@ import {
 const MIN_REQUEST_INTERVAL_MS = 500;
 const SEARCH_PAGE_SIZE = 30;
 const LINKS_PER_PAGE = 100;
+/** Unfiltered listings of a long-running show can run past one page; cap the walk. */
+const MAX_LINK_PAGES = 5;
 
 export const configSchema = z.object({
   apiHost: z.string().min(1),
@@ -27,12 +29,8 @@ export const configSchema = z.object({
 
 export type LoadixConfig = z.infer<typeof configSchema>;
 
-/** Empty filter arrays mean "do not filter on that dimension". */
 export type ListLinksOptions = {
   seasonId?: string;
-  qualities?: string[];
-  languages?: string[];
-  providers?: string[];
 };
 
 export class LoadixUnparseableResponseError extends Error {
@@ -106,9 +104,31 @@ export class LoadixApi {
     return this.parse(loadixMediaDetailSchema, response.data, `media ${id}`);
   }
 
+  /** Every link of the media (or of one season), walking the pages up to a cap. */
   async listLinks(mediaId: string, options: ListLinksOptions = {}): Promise<LoadixLink[]> {
+    const items: LoadixLink[] = [];
+    let total = Infinity;
+    for (let page = 1; items.length < total && page <= MAX_LINK_PAGES; page += 1) {
+      const parsed = await this.listLinksPage(mediaId, page, options);
+      items.push(...parsed.items);
+      total = parsed.total;
+      if (parsed.items.length === 0) {
+        break;
+      }
+    }
+    if (items.length < total) {
+      LoadixApi.logger.warn(`Loadix returned ${items.length}/${total} links for ${mediaId}; extra pages ignored`);
+    }
+    return items;
+  }
+
+  private async listLinksPage(
+    mediaId: string,
+    page: number,
+    options: ListLinksOptions,
+  ): Promise<{ items: LoadixLink[]; total: number }> {
     const params = new URLSearchParams({
-      page: '1',
+      page: String(page),
       perPage: String(LINKS_PER_PAGE),
       sort: 'scope_asc',
       linkType: 'ddl_url',
@@ -116,18 +136,7 @@ export class LoadixApi {
     if (options.seasonId) {
       params.append('seasonId', options.seasonId);
     }
-    (options.qualities ?? []).forEach((quality) => params.append('quality', quality));
-    (options.languages ?? []).forEach((language) => params.append('language', language));
-    (options.providers ?? []).forEach((provider) => params.append('provider', provider));
-
     const response = await this.client.get(`/media/${mediaId}/links`, { params });
-
-    const parsed = this.parse(loadixLinksResponseSchema, response.data, `links of ${mediaId}`);
-    if (parsed.total > parsed.items.length) {
-      LoadixApi.logger.warn(
-        `Loadix returned ${parsed.items.length}/${parsed.total} links for ${mediaId}; extra pages ignored`,
-      );
-    }
-    return parsed.items;
+    return this.parse(loadixLinksResponseSchema, response.data, `links of ${mediaId} p${page}`);
   }
 }

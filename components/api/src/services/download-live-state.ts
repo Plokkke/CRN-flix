@@ -41,6 +41,7 @@ export function applyFetchrEvent(live: Map<string, LiveDownload>, { topic, paylo
     case 'download::progress':
     case 'download::completed':
     case 'download::failed':
+    case 'download::updated':
       return mergeDownload(live, payload as Partial<LiveDownload> & { id: string }, topic);
 
     case 'download::canceled':

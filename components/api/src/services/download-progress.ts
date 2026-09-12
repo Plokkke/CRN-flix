@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 
 import { Listener } from '@/helpers/events';
 import { FetchrSyncEvents, FetchrSyncService } from '@/services/fetchr-sync';
-import { DiscordAdminMessaging } from '@/services/messaging/admin/discord';
+import { DownloadsBoard } from '@/services/messaging/admin/downloads-board';
 
 /**
  * Discord rate-limits message edits, and a download runs for minutes: a fixed tick is both
@@ -20,7 +20,7 @@ export class DownloadProgressService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly fetchrSync: FetchrSyncService,
-    private readonly adminsMessaging: DiscordAdminMessaging,
+    private readonly downloadsBoard: DownloadsBoard,
   ) {}
 
   onModuleInit(): void {
@@ -48,7 +48,7 @@ export class DownloadProgressService implements OnModuleInit, OnModuleDestroy {
     this.dirty = false;
 
     try {
-      await this.adminsMessaging.refreshDownloadsMessage(this.fetchrSync.liveDownloads());
+      await this.downloadsBoard.refresh(this.fetchrSync.liveDownloads());
     } catch (error) {
       DownloadProgressService.logger.error(
         `Failed to publish download progress: ${error instanceof Error ? error.message : error}`,

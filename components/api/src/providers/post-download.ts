@@ -8,6 +8,8 @@ import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
+import { TicketsRepository } from '@/services/database/tickets';
+import { EnglishTitleResolver } from '@/services/english-title-resolver';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { MediaLabelizerService } from '@/services/media-labelizer';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
@@ -23,26 +25,37 @@ export const identificationProvider: Provider = {
   ): MediaIdentifierService => new MediaIdentifierService(tmdb, pool, medias, requests),
 };
 
+export const englishTitleResolverProvider: Provider = {
+  provide: EnglishTitleResolver,
+  inject: [TmdbApiService],
+  useFactory: (tmdb: TmdbApiService): EnglishTitleResolver => new EnglishTitleResolver(tmdb),
+};
+
 export const placementProvider: Provider = {
   provide: MediaLabelizerService,
-  inject: [ConfigService],
-  useFactory: (configService: ConfigService<Config, true>): MediaLabelizerService => {
+  inject: [ConfigService, EnglishTitleResolver],
+  useFactory: (
+    configService: ConfigService<Config, true>,
+    englishTitle: EnglishTitleResolver,
+  ): MediaLabelizerService => {
     const config = configService.get('mediaPaths');
-    return new MediaLabelizerService(config);
+    return new MediaLabelizerService(config, englishTitle);
   },
 };
 
 export const postDownloadPipelineProvider: Provider = {
   provide: PostDownloadPipeline,
-  inject: [DownloadJobsRepository, MediaIdentifierService, MediaLabelizerService],
+  inject: [DownloadJobsRepository, MediaIdentifierService, MediaLabelizerService, TicketsRepository],
   useFactory: (
     downloadJobs: DownloadJobsRepository,
     identification: MediaIdentifierService,
     placement: MediaLabelizerService,
-  ): PostDownloadPipeline => new PostDownloadPipeline(downloadJobs, identification, placement),
+    tickets: TicketsRepository,
+  ): PostDownloadPipeline => new PostDownloadPipeline(downloadJobs, identification, placement, tickets),
 };
 
 export const postDownloadProviders: Provider[] = [
+  englishTitleResolverProvider,
   identificationProvider,
   placementProvider,
   postDownloadPipelineProvider,

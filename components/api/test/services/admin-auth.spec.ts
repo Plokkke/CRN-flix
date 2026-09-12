@@ -87,7 +87,7 @@ describe('AdminAuthService', () => {
 
       expect(token).toEqual(expect.any(String));
       expect(sessions.create).toHaveBeenCalledWith(
-        expect.objectContaining({ discordUserId: 'admin-2', userAgent: 'jest-agent' }),
+        expect.objectContaining({ subjectId: 'admin-2', userAgent: 'jest-agent' }),
       );
     });
 
@@ -134,23 +134,23 @@ describe('AdminAuthService', () => {
     it('rejects an unknown token', async () => {
       const { service } = buildHarness();
 
-      await expect(service.validateSession('nope')).resolves.toBe(false);
+      await expect(service.validateSession('nope')).resolves.toBeNull();
     });
 
     it('slides the expiry window when the session is a day stale', async () => {
       const { service, sessions } = buildHarness();
       const staleDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-      sessions.getLive.mockResolvedValue({ id: 'session-1', discordUserId: 'admin-1', lastUsedAt: staleDate });
+      sessions.getLive.mockResolvedValue({ id: 'session-1', subjectId: 'admin-1', lastUsedAt: staleDate });
 
-      await expect(service.validateSession('token')).resolves.toBe(true);
+      await expect(service.validateSession('token')).resolves.toEqual({ subjectId: 'admin-1' });
       expect(sessions.touch).toHaveBeenCalledWith('session-1', expect.any(Date));
     });
 
     it('does not write on every request for a freshly used session', async () => {
       const { service, sessions } = buildHarness();
-      sessions.getLive.mockResolvedValue({ id: 'session-1', discordUserId: 'admin-1', lastUsedAt: new Date() });
+      sessions.getLive.mockResolvedValue({ id: 'session-1', subjectId: 'admin-1', lastUsedAt: new Date() });
 
-      await expect(service.validateSession('token')).resolves.toBe(true);
+      await expect(service.validateSession('token')).resolves.toEqual({ subjectId: 'admin-1' });
       expect(sessions.touch).not.toHaveBeenCalled();
     });
   });

@@ -14,12 +14,14 @@ model User {
   jellyfinId          String?  @unique @map("jellyfin_id") @db.VarChar(255)
   messagingKey        String   @map("messaging_key") @db.VarChar(255)
   messagingId         String   @map("messaging_id") @db.VarChar(255)
-  discordMessageId    String?  @unique @map("discord_message_id") @db.VarChar(255)
+  status              UserStatus @default(pending)
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   userActivities      UserActivity[]
   requestUsers        RequestUser[]
+  showProgress        UserShowProgress[]
+  sessions            UserSession[]
 
   @@unique([messagingKey, messagingId])
   @@map("users")
@@ -46,11 +48,13 @@ model Media {
   year           Int?
   seasonNumber   Int?     @map("season_number")
   episodeNumber  Int?     @map("episode_number")
+  traktSlug      String?  @map("trakt_slug") @db.VarChar(255)
   runtimeMinutes Int?     @map("runtime_minutes")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  mediaRequest  MediaRequest?
+  mediaRequest          MediaRequest?
+  plannedDownloadMedias PlannedDownloadMedia[]
 
   @@unique([imdbId, seasonNumber, episodeNumber], name: "medias_unique_idx")
   @@map("medias")
@@ -59,9 +63,6 @@ model Media {
 model MediaRequest {
   mediaId            String              @id @map("media_id") @db.Uuid
   status             MediaRequestStatus  @default(missing)
-  discordMessageId   String?             @map("discord_message_id") @db.VarChar(50)
-  indexerName        String?             @map("indexer_name")
-  indexerLink        String?             @map("indexer_link")
   downloadJobId      String?             @map("download_job_id") @db.Uuid
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -71,6 +72,54 @@ model MediaRequest {
   requestUsers  RequestUser[]
 
   @@map("media_requests")
+}
+
+model UserShowProgress {
+  userId      String   @map("user_id") @db.Uuid
+  showImdbId  String   @map("show_imdb_id") @db.VarChar(32)
+  nextSeason  Int?     @map("next_season")
+  nextEpisode Int?     @map("next_episode")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, showImdbId])
+  @@map("user_show_progress")
+}
+
+model PlannedDownload {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  showImdbId       String?              @map("show_imdb_id") @db.VarChar(32)
+  scope            PlannedDownloadScope
+  seasonNumber     Int?                 @map("season_number")
+  episodeNumber    Int?                 @map("episode_number")
+  indexerName      String               @map("indexer_name")
+  url              String
+  quality          String               @db.VarChar(16)
+  host          String   @default("1fichier") @db.VarChar(32)
+  language         String               @db.VarChar(16)
+  sizeBytes        BigInt?              @map("size_bytes") @db.BigInt
+  label            PlannedDownloadLabel
+  status           PlannedDownloadStatus @default(proposed)
+  alternatives     Json                 @default("[]") @db.JsonB
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  medias PlannedDownloadMedia[]
+
+  @@index([showImdbId])
+  @@map("planned_downloads")
+}
+
+model PlannedDownloadMedia {
+  plannedDownloadId String @map("planned_download_id") @db.Uuid
+  mediaId           String @map("media_id") @db.Uuid
+
+  plannedDownload PlannedDownload @relation(fields: [plannedDownloadId], references: [id], onDelete: Cascade)
+  media           Media           @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([plannedDownloadId, mediaId])
+  @@map("planned_download_medias")
 }
 
 model UserNotification {
@@ -96,6 +145,58 @@ model AdminSession {
   @@map("admin_sessions")
 }
 
+model IndexerBookmark {
+  indexerName String   @map("indexer_name") @db.VarChar(64)
+  imdbId      String   @map("imdb_id") @db.VarChar(32)
+  pageUrl     String?  @map("page_url")
+  searchUrl   String?  @map("search_url")
+  state       Json?    @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([indexerName, imdbId])
+  @@index([imdbId])
+  @@map("indexer_bookmarks")
+}
+
+model MediaRequestState {
+  mediaId       String   @id @map("media_id") @db.Uuid
+  urgency       String   @db.VarChar(16)
+  sourcing      String   @db.VarChar(16)
+  bestCandidate Json?    @map("best_candidate") @db.JsonB
+  bestRejected  Json?    @map("best_rejected") @db.JsonB
+  actionId      String?  @map("action_id") @db.Uuid
+  plannedAt     DateTime @default(now()) @map("planned_at") @db.Timestamptz(6)
+
+  @@index([sourcing])
+  @@map("media_request_states")
+}
+
+model PlannerFinding {
+  targetKey  String   @id @map("target_key") @db.VarChar(64)
+  candidates Json     @db.JsonB
+  referenced Boolean  @default(false)
+  foundAt    DateTime @default(now()) @map("found_at") @db.Timestamptz(6)
+
+  @@map("planner_findings")
+}
+
+model UserSession {
+  id         String    @id @default(uuid()) @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  userId     String    @map("user_id") @db.Uuid
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastUsedAt DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(6)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
 model RequestUser {
   requestMediaId String             @map("request_media_id") @db.Uuid
   userId         String             @map("user_id") @db.Uuid
@@ -108,6 +209,76 @@ model RequestUser {
 
   @@id([requestMediaId, userId])
   @@map("request_users")
+}
+
+model Ticket {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category    TicketCategory
+  subjectType String?      @map("subject_type") @db.VarChar(32)
+  subjectId   String?      @map("subject_id") @db.VarChar(64)
+  status      TicketStatus @default(open)
+  title       String
+  summary     String?
+  payload     Json         @default("{}") @db.JsonB
+  attempts    Int          @default(0)
+  resolution  String?
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  resolvedAt  DateTime?    @map("resolved_at") @db.Timestamptz(6)
+
+  events   TicketEvent[]
+  bindings TicketBinding[]
+
+  @@map("tickets")
+}
+
+model TicketEvent {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  kind      String   @db.VarChar(32)
+  actor     String   @db.VarChar(80)
+  message   String
+  data      Json     @default("{}") @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_events")
+}
+
+model TicketBinding {
+  ticketId   String   @map("ticket_id") @db.Uuid
+  adapter    String   @db.VarChar(16)
+  kind       String   @db.VarChar(16)
+  externalId String   @map("external_id") @db.VarChar(64)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@id([ticketId, adapter, kind])
+  @@unique([adapter, externalId])
+  @@map("ticket_bindings")
+}
+
+enum UserStatus {
+  pending
+  active
+}
+
+enum TicketCategory {
+  user_approval          @map("user-approval")
+  download_action        @map("download-action")
+  identification_failure @map("identification-failure")
+  pipeline_failure       @map("pipeline-failure")
+  manual_download        @map("manual-download")
+  missing_imdb           @map("missing-imdb")
+}
+
+enum TicketStatus {
+  open
+  resolved
+  abandoned
 }
 
 enum UserActivityType {
@@ -127,7 +298,27 @@ enum MediaRequestStatus {
   fulfilled
   missing
   rejected
-  canceled
+}
+
+enum PlannedDownloadScope {
+  movie
+  episode
+  season
+  series
+}
+
+enum PlannedDownloadLabel {
+  starved
+  needed
+  deferred
+}
+
+enum PlannedDownloadStatus {
+  proposed
+  downloading
+  done
+  superseded
+  expired
 }
 
 enum RequestReason {
@@ -168,13 +359,12 @@ model NamingAuditItem {
 
 model DownloadJob {
   id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  jdownloaderPackageId BigInt            @unique @map("jdownloader_package_id") @db.BigInt
+  sourceId             String            @unique @map("source_id")
   packageName          String            @map("package_name")
   saveTo               String            @map("save_to")
   status               DownloadJobStatus @default(detected)
   sourcePaths              String[]          @map("source_paths")
   errorMessage             String?           @map("error_message")
-  discordMessageId         String?           @map("discord_message_id")
   metadata                 Json?             @db.JsonB
   createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

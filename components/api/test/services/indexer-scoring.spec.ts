@@ -6,6 +6,7 @@ function buildCandidate(overrides: Partial<IndexerCandidate> = {}): IndexerCandi
   return {
     indexerName: 'test',
     url: 'https://example.com',
+    scope: { kind: 'movie' },
     quality: Quality.HD_1080P,
     language: Language.TRUEFRENCH,
     host: Host.ONE_FICHIER,

@@ -5,10 +5,14 @@ import { z } from 'zod';
 import { ContextService } from '@/services/context';
 import { RequestEntity } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
-import { isUserNotifiableStatus, UserMessaging } from '@/services/messaging/user';
-import { errorTemplate, registeredTemplate, requestUpdateTemplate } from '@/services/messaging/user/email/templates';
-
-import { EmailQueue } from './queue';
+import { isUserNotifiableStatus, LoginChallenge, UserMessaging } from '@/services/messaging/user';
+import {
+  errorTemplate,
+  loginChallengeTemplate,
+  registeredTemplate,
+  requestUpdateTemplate,
+} from '@/services/messaging/user/email/templates';
+import { DebouncedRequestQueue } from '@/services/messaging/user/notification-queue';
 
 export const configSchema = z.object({
   serviceName: z.string(),
@@ -21,7 +25,7 @@ export type Config = z.infer<typeof configSchema>;
 export class EmailUserMessaging extends UserMessaging<string> implements OnModuleInit, OnModuleDestroy {
   private static logger = new Logger(EmailUserMessaging.name);
   private transporter: nodemailer.Transporter;
-  private emailQueue: EmailQueue;
+  private emailQueue: DebouncedRequestQueue;
 
   constructor(
     private readonly config: Config,
@@ -38,7 +42,7 @@ export class EmailUserMessaging extends UserMessaging<string> implements OnModul
       },
     });
 
-    this.emailQueue = new EmailQueue(this.sendRequestUpdateEmail.bind(this));
+    this.emailQueue = new DebouncedRequestQueue(this.sendRequestUpdateEmail.bind(this));
   }
 
   async onModuleInit(): Promise<void> {
@@ -102,6 +106,16 @@ export class EmailUserMessaging extends UserMessaging<string> implements OnModul
     }
   }
 
+  async loginChallenge(email: string, challenge: LoginChallenge): Promise<void> {
+    try {
+      await this.transporter.sendMail({ from: this.from, to: email, ...loginChallengeTemplate(challenge) });
+      EmailUserMessaging.logger.log(`Login challenge email sent to ${email}`);
+    } catch (error) {
+      EmailUserMessaging.logger.error(`Failed to send login challenge email to ${email}`, error);
+      throw error;
+    }
+  }
+
   async requestUpdated(email: string, request: RequestEntity): Promise<void> {
     if (!request.media) {
       throw new InternalServerErrorException('Request media not loaded');
@@ -112,7 +126,7 @@ export class EmailUserMessaging extends UserMessaging<string> implements OnModul
     }
 
     EmailUserMessaging.logger.log(`Queueing email to ${email} for media request update`);
-    await this.emailQueue.addToQueue(email, request);
+    await this.emailQueue.add(email, request);
   }
 
   private async sendRequestUpdateEmail(email: string, requests: RequestEntity[]): Promise<void> {

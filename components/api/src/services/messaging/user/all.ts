@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 
 import { RequestEntity } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
-import { isUserNotifiableStatus, UserMessaging } from '@/services/messaging/user';
+import { isUserNotifiableStatus, LoginChallenge, UserMessaging } from '@/services/messaging/user';
 
 export type UserMessagingCtxt = {
   key: string;
@@ -32,6 +32,11 @@ export class AllUserMessaging extends UserMessaging<UserMessagingCtxt> {
   async error(ctxt: UserMessagingCtxt, message: string): Promise<void> {
     const messaging = this.getMessaging(ctxt.key);
     await messaging.error(ctxt.id, message);
+  }
+
+  async loginChallenge(ctxt: UserMessagingCtxt, challenge: LoginChallenge): Promise<void> {
+    const messaging = this.getMessaging(ctxt.key);
+    await messaging.loginChallenge(ctxt.id, challenge);
   }
 
   async requestUpdated(ctxt: UserMessagingCtxt, request: RequestEntity): Promise<void> {

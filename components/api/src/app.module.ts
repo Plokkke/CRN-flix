@@ -8,11 +8,12 @@ import { AppService } from '@/app.service';
 import { AdminController } from '@/controllers/AdminController';
 import { AssetsController } from '@/controllers/AssetsController';
 import { MailingController } from '@/controllers/MailingController';
+import { MeController } from '@/controllers/MeController';
+import { TicketsAdminController } from '@/controllers/TicketsAdminController';
 import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
 import { discordConfigSchema } from '@/modules/discord/discord';
-import { configSchema as hydrackerConfigSchema } from '@/modules/indexer/hydracker/api';
 import { configSchema as loadixConfigSchema } from '@/modules/indexer/loadix/api';
 import { Host, Language, Quality } from '@/modules/indexer/preferences';
 import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
@@ -22,22 +23,22 @@ import { adminAuthProvider } from '@/providers/admin-auth';
 import { contextProvider } from '@/providers/context';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
-import { discordSyncProvider } from '@/providers/discord-sync';
 import { fetchrSyncProvider } from '@/providers/fetchr-sync';
-import { indexerOrchestratorProvider, indexersRegistryProvider } from '@/providers/indexer-orchestrator';
-import { indexerSyncProvider } from '@/providers/indexer-sync';
 import { jellyfinProvider } from '@/providers/jellyfin';
 import { jellyfinSyncProvider } from '@/providers/jellyfin-sync';
-import { adminMessagingProvider } from '@/providers/messaging/admin';
+import { adminMessagingProviders } from '@/providers/messaging/admin';
 import { allUserMessagingProvider } from '@/providers/messaging/all';
 import { userMessagingProviders } from '@/providers/messaging/user';
 import { namingAuditProviders } from '@/providers/naming-audit';
+import { indexersRegistryProvider, plannerProvider, traktPlayheadProvider } from '@/providers/planner';
 import { postDownloadProviders } from '@/providers/post-download';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
+import { ticketProviders } from '@/providers/tickets';
 import { tmdbProvider } from '@/providers/tmdb';
 import { traktProvider } from '@/providers/trakt';
 import { traktSyncProvider } from '@/providers/trakt-sync';
 import { traktPluginProvider } from '@/providers/traktPlugin';
+import { userAuthProvider } from '@/providers/user-auth';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { DownloadProgressService } from '@/services/download-progress';
 import { HealthChecksService } from '@/services/health-checks';
@@ -59,7 +60,6 @@ export const configSchema = z.object({
   mailing: mailingConfigSchema,
   discord: discordConfigSchema,
   indexer: z.object({
-    hydracker: hydrackerConfigSchema.nullable(),
     loadix: loadixConfigSchema.nullable(),
     preferences: z.object({
       allowedQualities: z.array(z.enum(Quality)),
@@ -94,7 +94,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
       url: env.server.url,
     },
     trakt: env.trakt,
-    sync: {},
+    sync: env.sync,
     datasource: {
       host: env.database.host,
       port: env.database.port,
@@ -121,11 +121,20 @@ export function loadConfig(env: EnvironmentVariables): Config {
 export function configureAppModule(env: EnvironmentVariables): new () => NestModule {
   @Module({
     imports: [ConfigModule.forRoot({ load: [() => loadConfig(env)] }), ScheduleModule.forRoot(), HealthModule],
-    controllers: [UsersController, MailingController, UserGuideController, AssetsController, AdminController],
+    controllers: [
+      UsersController,
+      MailingController,
+      UserGuideController,
+      AssetsController,
+      AdminController,
+      TicketsAdminController,
+      MeController,
+    ],
     providers: [
       MemoryCacheService,
       AppService,
       adminAuthProvider,
+      userAuthProvider,
       contextProvider,
       traktProvider,
       syncDataSourceProvider,
@@ -133,15 +142,15 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       traktSyncProvider,
       jellyfinSyncProvider,
       indexersRegistryProvider,
-      indexerOrchestratorProvider,
-      indexerSyncProvider,
+      traktPlayheadProvider,
+      plannerProvider,
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
-      discordSyncProvider,
       ...userMessagingProviders,
       allUserMessagingProvider,
-      adminMessagingProvider,
+      ...adminMessagingProviders,
+      ...ticketProviders,
       fetchrSyncProvider,
       DownloadProgressService,
       tmdbProvider,

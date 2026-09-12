@@ -1,11 +1,4 @@
-import {
-  loadixLanguageLabels,
-  loadixProviderLabels,
-  loadixQualityLabels,
-  mapHost,
-  mapLanguage,
-  mapQuality,
-} from '@/modules/indexer/loadix/mapping';
+import { mapHost, mapLanguage, mapQuality } from '@/modules/indexer/loadix/mapping';
 import { Host, Language, Quality } from '@/modules/indexer/preferences';
 
 describe('loadix mapping', () => {
@@ -88,25 +81,6 @@ describe('loadix mapping', () => {
       ['Japanese', Language.UNKNOWN],
     ])('maps "%s"', (raw, expected) => {
       expect(mapLanguage(raw)).toBe(expected);
-    });
-  });
-
-  describe('reverse label lookups (server-side search filters)', () => {
-    it('expands allowed enums into every matching Loadix label', () => {
-      const labels = loadixQualityLabels([Quality.HD_1080P]);
-      expect(labels).toEqual(expect.arrayContaining(['HDLight 1080p', 'REMUX BLURAY', 'Blu-Ray 1080p (x265)']));
-      expect(labels).not.toEqual(expect.arrayContaining(['CAM', 'WEB 720p', '4K']));
-
-      expect(loadixLanguageLabels([Language.TRUEFRENCH])).toEqual(
-        expect.arrayContaining(['VFF', 'TRUEFRENCH', 'VFF+VOSTFR']),
-      );
-      expect(loadixProviderLabels([Host.ONE_FICHIER])).toEqual(['1fichier']);
-    });
-
-    it('returns no filter when everything is allowed or unknown is allowed', () => {
-      expect(loadixQualityLabels([])).toEqual([]);
-      expect(loadixQualityLabels([Quality.HD_1080P, Quality.UNKNOWN])).toEqual([]);
-      expect(loadixLanguageLabels([Language.UNKNOWN])).toEqual([]);
     });
   });
 

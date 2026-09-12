@@ -21,7 +21,6 @@ export type DownloadJobEntity = {
   status: DownloadJobStatus;
   sourcePaths: string[];
   errorMessage: string | null;
-  discordMessageId: string | null;
   metadata: Record<string, string> | null;
   createdAt: Date;
   updatedAt: Date;
@@ -35,7 +34,6 @@ type DownloadJobRecord = {
   status: string;
   source_paths: string[];
   error_message: string | null;
-  discord_message_id: string | null;
   metadata: Record<string, string> | null;
   created_at: Date;
   updated_at: Date;
@@ -50,7 +48,6 @@ function mapRecord(record: DownloadJobRecord): DownloadJobEntity {
     status: record.status as DownloadJobStatus,
     sourcePaths: record.source_paths,
     errorMessage: record.error_message,
-    discordMessageId: record.discord_message_id,
     metadata: record.metadata,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
@@ -185,6 +182,18 @@ export class DownloadJobsRepository extends Emitter<DownloadJobEvents> implement
     );
   }
 
+  /** Post-download jobs still being processed (detected / identifying). */
+  async listInProgress(): Promise<DownloadJobEntity[]> {
+    const result = await withDbRetry(
+      () =>
+        this.pool.query<DownloadJobRecord>(`SELECT * FROM download_jobs WHERE status = ANY($1) ORDER BY created_at`, [
+          [DownloadJobStatus.Detected, DownloadJobStatus.Identifying],
+        ]),
+      { label: 'downloadJobs.listInProgress' },
+    );
+    return result.rows.map(mapRecord);
+  }
+
   async get(id: string): Promise<DownloadJobEntity | null> {
     const result = await withDbRetry(
       () => this.pool.query<DownloadJobRecord>('SELECT * FROM download_jobs WHERE id = $1', [id]),
@@ -197,26 +206,6 @@ export class DownloadJobsRepository extends Emitter<DownloadJobEvents> implement
     const result = await withDbRetry(
       () => this.pool.query<DownloadJobRecord>('SELECT * FROM download_jobs WHERE source_id = $1', [sourceId]),
       { label: 'downloadJobs.getBySourceId' },
-    );
-    return result.rows[0] ? mapRecord(result.rows[0]) : null;
-  }
-
-  async updateDiscordMessageId(id: string, messageId: string): Promise<void> {
-    await withDbRetry(
-      () =>
-        this.pool.query(`UPDATE download_jobs SET discord_message_id = $2, updated_at = NOW() WHERE id = $1`, [
-          id,
-          messageId,
-        ]),
-      { label: 'downloadJobs.updateDiscordMessageId' },
-    );
-  }
-
-  async getByDiscordMessageId(messageId: string): Promise<DownloadJobEntity | null> {
-    const result = await withDbRetry(
-      () =>
-        this.pool.query<DownloadJobRecord>('SELECT * FROM download_jobs WHERE discord_message_id = $1', [messageId]),
-      { label: 'downloadJobs.getByDiscordMessageId' },
     );
     return result.rows[0] ? mapRecord(result.rows[0]) : null;
   }

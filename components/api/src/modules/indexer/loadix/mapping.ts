@@ -5,9 +5,7 @@ import { Host, Language, Quality } from '@/modules/indexer/preferences';
  * The label is the single source of truth (a "CAM" happily claims 1080p in its
  * filename); any label absent from these tables maps to UNKNOWN.
  *
- * Labels keep the site's exact casing: the same tables serve both directions —
- * mapping API responses to enums, and turning allowed enums back into the
- * `quality=`/`language=` search filters the links endpoint accepts.
+ * Labels keep the site's exact casing for readability; lookups are case-insensitive.
  */
 
 const QUALITY_LABELS: [string, Quality][] = [
@@ -110,28 +108,4 @@ export function mapLanguage(label: string): Language {
 
 export function mapHost(provider: string): Host {
   return hostByProvider.get(provider.toLowerCase()) ?? Host.UNKNOWN;
-}
-
-/**
- * Loadix labels covered by an allow-list, for server-side search filters.
- * Empty result means "do not filter": either everything is allowed, or the
- * list contains UNKNOWN, whose labels cannot be enumerated.
- */
-function labelsFor<T>(labels: [string, T][], allowed: T[], unknown: T): string[] {
-  if (allowed.length === 0 || allowed.includes(unknown)) {
-    return [];
-  }
-  return labels.filter(([, value]) => allowed.includes(value)).map(([label]) => label);
-}
-
-export function loadixQualityLabels(allowed: Quality[]): string[] {
-  return labelsFor(QUALITY_LABELS, allowed, Quality.UNKNOWN);
-}
-
-export function loadixLanguageLabels(allowed: Language[]): string[] {
-  return labelsFor(LANGUAGE_LABELS, allowed, Language.UNKNOWN);
-}
-
-export function loadixProviderLabels(allowed: Host[]): string[] {
-  return labelsFor(PROVIDER_LABELS, allowed, Host.UNKNOWN);
 }

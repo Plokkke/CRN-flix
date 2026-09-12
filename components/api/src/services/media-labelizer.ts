@@ -4,6 +4,7 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
+import { EnglishTitleResolver } from './english-title-resolver';
 import { IdentificationResult } from './media-identifier';
 
 export type MediaIdentity = Pick<
@@ -57,7 +58,18 @@ function buildFolderName(title: string, year: number | null, imdbId: string | nu
 export class MediaLabelizerService {
   private static readonly logger = new Logger(MediaLabelizerService.name);
 
-  constructor(private readonly config: MediaPathsConfig) {}
+  constructor(
+    private readonly config: MediaPathsConfig,
+    private readonly englishTitle: EnglishTitleResolver,
+  ) {}
+
+  async toCanonicalIdentity<T extends MediaIdentity>(identity: T): Promise<T> {
+    if (!identity.imdbId) {
+      return identity;
+    }
+    const resolution = await this.englishTitle.resolve(identity.imdbId);
+    return resolution.title ? { ...identity, title: resolution.title } : identity;
+  }
 
   generateDestination(identity: MediaIdentity, opts: PlacementOptions = {}): [string, string] {
     const idName = buildFolderName(identity.title, identity.year, identity.imdbId);
@@ -100,7 +112,8 @@ export class MediaLabelizerService {
     metadata?: Record<string, string> | null,
   ): Promise<void> {
     const isPrivate = isPrivateMetadata(metadata);
-    const [folderName, fileName] = this.generateDestination(identity, { isPrivate });
+    const canonical = await this.toCanonicalIdentity(identity);
+    const [folderName, fileName] = this.generateDestination(canonical, { isPrivate });
     const ext = path.extname(sourcePath);
     const destinationPath = path.join(folderName, `${fileName + ext}`);
 

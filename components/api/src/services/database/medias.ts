@@ -5,13 +5,15 @@ import { IndexerMedia, MediaType } from '@/modules/indexer/contract';
 
 export { MediaType };
 
-export type MediaEntity = IndexerMedia & {
+/** Trakt's slug is engine metadata (direct links), not part of the indexer contract. */
+export type MediaInfos = IndexerMedia & { traktSlug?: string | null };
+
+export type MediaEntity = MediaInfos & {
   id: string;
+  traktSlug: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
-
-export type MediaInfos = IndexerMedia;
 
 type MediaRecord = {
   id: string;
@@ -23,6 +25,7 @@ type MediaRecord = {
   season_number: number | null;
   episode_number: number | null;
   runtime_minutes: number | null;
+  trakt_slug: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -38,6 +41,7 @@ function fromMediaRecord(record: MediaRecord): MediaEntity {
     seasonNumber: record.season_number,
     episodeNumber: record.episode_number,
     runtimeMinutes: record.runtime_minutes,
+    traktSlug: record.trakt_slug,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -92,14 +96,15 @@ export class MediasRepository {
 
   async upsert(infos: MediaInfos): Promise<MediaEntity> {
     const query = `
-      INSERT INTO medias (imdb_id, type, title, original_title, year, season_number, episode_number, runtime_minutes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO medias (imdb_id, type, title, original_title, year, season_number, episode_number, runtime_minutes, trakt_slug)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT (imdb_id, COALESCE(season_number, -1), COALESCE(episode_number, -1))
       DO UPDATE SET
         title = $3,
         original_title = COALESCE($4, medias.original_title),
         year = $5,
-        runtime_minutes = COALESCE($8, medias.runtime_minutes)
+        runtime_minutes = COALESCE($8, medias.runtime_minutes),
+        trakt_slug = COALESCE($9, medias.trakt_slug)
       RETURNING *
     `;
     const { rows } = await this.pool.query<MediaRecord>(query, [
@@ -111,6 +116,7 @@ export class MediasRepository {
       infos.seasonNumber,
       infos.episodeNumber,
       infos.runtimeMinutes,
+      infos.traktSlug ?? null,
     ]);
 
     if (rows.length) {

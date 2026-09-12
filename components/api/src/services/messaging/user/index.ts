@@ -20,8 +20,17 @@ export type Config = {
   };
 };
 
+/** Proofs of a subscriber-space login: a code to type and a magic link, both single-use. */
+export type LoginChallenge = {
+  code: string;
+  link: string;
+  serviceName: string;
+  expiresInMinutes: number;
+};
+
 export abstract class UserMessaging<ID> {
   abstract error(id: ID, message: string): Promise<void>;
   abstract registered(id: ID, user: UserEntity, password: string): Promise<void>;
   abstract requestUpdated(id: ID, request: RequestEntity): Promise<void>;
+  abstract loginChallenge(id: ID, challenge: LoginChallenge): Promise<void>;
 }

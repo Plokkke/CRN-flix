@@ -3,17 +3,10 @@ import { ConfigService } from '@nestjs/config';
 
 import { Config } from '@/app.module';
 import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
-import { TmdbApiService } from '@/modules/tmdb/tmdb';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
 import { EnglishTitleResolver } from '@/services/english-title-resolver';
 import { MediaLabelizerService } from '@/services/media-labelizer';
 import { NamingAuditService } from '@/services/naming-audit';
-
-export const englishTitleResolverProvider: Provider = {
-  provide: EnglishTitleResolver,
-  inject: [TmdbApiService],
-  useFactory: (tmdb: TmdbApiService): EnglishTitleResolver => new EnglishTitleResolver(tmdb),
-};
 
 export const namingAuditProvider: Provider = {
   provide: NamingAuditService,
@@ -30,4 +23,4 @@ export const namingAuditProvider: Provider = {
   },
 };
 
-export const namingAuditProviders: Provider[] = [englishTitleResolverProvider, namingAuditProvider];
+export const namingAuditProviders: Provider[] = [namingAuditProvider];

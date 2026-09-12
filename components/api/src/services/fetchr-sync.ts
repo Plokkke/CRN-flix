@@ -64,6 +64,7 @@ const SUBSCRIBED_TOPICS = [
   'download::failed',
   'download::canceled',
   'download::removed',
+  'download::updated',
 ];
 
 const RECONNECT_BASE_MS = 1000;
@@ -250,6 +251,15 @@ export class FetchrSyncService extends Emitter<FetchrSyncEvents> implements OnMo
 
   remove(downloadId: string): void {
     this.send({ topic: 'download::remove', payload: { id: downloadId } });
+  }
+
+  cancel(downloadId: string): void {
+    this.send({ topic: 'download::cancel', payload: { id: downloadId } });
+  }
+
+  /** Replaces the metadata Fetchr will echo on `download::completed`; ignored by Fetchr once completed. */
+  updateMetadata(downloadId: string, metadata: Record<string, string>): void {
+    this.send({ topic: 'download::update', payload: { id: downloadId, metadata } });
   }
 
   async resolve(url: string): Promise<{ fileName: string; size: number | null }> {

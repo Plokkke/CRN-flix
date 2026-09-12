@@ -21,6 +21,18 @@ function buildDownload(overrides: Partial<LiveDownload> = {}): LiveDownload {
 }
 
 describe('applyFetchrEvent', () => {
+  it('swaps the metadata of a live download on an updated event', () => {
+    const live = new Map([['dl-1', buildDownload()]]);
+
+    const changed = applyFetchrEvent(live, {
+      topic: 'download::updated',
+      payload: { id: 'dl-1', metadata: { 'crn-flix-request-id': 'req-2' } },
+    });
+
+    expect(changed).toBe(true);
+    expect(live.get('dl-1')).toMatchObject({ status: 'downloading', metadata: { 'crn-flix-request-id': 'req-2' } });
+  });
+
   it('replaces the whole set on a list snapshot', () => {
     const live = new Map([['stale', buildDownload({ id: 'stale' })]]);
 

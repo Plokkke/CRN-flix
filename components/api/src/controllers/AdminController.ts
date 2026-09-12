@@ -14,31 +14,44 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
-import { AdminAuthRedirectFilter } from '@/filters/admin-auth-redirect.filter';
+import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
 import { AdminSessionGuard, SkipAdminAuth } from '@/guards/admin-session.guard';
 import { readCookie } from '@/helpers/cookies';
+import { executionByTrack, ExecutionView } from '@/services/admin/execution';
+import { buildDashboard, DashboardTab, TABS } from '@/services/admin/requests-view';
 import { ADMIN_SESSION_COOKIE, AdminAuthService, CodeRequestOutcome } from '@/services/admin-auth';
 import { ContextService } from '@/services/context';
+import { DownloadJobsRepository } from '@/services/database/download-jobs';
+import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
+import { PlannedDownloadsRepository } from '@/services/database/planned-downloads';
+import { PlannerFindingsRepository } from '@/services/database/planner-findings';
+import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
-import { DiscordSyncService } from '@/services/discord-sync';
-import { IndexerSyncService } from '@/services/indexer-sync';
+import { TicketsRepository } from '@/services/database/tickets';
+import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
 import { adminLoginTemplate } from '@/services/messaging/user/email/templates/admin-login';
 import { adminNamingAuditTemplate } from '@/services/messaging/user/email/templates/admin-naming-audit';
 import { NamingAuditService } from '@/services/naming-audit';
+import { PlannerService } from '@/services/planner/planner';
+import { TicketReconcilerService } from '@/services/tickets/reconciler';
 import { TraktSyncService } from '@/services/trakt-sync';
+import { truthy } from '@/utils';
 
 const JOBS = [
   { name: 'trakt-sync', schedule: 'Every 5 minutes' },
-  { name: 'indexer-sync', schedule: 'Every hour' },
+  { name: 'planner', schedule: 'Every hour' },
   { name: 'jellyfin-sync', schedule: 'Every 15 minutes' },
-  { name: 'discord-sync', schedule: 'Every 5 minutes' },
+  { name: 'ticket-sync', schedule: 'Every 5 minutes' },
   { name: 'naming-audit', schedule: 'Manual only' },
 ] as const;
 
 type JobName = (typeof JOBS)[number]['name'];
+
+const parseTab = (tab: string | undefined): DashboardTab =>
+  TABS.some((t) => t.key === tab) ? (tab as DashboardTab) : 'download';
 
 const CODE_REQUEST_MESSAGES: Record<CodeRequestOutcome, string> = {
   sent: 'Code envoyé sur Discord.',
@@ -48,7 +61,7 @@ const CODE_REQUEST_MESSAGES: Record<CodeRequestOutcome, string> = {
 
 @Controller('admin')
 @UseGuards(AdminSessionGuard)
-@UseFilters(AdminAuthRedirectFilter)
+@UseFilters(SessionAuthRedirectFilter)
 export class AdminController {
   private static readonly logger = new Logger(AdminController.name);
 
@@ -59,17 +72,24 @@ export class AdminController {
     private readonly contextService: ContextService,
     private readonly traktSync: TraktSyncService,
     private readonly jellyfinSync: JellyfinSyncService,
-    private readonly indexerSync: IndexerSyncService,
-    private readonly discordSync: DiscordSyncService,
+    private readonly planner: PlannerService,
+    private readonly ticketReconciler: TicketReconcilerService,
     private readonly requestsRepository: RequestsRepository,
+    private readonly indexerBookmarks: IndexerBookmarksRepository,
+    private readonly requestStates: RequestStatesRepository,
+    private readonly findings: PlannerFindingsRepository,
+    private readonly plannedDownloads: PlannedDownloadsRepository,
+    private readonly tickets: TicketsRepository,
+    private readonly downloadJobs: DownloadJobsRepository,
+    private readonly fetchr: FetchrSyncService,
     private readonly namingAudit: NamingAuditService,
     private readonly namingAuditRepository: NamingAuditRepository,
   ) {
     this.jobHandlers = {
       'trakt-sync': () => this.traktSync.sync(),
-      'indexer-sync': () => this.indexerSync.sync(),
+      planner: () => this.planner.runAll(),
       'jellyfin-sync': () => this.jellyfinSync.sync(),
-      'discord-sync': () => this.discordSync.sync(),
+      'ticket-sync': () => this.ticketReconciler.sync(),
       'naming-audit': async () => {
         await this.namingAudit.run();
       },
@@ -136,15 +156,49 @@ export class AdminController {
 
   @Get()
   @Header('content-type', 'text/html')
-  async getDashboard(@Query('message') message?: string): Promise<string> {
+  async getDashboard(@Query('tab') tab?: string, @Query('message') message?: string): Promise<string> {
     const requests = await this.requestsRepository.listAllWithDetails();
+    const imdbIds = [...new Set(requests.map((r) => r.media?.imdbId).filter(truthy))];
+    const [states, bookmarks, actions, tickets, findings, lastPassAt, jobs] = await Promise.all([
+      this.requestStates.listAll(),
+      this.indexerBookmarks.listByImdbIds(imdbIds),
+      this.plannedDownloads.listLive(),
+      this.tickets.listOpen(),
+      this.findings.listAll(),
+      this.requestStates.latestPlannedAt(),
+      this.downloadJobs.listInProgress(),
+    ]);
+
+    const dashboard = buildDashboard({
+      requests,
+      states,
+      bookmarks,
+      actions,
+      tickets,
+      findings,
+      prefs: this.contextService.indexerPreferences,
+      lastPassAt,
+      jobs,
+      downloads: this.fetchr.liveDownloads(),
+    });
 
     return adminDashboardTemplate({
       serviceName: this.contextService.name,
-      requests,
+      dashboard,
+      activeTab: parseTab(tab),
       jobs: [...JOBS],
       flashMessage: message,
     });
+  }
+
+  /** Execution of every live action and hand launch (download, extraction), polled every 30s. */
+  @Get('requests/progress')
+  async getProgress(): Promise<Record<string, ExecutionView>> {
+    return executionByTrack(
+      await this.plannedDownloads.listLive(),
+      this.fetchr.liveDownloads(),
+      await this.downloadJobs.listInProgress(),
+    );
   }
 
   @Post('jobs/:name')

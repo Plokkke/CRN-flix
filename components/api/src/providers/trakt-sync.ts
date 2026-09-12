@@ -7,7 +7,8 @@ import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { UsersRepository } from '@/services/database/users';
-import { IndexerOrchestrator } from '@/services/indexer-orchestrator';
+import { PlannerService } from '@/services/planner/planner';
+import { TicketService } from '@/services/tickets/ticket.service';
 import { TraktSyncService } from '@/services/trakt-sync';
 
 export const traktSyncProvider = {
@@ -20,7 +21,8 @@ export const traktSyncProvider = {
     UserActivitiesRepository,
     MediasRepository,
     RequestsRepository,
-    IndexerOrchestrator,
+    PlannerService,
+    TicketService,
   ],
   useFactory: (
     configService: ConfigService<Config, true>,
@@ -30,7 +32,8 @@ export const traktSyncProvider = {
     userActivitySyncsRepository: UserActivitiesRepository,
     mediasRepository: MediasRepository,
     requestsRepository: RequestsRepository,
-    indexerOrchestrator: IndexerOrchestrator,
+    planner: PlannerService,
+    ticketService: TicketService,
   ): TraktSyncService => {
     return new TraktSyncService(
       configService.get('sync'),
@@ -40,7 +43,8 @@ export const traktSyncProvider = {
       userActivitySyncsRepository,
       mediasRepository,
       requestsRepository,
-      indexerOrchestrator,
+      planner,
+      ticketService,
     );
   },
 };

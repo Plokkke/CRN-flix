@@ -25,9 +25,10 @@ export const environmentVariablesSchema = z
     DATABASE_NAME: z.string(),
     DATABASE_USERNAME: z.string(),
     DATABASE_PASSWORD: z.string(),
-    HYDRACKER_API_KEY: z.string().optional(),
-    HYDRACKER_HOST: z.string().optional(),
-    HYDRACKER_CONTACT_EMAIL: z.string().optional(),
+    SYNC_RATING_THRESHOLD: z.coerce.number().optional(),
+    SYNC_NEED_WINDOW_HOURS: z.coerce.number().optional(),
+    SYNC_MAX_WINDOW_HOURS: z.coerce.number().optional(),
+    SYNC_FULL_INTERVAL_HOURS: z.coerce.number().optional(),
     LOADIX_API_HOST: z.string().optional(),
     LOADIX_SITE_HOST: z.string().optional(),
     INDEXER_ALLOWED_QUALITIES: z.string().default(''),
@@ -58,6 +59,12 @@ export const environmentVariablesSchema = z
       clientId: env.TRAKT_CLIENT_ID,
       clientSecret: env.TRAKT_CLIENT_SECRET,
     },
+    sync: {
+      ...(env.SYNC_RATING_THRESHOLD !== undefined && { ratingThreshold: env.SYNC_RATING_THRESHOLD }),
+      ...(env.SYNC_NEED_WINDOW_HOURS !== undefined && { needWindowHours: env.SYNC_NEED_WINDOW_HOURS }),
+      ...(env.SYNC_MAX_WINDOW_HOURS !== undefined && { maxWindowHours: env.SYNC_MAX_WINDOW_HOURS }),
+      ...(env.SYNC_FULL_INTERVAL_HOURS !== undefined && { fullSyncIntervalHours: env.SYNC_FULL_INTERVAL_HOURS }),
+    },
     jellyfin: {
       url: env.JELLYFIN_URL,
       token: env.JELLYFIN_TOKEN,
@@ -81,14 +88,6 @@ export const environmentVariablesSchema = z
       password: env.DATABASE_PASSWORD,
     },
     indexer: {
-      hydracker:
-        env.HYDRACKER_API_KEY && env.HYDRACKER_HOST
-          ? {
-              apiKey: env.HYDRACKER_API_KEY,
-              host: env.HYDRACKER_HOST,
-              ...(env.HYDRACKER_CONTACT_EMAIL && { contactEmail: env.HYDRACKER_CONTACT_EMAIL }),
-            }
-          : null,
       loadix:
         env.LOADIX_API_HOST && env.LOADIX_SITE_HOST
           ? {
