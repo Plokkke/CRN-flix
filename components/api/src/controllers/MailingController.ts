@@ -1,9 +1,11 @@
-import { Controller, Get, Header, Param } from '@nestjs/common';
+import { Controller, Get, Header, NotFoundException, Param } from '@nestjs/common';
 
+import { buildPresetNotice, isNoticePreset } from '@/services/announcements/presets';
 import { ContextService } from '@/services/context';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { registeredTemplate } from '@/services/messaging/user/email/templates/registered';
 import { requestUpdateTemplate } from '@/services/messaging/user/email/templates/request-update';
+import { serviceNoticeTemplate } from '@/services/messaging/user/email/templates/service-notice';
 
 @Controller('mailing')
 export class MailingController {
@@ -24,6 +26,19 @@ export class MailingController {
     });
 
     return html;
+  }
+
+  @Get('service-notice/:preset')
+  @Header('content-type', 'text/html')
+  previewServiceNotice(@Param('preset') preset: string): string {
+    if (!isNoticePreset(preset)) {
+      throw new NotFoundException(`Unknown notice preset ${preset}`);
+    }
+    const notice = buildPresetNotice(preset, {
+      serviceName: this.contextService.name,
+      mediaServerUrl: this.contextService.mediaServerUrl,
+    });
+    return serviceNoticeTemplate(this.contextService.name, notice).html;
   }
 
   @Get(['media-request-updated/:status', 'media-request-updated'])

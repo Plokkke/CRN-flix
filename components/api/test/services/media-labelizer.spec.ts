@@ -1,5 +1,5 @@
-import { EnglishTitleResolver } from '@/services/english-title-resolver';
 import { MediaIdentity, MediaLabelizerService } from '@/services/media-labelizer';
+import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 
 const config = {
   downloads: '/data/downloads',
@@ -9,8 +9,8 @@ const config = {
   privateSeries: '/data/medias/private/series',
 };
 
-function resolver(title: string | null): EnglishTitleResolver {
-  return { resolve: jest.fn().mockResolvedValue({ title, year: 2005 }) } as unknown as EnglishTitleResolver;
+function resolver(title: string | null): MediaTitlesResolver {
+  return { resolve: jest.fn().mockResolvedValue({ title, year: 2005 }) } as unknown as MediaTitlesResolver;
 }
 
 const frenchMovie: MediaIdentity = {

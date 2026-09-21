@@ -5,6 +5,7 @@ import { Config } from '@/app.module';
 import { DiscordService } from '@/modules/discord/discord';
 import { TicketsRepository } from '@/services/database/tickets';
 import { DiscordAdminChannel } from '@/services/messaging/admin/channel';
+import { DiscordChannelCleanup } from '@/services/messaging/admin/channel-cleanup';
 import { DownloadsBoard } from '@/services/messaging/admin/downloads-board';
 import { DiscordTicketAdapter } from '@/services/messaging/admin/ticket-adapter';
 import { TicketContextLoader } from '@/services/tickets/context';
@@ -34,6 +35,12 @@ export const adminMessagingProviders: Provider[] = [
       ticketService: TicketService,
       contextLoader: TicketContextLoader,
     ): DiscordTicketAdapter => new DiscordTicketAdapter(adminChannel, tickets, ticketService, contextLoader),
+  },
+  {
+    provide: DiscordChannelCleanup,
+    inject: [DiscordAdminChannel, TicketsRepository],
+    useFactory: (adminChannel: DiscordAdminChannel, tickets: TicketsRepository): DiscordChannelCleanup =>
+      new DiscordChannelCleanup(adminChannel, tickets),
   },
   {
     provide: DownloadsBoard,

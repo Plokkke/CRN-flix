@@ -5,6 +5,7 @@ export const loadixSearchHitSchema = z.object({
   type: z.string(),
   title: z.string(),
   originalTitle: z.string().nullable().optional(),
+  titleAlt: z.array(z.string()).optional(),
   year: z.number().nullable().optional(),
   hasLinks: z.boolean().optional(),
 });

@@ -177,6 +177,8 @@ const DETAILS_SELECT = `
         'type', m.type,
         'title', m.title,
         'originalTitle', m.original_title,
+        'frenchTitle', m.french_title,
+        'originalLanguage', m.original_language,
         'year', m.year,
         'seasonNumber', m.season_number,
         'episodeNumber', m.episode_number,

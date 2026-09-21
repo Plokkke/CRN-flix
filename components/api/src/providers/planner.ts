@@ -13,6 +13,7 @@ import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { UsersRepository } from '@/services/database/users';
 import { FetchrSyncService } from '@/services/fetchr-sync';
+import { MediaTitlesService } from '@/services/media-titles';
 import { PlannerService } from '@/services/planner/planner';
 import { TraktPlayheadService } from '@/services/trakt-playhead';
 
@@ -45,6 +46,7 @@ export const plannerProvider = {
     IndexerBookmarksRepository,
     RequestStatesRepository,
     PlannerFindingsRepository,
+    MediaTitlesService,
   ],
   useFactory: (
     configService: ConfigService<Config, true>,
@@ -57,6 +59,7 @@ export const plannerProvider = {
     bookmarks: IndexerBookmarksRepository,
     states: RequestStatesRepository,
     findings: PlannerFindingsRepository,
+    mediaTitles: MediaTitlesService,
   ): PlannerService => {
     const { needWindowHours, maxWindowHours } = configService.get('sync', { infer: true });
     const { preferences } = configService.get('indexer', { infer: true });
@@ -72,6 +75,7 @@ export const plannerProvider = {
       bookmarks,
       states,
       findings,
+      mediaTitles,
     );
   },
 };

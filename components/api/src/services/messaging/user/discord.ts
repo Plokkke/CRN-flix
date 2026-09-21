@@ -3,9 +3,10 @@ import { ColorResolvable, EmbedBuilder } from 'discord.js';
 import * as _ from 'lodash';
 
 import { DiscordService } from '@/modules/discord/discord';
+import { displayTitle } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
-import { LoginChallenge, UserMessaging } from '@/services/messaging/user';
+import { LoginChallenge, NoticeTone, ServiceNotice, UserMessaging } from '@/services/messaging/user';
 import { DebouncedRequestQueue } from '@/services/messaging/user/notification-queue';
 import { episodeRangesBySeason } from '@/services/request-groups';
 
@@ -23,6 +24,12 @@ const DESCRIPTION_BY_STATUS: Record<RequestStatus, string> = {
     'Le contenu demandé ne respecte pas les règles du serveur. Veuillez réessayer avec un contenu approprié.',
   [RequestStatus.Missing]:
     "Le contenu demandé n'est pas encore disponible. Nous vérifions régulièrement et vous serez notifié dès qu'il sera disponible.",
+};
+
+const COLOR_BY_TONE: Record<NoticeTone, ColorResolvable> = {
+  warning: '#f39c12',
+  success: '#2ecc71',
+  info: '#3498db',
 };
 
 const MAX_EMBEDS_PER_MESSAGE = 10;
@@ -43,7 +50,7 @@ function buildBatchEmbeds(requests: RequestEntity[]): EmbedBuilder[] {
     const media = request.media!;
     return new EmbedBuilder()
       .setColor(COLOR_BY_STATUS[request.status])
-      .setTitle(`${media.title} (${media.year})`)
+      .setTitle(`${displayTitle(media)} (${media.year})`)
       .setDescription(DESCRIPTION_BY_STATUS[request.status]);
   });
 
@@ -51,7 +58,7 @@ function buildBatchEmbeds(requests: RequestEntity[]): EmbedBuilder[] {
     const media = group[0].media!;
     return new EmbedBuilder()
       .setColor(COLOR_BY_STATUS[group[0].status])
-      .setTitle(`${media.title} (${media.year})`)
+      .setTitle(`${displayTitle(media)} (${media.year})`)
       .setDescription(DESCRIPTION_BY_STATUS[group[0].status])
       .addFields({ name: 'Épisodes', value: formatEpisodeList(group).slice(0, 1024) });
   });
@@ -111,6 +118,19 @@ export class DiscordUserMessaging extends UserMessaging<string> implements OnMod
         `Valable ${challenge.expiresInMinutes} minutes.`,
       ].join('\n'),
     );
+  }
+
+  async announce(id: string, notice: ServiceNotice): Promise<void> {
+    const discordUser = await this.discordService.getUser(id);
+    const description = [
+      ...notice.paragraphs,
+      ...(notice.cta ? [`[${notice.cta.label}](${notice.cta.url})`] : []),
+    ].join('\n\n');
+    const embed = new EmbedBuilder()
+      .setColor(COLOR_BY_TONE[notice.tone])
+      .setTitle(notice.title)
+      .setDescription(description.slice(0, 4096));
+    await discordUser.send({ embeds: [embed] });
   }
 
   private async sendBatch(id: string, requests: RequestEntity[]): Promise<void> {

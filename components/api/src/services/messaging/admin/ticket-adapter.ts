@@ -105,15 +105,14 @@ export class DiscordTicketAdapter implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const rootId = await this.rootBinding(ticketId);
+    // A closed ticket's thread is being deleted: posting there would recreate it from the root.
+    const rootId = ticket.status === TicketStatus.Open ? await this.rootBinding(ticketId) : null;
     if (!rootId) {
       return;
     }
 
     await this.postInThread(rootId, formatEventLine(event));
-    if (ticket.status === TicketStatus.Open) {
-      await this.refreshRootEmbed(ticket, rootId);
-    }
+    await this.refreshRootEmbed(ticket, rootId);
   }
 
   /** Skip what the admin already sees: their own thread messages and the created bootstrap. */
@@ -136,14 +135,14 @@ export class DiscordTicketAdapter implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // The channel only shows open tickets: the thread always goes, the root embed too —
+    // except a manual-download root, the admin's own message (deleting it would be rude).
     try {
-      await DiscordService.setThreadArchived(this.adminChannel.channel, rootId, true);
+      await DiscordService.deleteThread(this.adminChannel.channel, rootId);
     } catch {
-      // No thread was ever created — nothing to archive.
+      // No thread was ever created (or already gone) — nothing to delete.
     }
 
-    // The channel only shows open tickets; a manual-download root is the admin's own
-    // message and stays (deleting another author's message would be rude).
     const ticket = await this.tickets.get(ticketId);
     if (ticket?.category === TicketCategory.ManualDownload) {
       return;

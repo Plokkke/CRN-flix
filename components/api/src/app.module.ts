@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { AppService } from '@/app.service';
 import { AdminController } from '@/controllers/AdminController';
+import { AnnounceAdminController } from '@/controllers/AnnounceAdminController';
 import { AssetsController } from '@/controllers/AssetsController';
 import { MailingController } from '@/controllers/MailingController';
 import { MeController } from '@/controllers/MeController';
@@ -26,8 +27,9 @@ import { discordProvider } from '@/providers/discord';
 import { fetchrSyncProvider } from '@/providers/fetchr-sync';
 import { jellyfinProvider } from '@/providers/jellyfin';
 import { jellyfinSyncProvider } from '@/providers/jellyfin-sync';
+import { mediaTitlesProviders } from '@/providers/media-titles';
 import { adminMessagingProviders } from '@/providers/messaging/admin';
-import { allUserMessagingProvider } from '@/providers/messaging/all';
+import { allUserMessagingProvider, announcementProvider } from '@/providers/messaging/all';
 import { userMessagingProviders } from '@/providers/messaging/user';
 import { namingAuditProviders } from '@/providers/naming-audit';
 import { indexersRegistryProvider, plannerProvider, traktPlayheadProvider } from '@/providers/planner';
@@ -128,6 +130,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       AssetsController,
       AdminController,
       TicketsAdminController,
+      AnnounceAdminController,
       MeController,
     ],
     providers: [
@@ -149,11 +152,13 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       discordProvider,
       ...userMessagingProviders,
       allUserMessagingProvider,
+      announcementProvider,
       ...adminMessagingProviders,
       ...ticketProviders,
       fetchrSyncProvider,
       DownloadProgressService,
       tmdbProvider,
+      ...mediaTitlesProviders,
       ...postDownloadProviders,
       ...namingAuditProviders,
       HealthChecksService,

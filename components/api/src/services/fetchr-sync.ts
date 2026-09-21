@@ -9,7 +9,7 @@ import { Emitter } from '@/helpers/events';
 import { applyFetchrEvent, LiveDownload } from '@/services/download-live-state';
 
 import { DownloadJobsRepository } from './database/download-jobs';
-import { MediaEntity } from './database/medias';
+import { displayTitle, MediaEntity } from './database/medias';
 
 export function buildDownloadMetadata(requestId: string, media?: MediaEntity | null): Record<string, string> {
   const metadata: Record<string, string> = { 'crn-flix-request-id': requestId };
@@ -21,7 +21,7 @@ export function buildDownloadMetadata(requestId: string, media?: MediaEntity | n
     metadata.imdbid = media.imdbId;
   }
   metadata.type = media.type;
-  metadata.title = media.title;
+  metadata.title = displayTitle(media);
   if (media.year !== null) {
     metadata.year = String(media.year);
   }

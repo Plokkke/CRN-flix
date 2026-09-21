@@ -1,9 +1,3 @@
-export type SearchableTitle = {
-  title: string;
-  originalTitle: string | null;
-  year: number | null;
-};
-
 export function sanitizeForSearch(str: string): string {
   return str
     .normalize('NFD')
@@ -13,31 +7,21 @@ export function sanitizeForSearch(str: string): string {
     .trim();
 }
 
-/** Deduplicated search queries derived from titles and year, most specific last. */
-export function buildSearchQueries(media: SearchableTitle): string[] {
-  const seen = new Set<string>();
-  const queries: string[] = [];
+/**
+ * Deduplicated search queries from the titles an indexer wants to try, in that order,
+ * then the same titles suffixed with the year. Empty and duplicate titles are skipped,
+ * so an indexer can list every title it knows and let the data decide.
+ */
+export function buildSearchQueries(titles: ReadonlyArray<string | null | undefined>, year: number | null): string[] {
+  const distinct = [...new Set(titles.map((title) => (title ? sanitizeForSearch(title) : '')).filter(Boolean))];
+  const withYear = year ? distinct.map((title) => `${title} ${year}`) : [];
+  return [...distinct, ...withYear];
+}
 
-  const addQuery = (raw: string | null | undefined): void => {
-    if (!raw) {
-      return;
-    }
-    const sanitized = sanitizeForSearch(raw);
-    if (sanitized && !seen.has(sanitized)) {
-      seen.add(sanitized);
-      queries.push(sanitized);
-    }
-  };
-
-  addQuery(media.title);
-  addQuery(media.originalTitle);
-
-  if (media.year) {
-    addQuery(`${media.title} ${media.year}`);
-    if (media.originalTitle) {
-      addQuery(`${media.originalTitle} ${media.year}`);
-    }
+/** Whether two titles are the same once accents, punctuation and case are ignored. */
+export function isSameTitle(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) {
+    return false;
   }
-
-  return queries;
+  return sanitizeForSearch(a).toLowerCase() === sanitizeForSearch(b).toLowerCase();
 }

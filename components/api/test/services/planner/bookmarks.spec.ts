@@ -18,6 +18,8 @@ const target: IndexerTarget = {
     type: MediaType.Movie,
     title: 'Movie',
     originalTitle: null,
+    frenchTitle: null,
+    originalLanguage: null,
     year: 2020,
     seasonNumber: null,
     episodeNumber: null,

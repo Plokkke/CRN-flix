@@ -9,37 +9,29 @@ import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
-import { EnglishTitleResolver } from '@/services/english-title-resolver';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { MediaLabelizerService } from '@/services/media-labelizer';
+import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 
 export const identificationProvider: Provider = {
   provide: MediaIdentifierService,
-  inject: [TmdbApiService, SYNC_DATASOURCE, MediasRepository, RequestsRepository],
+  inject: [TmdbApiService, SYNC_DATASOURCE, MediasRepository, RequestsRepository, MediaTitlesResolver],
   useFactory: (
     tmdb: TmdbApiService,
     pool: Pool,
     medias: MediasRepository,
     requests: RequestsRepository,
-  ): MediaIdentifierService => new MediaIdentifierService(tmdb, pool, medias, requests),
-};
-
-export const englishTitleResolverProvider: Provider = {
-  provide: EnglishTitleResolver,
-  inject: [TmdbApiService],
-  useFactory: (tmdb: TmdbApiService): EnglishTitleResolver => new EnglishTitleResolver(tmdb),
+    titles: MediaTitlesResolver,
+  ): MediaIdentifierService => new MediaIdentifierService(tmdb, pool, medias, requests, titles),
 };
 
 export const placementProvider: Provider = {
   provide: MediaLabelizerService,
-  inject: [ConfigService, EnglishTitleResolver],
-  useFactory: (
-    configService: ConfigService<Config, true>,
-    englishTitle: EnglishTitleResolver,
-  ): MediaLabelizerService => {
+  inject: [ConfigService, MediaTitlesResolver],
+  useFactory: (configService: ConfigService<Config, true>, titles: MediaTitlesResolver): MediaLabelizerService => {
     const config = configService.get('mediaPaths');
-    return new MediaLabelizerService(config, englishTitle);
+    return new MediaLabelizerService(config, titles);
   },
 };
 
@@ -55,7 +47,6 @@ export const postDownloadPipelineProvider: Provider = {
 };
 
 export const postDownloadProviders: Provider[] = [
-  englishTitleResolverProvider,
   identificationProvider,
   placementProvider,
   postDownloadPipelineProvider,

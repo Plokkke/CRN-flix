@@ -31,6 +31,7 @@ import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
+import { DiscordChannelCleanup } from '@/services/messaging/admin/channel-cleanup';
 import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
 import { adminLoginTemplate } from '@/services/messaging/user/email/templates/admin-login';
 import { adminNamingAuditTemplate } from '@/services/messaging/user/email/templates/admin-naming-audit';
@@ -46,6 +47,7 @@ const JOBS = [
   { name: 'jellyfin-sync', schedule: 'Every 15 minutes' },
   { name: 'ticket-sync', schedule: 'Every 5 minutes' },
   { name: 'naming-audit', schedule: 'Manual only' },
+  { name: 'discord-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
 ] as const;
 
 type JobName = (typeof JOBS)[number]['name'];
@@ -84,6 +86,7 @@ export class AdminController {
     private readonly fetchr: FetchrSyncService,
     private readonly namingAudit: NamingAuditService,
     private readonly namingAuditRepository: NamingAuditRepository,
+    private readonly channelCleanup: DiscordChannelCleanup,
   ) {
     this.jobHandlers = {
       'trakt-sync': () => this.traktSync.sync(),
@@ -92,6 +95,10 @@ export class AdminController {
       'ticket-sync': () => this.ticketReconciler.sync(),
       'naming-audit': async () => {
         await this.namingAudit.run();
+      },
+      'discord-cleanup': async () => {
+        await this.channelCleanup.run();
+        await this.ticketReconciler.sync();
       },
     };
   }

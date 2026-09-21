@@ -24,6 +24,8 @@ const movieTarget: Extract<IndexerTarget, { kind: 'movie' }> = {
     type: MediaType.Movie,
     title: 'Taxi',
     originalTitle: null,
+    frenchTitle: null,
+    originalLanguage: null,
     year: 1998,
     seasonNumber: null,
     episodeNumber: null,
@@ -36,6 +38,8 @@ const showTarget: IndexerTarget = {
   imdbId: 'tt14688458',
   title: 'Silo',
   originalTitle: null,
+  frenchTitle: null,
+  originalLanguage: null,
   year: 2023,
   episodes: [
     { season: 3, episode: 1, runtimeMinutes: 50 },
@@ -192,6 +196,100 @@ describe('LoadixIndexer', () => {
 
     await expect(indexer.find(movieTarget, ALLOW_ALL, null)).resolves.toMatchObject({ candidates: [] });
     expect(getMedia).toHaveBeenCalledTimes(5);
+  });
+
+  describe('title queries', () => {
+    const hangover: Extract<IndexerTarget, { kind: 'movie' }> = {
+      kind: 'movie',
+      media: {
+        ...movieTarget.media,
+        imdbId: 'tt1119646',
+        title: 'The Hangover',
+        originalTitle: 'The Hangover',
+        frenchTitle: 'Very Bad Trip',
+        year: 2009,
+      },
+    };
+    const hangoverHit: LoadixSearchHit = {
+      id: 'hangover-id',
+      type: 'movie',
+      title: 'Very Bad Trip',
+      originalTitle: 'The Hangover',
+      year: 2009,
+      hasLinks: true,
+    };
+    const hangoverDetail: LoadixMediaDetail = {
+      media: { id: 'hangover-id', type: 'movie', imdbId: 'tt1119646', title: 'Very Bad Trip' },
+      seasons: [],
+    };
+
+    it('searches the French title first and stops at the first match', async () => {
+      const search = jest.fn().mockResolvedValue([hangoverHit]);
+      const getMedia = jest.fn().mockResolvedValue(hangoverDetail);
+      const listLinks = jest.fn().mockResolvedValue([]);
+      const indexer = buildIndexer({ search, getMedia, listLinks });
+
+      const { bookmark } = await indexer.find(hangover, ALLOW_ALL, null);
+
+      expect(search).toHaveBeenCalledTimes(1);
+      expect(search).toHaveBeenCalledWith('Very Bad Trip');
+      expect(bookmark?.searchUrl).toBe(`${SITE_HOST}/search?q=Very%20Bad%20Trip`);
+    });
+
+    it('falls back to the original then the English title', async () => {
+      const search = jest.fn().mockImplementation((query: string) => (query === 'The Hangover' ? [hangoverHit] : []));
+      const getMedia = jest.fn().mockResolvedValue(hangoverDetail);
+      const listLinks = jest.fn().mockResolvedValue([]);
+      const indexer = buildIndexer({ search, getMedia, listLinks });
+
+      await indexer.find(hangover, ALLOW_ALL, null);
+
+      expect(search.mock.calls.map(([query]) => query)).toEqual(['Very Bad Trip', 'The Hangover']);
+    });
+
+    it('looks up hits carrying one of the known titles before look-alikes', async () => {
+      const lookAlike = {
+        ...hangoverHit,
+        id: 'look-alike',
+        title: 'Very Bad Trip 2',
+        originalTitle: 'The Hangover Part II',
+      };
+      const search = jest.fn().mockResolvedValue([lookAlike, hangoverHit]);
+      const getMedia = jest.fn().mockResolvedValue(hangoverDetail);
+      const listLinks = jest.fn().mockResolvedValue([]);
+      const indexer = buildIndexer({ search, getMedia, listLinks });
+
+      await indexer.find(hangover, ALLOW_ALL, null);
+
+      expect(getMedia).toHaveBeenCalledTimes(1);
+      expect(getMedia).toHaveBeenCalledWith('hangover-id');
+    });
+
+    it('spends at most two lookups per query on look-alikes so later queries keep their budget', async () => {
+      const lookAlikes = Array.from({ length: 5 }, (_, i) => ({
+        ...hangoverHit,
+        id: `alike-${i}`,
+        title: `Trip ${i}`,
+        originalTitle: `Trip ${i}`,
+      }));
+      const search = jest
+        .fn()
+        .mockImplementation((query: string) => (query === 'Very Bad Trip' ? lookAlikes : [hangoverHit]));
+      const getMedia = jest
+        .fn()
+        .mockImplementation((id: string) =>
+          id === 'hangover-id'
+            ? hangoverDetail
+            : { ...hangoverDetail, media: { ...hangoverDetail.media, id, imdbId: 'tt0' } },
+        );
+      const listLinks = jest.fn().mockResolvedValue([]);
+      const indexer = buildIndexer({ search, getMedia, listLinks });
+
+      const { bookmark } = await indexer.find(hangover, ALLOW_ALL, null);
+
+      expect(getMedia.mock.calls.map(([id]) => id)).toEqual(['alike-0', 'alike-1', 'hangover-id']);
+      expect(bookmark?.pageUrl).toBe(`${SITE_HOST}/media/hangover-id`);
+    });
   });
 
   it('lists links unscoped and per intent season, deduplicated by link id', async () => {

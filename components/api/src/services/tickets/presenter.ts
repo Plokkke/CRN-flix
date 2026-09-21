@@ -1,7 +1,7 @@
 import * as _ from 'lodash';
 
 import { formatBytes } from '@/helpers/format';
-import { MediaEntity } from '@/services/database/medias';
+import { displayTitle, MediaEntity } from '@/services/database/medias';
 import { PlannedDownloadEntity } from '@/services/database/planned-downloads';
 import { UserEntity } from '@/services/database/users';
 import { actionDisplayLink } from '@/services/indexer-link';
@@ -71,7 +71,7 @@ export function formatCoveredEpisodes(medias: MediaEntity[]): string {
 
 export function actionTitle(action: PlannedDownloadEntity): string {
   const media = action.medias?.[0];
-  const showTitle = media?.title ?? action.showImdbId ?? 'Inconnu';
+  const showTitle = (media && displayTitle(media)) ?? action.showImdbId ?? 'Inconnu';
   switch (action.scope.kind) {
     case 'movie':
       return `${showTitle}${media?.year ? ` (${media.year})` : ''} — film`;

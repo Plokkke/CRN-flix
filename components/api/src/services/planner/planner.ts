@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 
-import { assessCandidate, Indexer, IndexerTarget } from '@/modules/indexer/contract';
+import { assessCandidate, Indexer, IndexerTarget, MediaTitles } from '@/modules/indexer/contract';
 import { EnginePreferences } from '@/modules/indexer/preferences';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
-import { MediaType } from '@/services/database/medias';
+import { displayTitle, MediaType } from '@/services/database/medias';
 import {
   ActionAlternative,
   PlannedDownloadEntity,
@@ -17,6 +17,7 @@ import { PlannerFindingsRepository } from '@/services/database/planner-findings'
 import { NewRequestState, RequestStatesRepository } from '@/services/database/request-states';
 import { PlannerStateRow, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { FetchrSyncService } from '@/services/fetchr-sync';
+import { MediaTitlesService } from '@/services/media-titles';
 import { truthy } from '@/utils';
 
 import { findAcrossIndexers } from './bookmarks';
@@ -41,8 +42,8 @@ export function buildActionDownloadMetadata(action: PlannedDownloadEntity): Reco
     [PLANNED_DOWNLOAD_ID_METADATA_KEY]: action.id,
     type: action.scope.kind === 'movie' ? 'movie' : 'episode',
   };
-  if (media?.title) {
-    metadata.title = media.title;
+  if (media) {
+    metadata.title = displayTitle(media);
   }
   const imdbId = action.showImdbId ?? media?.imdbId;
   if (imdbId) {
@@ -115,6 +116,7 @@ export class PlannerService implements OnModuleDestroy {
     private readonly bookmarks: IndexerBookmarksRepository,
     private readonly states: RequestStatesRepository,
     private readonly findings: PlannerFindingsRepository,
+    private readonly mediaTitles: MediaTitlesService,
   ) {
     this.fetchr.on('liveChanged', () => void this.onFetchrLiveChanged());
   }
@@ -244,7 +246,7 @@ export class PlannerService implements OnModuleDestroy {
 
     // A proposal is re-assessed on every pass: it must not outlive the rules that produced it.
     const prefs = this.prefs;
-    const indexerTarget = buildIndexerTarget(target, state);
+    const indexerTarget = await this.indexerTargetOf(target, state);
     const stale = indexerTarget ? staleProposals(settledLive, indexerTarget, prefs) : [];
     for (const { action, reasons } of stale) {
       PlannerService.logger.log(`Superseding action ${action.id} (${key}): no longer eligible (${reasons.join(', ')})`);
@@ -415,6 +417,16 @@ export class PlannerService implements OnModuleDestroy {
 
   // --- Inputs ---
 
+  /** Indexers get every title the engine knows; the French one is resolved on first need. */
+  private async indexerTargetOf(target: PlanTarget, state: PlannerStateRow[]): Promise<IndexerTarget | null> {
+    const first = state[0];
+    if (!first?.imdbId) {
+      return null;
+    }
+    const titles = await this.mediaTitles.ensure(first.imdbId, first);
+    return buildIndexerTarget(target, state, titles);
+  }
+
   private async loadPlayheads(imdbId: string, state: PlannerStateRow[]): Promise<Playhead[]> {
     const intentUserIds = new Set(state.flatMap((row) => row.userIds));
     return this.playheads.getPlayheads(imdbId, [...intentUserIds]);
@@ -519,21 +531,16 @@ function toPlannerEpisode(row: PlannerStateRow): PlannerEpisode {
   };
 }
 
-function buildIndexerTarget(target: PlanTarget, state: PlannerStateRow[]): IndexerTarget | null {
+function buildIndexerTarget(target: PlanTarget, state: PlannerStateRow[], titles: MediaTitles): IndexerTarget {
   const first = state[0];
-  if (!first?.imdbId) {
-    return null;
-  }
 
   if (target.kind === 'movie') {
     return {
       kind: 'movie',
       media: {
+        ...titles,
         imdbId: first.imdbId,
         type: MediaType.Movie,
-        title: first.title,
-        originalTitle: first.originalTitle,
-        year: first.year,
         seasonNumber: null,
         episodeNumber: null,
         runtimeMinutes: first.runtimeMinutes,
@@ -542,11 +549,9 @@ function buildIndexerTarget(target: PlanTarget, state: PlannerStateRow[]): Index
   }
 
   return {
+    ...titles,
     kind: 'show',
     imdbId: first.imdbId,
-    title: first.title,
-    originalTitle: first.originalTitle,
-    year: first.year,
     episodes: state
       .filter((row) => row.seasonNumber !== null && row.episodeNumber !== null)
       .map((row) => ({

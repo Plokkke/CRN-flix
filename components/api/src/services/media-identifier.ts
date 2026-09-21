@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 
 import { MediasRepository, MediaType } from '@/services/database/medias';
 import { RequestsRepository, RequestStatus } from '@/services/database/requests';
+import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 
 import { TmdbApiService, TmdbIdentification, TmdbMovie, TmdbTvShow } from '../modules/tmdb/tmdb';
 
@@ -37,6 +38,7 @@ export class MediaIdentifierService {
     private readonly pool: Pool,
     private readonly medias: MediasRepository,
     private readonly requests: RequestsRepository,
+    private readonly titles: MediaTitlesResolver,
   ) {}
 
   parseFilename(filePath: string): ParsedMedia {
@@ -214,11 +216,15 @@ export class MediaIdentifierService {
       return existingRequestId;
     }
 
+    // Identification runs in French (TMDB fr-FR); the database keeps the English title.
+    const titles = await this.titles.resolve(identification.imdbId!);
     const media = await this.medias.upsert({
       imdbId: identification.imdbId!,
       type: identification.mediaType as MediaType,
-      title: identification.title,
-      originalTitle: identification.originalTitle,
+      title: titles.title ?? identification.title,
+      originalTitle: titles.originalTitle ?? identification.originalTitle,
+      frenchTitle: titles.frenchTitle,
+      originalLanguage: titles.originalLanguage,
       year: identification.year,
       seasonNumber,
       episodeNumber,

@@ -15,6 +15,7 @@ export type TmdbMovie = {
   id: number;
   title: string;
   original_title: string;
+  original_language?: string;
   release_date: string;
   popularity: number;
   vote_count: number;
@@ -24,6 +25,7 @@ export type TmdbTvShow = {
   id: number;
   name: string;
   original_name: string;
+  original_language?: string;
   first_air_date: string;
   popularity: number;
   vote_count: number;

@@ -27,6 +27,7 @@ import { UserNotificationsRepository } from '@/services/database/user-notificati
 import { UsersRepository } from '@/services/database/users';
 import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
+import { MediaTitlesService } from '@/services/media-titles';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { PlannerService } from '@/services/planner/planner';
@@ -65,6 +66,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly fetchrSync: FetchrSyncService,
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
+    private readonly mediaTitles: MediaTitlesService,
   ) {}
 
   onModuleInit(): void {
@@ -79,6 +81,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('planner-job', '0 * * * *', () => this.planner.runAll());
       this.registerCronJob('jellyfin-sync-job', '*/15 * * * *', () => this.jellyfinSync.sync());
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
+      this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
     }
   }
 

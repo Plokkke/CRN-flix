@@ -14,6 +14,8 @@ const baseMedia: MediaInfos = {
   type: MediaType.Movie,
   title: 'Test',
   originalTitle: 'Test',
+  frenchTitle: null,
+  originalLanguage: null,
   year: 2024,
   seasonNumber: null,
   episodeNumber: null,

@@ -11,8 +11,8 @@ import {
   NamingAuditMediaType,
   NamingAuditRepository,
 } from '@/services/database/naming-audit';
-import { EnglishTitleResolver } from '@/services/english-title-resolver';
 import { MediaIdentity, MediaLabelizerService } from '@/services/media-labelizer';
+import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 
 export const namingAuditConfigSchema = z.object({
   jellyfinLibraryRoot: z.string(),
@@ -49,7 +49,7 @@ export class NamingAuditService {
     private readonly config: NamingAuditConfig,
     private readonly jellyfin: JellyfinMediaService,
     private readonly labelizer: MediaLabelizerService,
-    private readonly englishTitle: EnglishTitleResolver,
+    private readonly titles: MediaTitlesResolver,
     private readonly auditRepo: NamingAuditRepository,
   ) {}
 
@@ -166,7 +166,7 @@ export class NamingAuditService {
       };
     }
 
-    const tmdbResolution = await this.englishTitle.resolve(imdbId);
+    const tmdbResolution = await this.titles.resolve(imdbId);
     if (!tmdbResolution.title) {
       reasonHints.push('tmdb-not-found');
     }

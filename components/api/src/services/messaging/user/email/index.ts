@@ -5,12 +5,13 @@ import { z } from 'zod';
 import { ContextService } from '@/services/context';
 import { RequestEntity } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
-import { isUserNotifiableStatus, LoginChallenge, UserMessaging } from '@/services/messaging/user';
+import { isUserNotifiableStatus, LoginChallenge, ServiceNotice, UserMessaging } from '@/services/messaging/user';
 import {
   errorTemplate,
   loginChallengeTemplate,
   registeredTemplate,
   requestUpdateTemplate,
+  serviceNoticeTemplate,
 } from '@/services/messaging/user/email/templates';
 import { DebouncedRequestQueue } from '@/services/messaging/user/notification-queue';
 
@@ -112,6 +113,20 @@ export class EmailUserMessaging extends UserMessaging<string> implements OnModul
       EmailUserMessaging.logger.log(`Login challenge email sent to ${email}`);
     } catch (error) {
       EmailUserMessaging.logger.error(`Failed to send login challenge email to ${email}`, error);
+      throw error;
+    }
+  }
+
+  async announce(email: string, notice: ServiceNotice): Promise<void> {
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: email,
+        ...serviceNoticeTemplate(this.contextService.name, notice),
+      });
+      EmailUserMessaging.logger.log(`Announcement email sent to ${email}`);
+    } catch (error) {
+      EmailUserMessaging.logger.error(`Failed to send announcement email to ${email}`, error);
       throw error;
     }
   }

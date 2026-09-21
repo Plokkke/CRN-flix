@@ -1,5 +1,6 @@
 import * as _ from 'lodash';
 
+import { displayTitle } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 
 /** Display order: what still needs attention first. */
@@ -85,7 +86,7 @@ function buildGroup(requests: RequestEntity[]): RequestGroup {
   return {
     key: kind === 'show' ? media.imdbId : media.id,
     kind,
-    title: media.title,
+    title: displayTitle(media),
     year: media.year,
     imdbId: media.imdbId,
     traktSlug: media.traktSlug ?? null,

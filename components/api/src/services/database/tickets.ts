@@ -280,6 +280,12 @@ export class TicketsRepository extends Emitter<TicketNotifyEvents> implements On
     return rows.map((row) => ({ kind: row.kind, externalId: row.external_id }));
   }
 
+  /** Drops every binding of an adapter (its rendering was wiped); returns how many went. */
+  async unbindAll(adapter: string): Promise<number> {
+    const result = await this.pool.query(`DELETE FROM ticket_bindings WHERE adapter = $1`, [adapter]);
+    return result.rowCount ?? 0;
+  }
+
   async findOpenWithoutBinding(adapter: string, kind: 'root' | 'thread', olderThan: Date): Promise<TicketEntity[]> {
     const { rows } = await this.pool.query<TicketRecord>(
       `SELECT t.* FROM tickets t

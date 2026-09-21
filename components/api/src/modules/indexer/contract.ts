@@ -6,15 +6,27 @@ export enum MediaType {
 }
 
 /**
+ * Every name the engine knows for a title, so an indexer can pick the queries that fit
+ * its own audience (a French site searches the French title first, a foreign one the
+ * original) or bail out early (an anime-only indexer on a `originalLanguage` it never
+ * carries). `title` is the English title, the engine's canonical one (database, disk).
+ */
+export type MediaTitles = {
+  title: string;
+  originalTitle: string | null;
+  frenchTitle: string | null;
+  /** ISO 639-1 code of the original language, when known (e.g. "ja", "ko", "fr"). */
+  originalLanguage: string | null;
+  year: number | null;
+};
+
+/**
  * The media description handed to indexers. Owned by the contract so that
  * indexer implementations never depend on the engine's persistence layer.
  */
-export type IndexerMedia = {
+export type IndexerMedia = MediaTitles & {
   imdbId: string;
   type: MediaType;
-  title: string;
-  originalTitle: string | null;
-  year: number | null;
   seasonNumber: number | null;
   episodeNumber: number | null;
   runtimeMinutes: number | null;
@@ -59,14 +71,11 @@ export type IndexerShowEpisode = {
 /** One search per show (not per episode): the target carries the full episode intent. */
 export type IndexerTarget =
   | { kind: 'movie'; media: IndexerMedia }
-  | {
+  | (MediaTitles & {
       kind: 'show';
       imdbId: string;
-      title: string;
-      originalTitle: string | null;
-      year: number | null;
       episodes: ReadonlyArray<IndexerShowEpisode>;
-    };
+    });
 
 /**
  * What an indexer wants remembered about one media (imdb id), persisted by the engine
@@ -104,6 +113,11 @@ export function targetImdbId(target: IndexerTarget): string {
 
 export function targetTitle(target: IndexerTarget): string {
   return target.kind === 'movie' ? target.media.title : target.title;
+}
+
+export function targetTitles(target: IndexerTarget): MediaTitles {
+  const { title, originalTitle, frenchTitle, originalLanguage, year } = target.kind === 'movie' ? target.media : target;
+  return { title, originalTitle, frenchTitle, originalLanguage, year };
 }
 
 export function scopeCoveredEpisodes(scope: CandidateScope, target: IndexerTarget): IndexerShowEpisode[] {

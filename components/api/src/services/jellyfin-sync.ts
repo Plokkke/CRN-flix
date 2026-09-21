@@ -22,6 +22,8 @@ function jellyfinMediaToInfos(m: JellyfinMedia, seriesImdbById: Map<string, stri
     type: m.Type === 'Movie' ? MediaType.Movie : MediaType.Episode,
     title: m.SeriesName ?? m.Name,
     originalTitle: null,
+    frenchTitle: null,
+    originalLanguage: null,
     year: m.ProductionYear,
     seasonNumber: m.ParentIndexNumber ?? null,
     episodeNumber: m.IndexNumber ?? null,

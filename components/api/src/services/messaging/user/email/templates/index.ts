@@ -5,3 +5,4 @@ export * from './request-update';
 export * from './registration-form';
 export * from './user-guide-template';
 export * from './email-styles';
+export * from './service-notice';

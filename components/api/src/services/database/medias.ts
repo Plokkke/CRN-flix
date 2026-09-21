@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 
-import { IndexerMedia, MediaType } from '@/modules/indexer/contract';
+import { IndexerMedia, MediaTitles, MediaType } from '@/modules/indexer/contract';
 
 export { MediaType };
 
@@ -21,6 +21,8 @@ type MediaRecord = {
   type: MediaType;
   title: string;
   original_title: string | null;
+  french_title: string | null;
+  original_language: string | null;
   year: number | null;
   season_number: number | null;
   episode_number: number | null;
@@ -37,6 +39,8 @@ function fromMediaRecord(record: MediaRecord): MediaEntity {
     type: record.type,
     title: record.title,
     originalTitle: record.original_title,
+    frenchTitle: record.french_title,
+    originalLanguage: record.original_language,
     year: record.year,
     seasonNumber: record.season_number,
     episodeNumber: record.episode_number,
@@ -46,6 +50,14 @@ function fromMediaRecord(record: MediaRecord): MediaEntity {
     updatedAt: record.updated_at,
   };
 }
+
+/** What subscribers and admins read: the French title when known, the English one otherwise. */
+export function displayTitle(media: Pick<MediaTitles, 'title' | 'frenchTitle'>): string {
+  return media.frenchTitle ?? media.title;
+}
+
+/** Titles resolved from TMDB; null fields leave the stored value untouched. */
+export type MediaTitlesPatch = { [K in Exclude<keyof MediaTitles, 'year'>]?: string | null };
 
 export function isSameMedia(a: MediaInfos, b: MediaInfos): boolean {
   return (
@@ -96,15 +108,17 @@ export class MediasRepository {
 
   async upsert(infos: MediaInfos): Promise<MediaEntity> {
     const query = `
-      INSERT INTO medias (imdb_id, type, title, original_title, year, season_number, episode_number, runtime_minutes, trakt_slug)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO medias (imdb_id, type, title, original_title, year, season_number, episode_number, runtime_minutes, trakt_slug, french_title, original_language)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       ON CONFLICT (imdb_id, COALESCE(season_number, -1), COALESCE(episode_number, -1))
       DO UPDATE SET
         title = $3,
         original_title = COALESCE($4, medias.original_title),
         year = $5,
         runtime_minutes = COALESCE($8, medias.runtime_minutes),
-        trakt_slug = COALESCE($9, medias.trakt_slug)
+        trakt_slug = COALESCE($9, medias.trakt_slug),
+        french_title = COALESCE($10, medias.french_title),
+        original_language = COALESCE($11, medias.original_language)
       RETURNING *
     `;
     const { rows } = await this.pool.query<MediaRecord>(query, [
@@ -117,6 +131,8 @@ export class MediasRepository {
       infos.episodeNumber,
       infos.runtimeMinutes,
       infos.traktSlug ?? null,
+      infos.frenchTitle,
+      infos.originalLanguage,
     ]);
 
     if (rows.length) {
@@ -124,6 +140,27 @@ export class MediasRepository {
     }
 
     return (await this.findByInfos(infos))!;
+  }
+
+  /** Every row of the title (all episodes of a show share the imdb id) gets the resolved names. */
+  async updateTitles(imdbId: string, titles: MediaTitlesPatch): Promise<void> {
+    await this.pool.query(
+      `UPDATE medias
+       SET title = COALESCE($2, title),
+           original_title = COALESCE($3, original_title),
+           french_title = COALESCE($4, french_title),
+           original_language = COALESCE($5, original_language)
+       WHERE imdb_id = $1`,
+      [imdbId, titles.title, titles.originalTitle, titles.frenchTitle, titles.originalLanguage],
+    );
+  }
+
+  async listImdbIdsWithoutFrenchTitle(limit: number): Promise<string[]> {
+    const { rows } = await this.pool.query<{ imdb_id: string }>(
+      `SELECT DISTINCT imdb_id FROM medias WHERE french_title IS NULL AND imdb_id <> '' LIMIT $1`,
+      [limit],
+    );
+    return rows.map((row) => row.imdb_id);
   }
 
   async updateImdbId(mediaId: string, imdbId: string): Promise<void> {

@@ -61,34 +61,50 @@ export type UserAuthContext = {
   accessToken: string;
 };
 
+/**
+ * Resolves the Jellyfin plugin lazily: Jellyfin may be down when the engine boots,
+ * and nothing else needs it until the first Trakt sync or user registration.
+ */
 export class TraktPlugin {
   private static readonly logger = new Logger(TraktPlugin.name);
 
-  static async create(jellyfin: JellyfinMediaService): Promise<TraktPlugin> {
-    const plugins = await jellyfin.listPlugins();
+  private pluginId: Promise<string> | null = null;
+
+  constructor(private readonly jellyfin: JellyfinMediaService) {}
+
+  private resolvePluginId(): Promise<string> {
+    if (!this.pluginId) {
+      this.pluginId = this.initialize().catch((error: unknown) => {
+        this.pluginId = null;
+        TraktPlugin.logger.warn(
+          `Trakt plugin unavailable, will retry on next use: ${error instanceof Error ? error.message : error}`,
+        );
+        throw error;
+      });
+    }
+    return this.pluginId;
+  }
+
+  private async initialize(): Promise<string> {
+    const plugins = await this.jellyfin.listPlugins();
     const plugin = plugins.find((plugin) => plugin.Name === TRAKT_PLUGIN_NAME);
     if (!plugin) {
       throw new Error(`Plugin ${TRAKT_PLUGIN_NAME} not found`);
     }
-    const pluginService = new TraktPlugin(jellyfin, plugin.Id);
 
-    const pluginConfig = await pluginService.getFullConfig();
+    const pluginConfig = traktPluginConfigSchema.parse(await this.jellyfin.getPluginConfiguration(plugin.Id));
     pluginConfig.TraktUsers = pluginConfig.TraktUsers.map((c) => ({
       ...c,
       ...DEFAULT_TRAKT_PLUGIN_CONFIG,
       LocationsExcluded: DEFAULT_TRAKT_PLUGIN_CONFIG.LocationsExcluded.slice(),
     }));
-    await pluginService.jellyfin.setPluginConfiguration(plugin.Id, pluginConfig);
-    return pluginService;
+    await this.jellyfin.setPluginConfiguration(plugin.Id, pluginConfig);
+    TraktPlugin.logger.log(`Trakt plugin ready (${plugin.Id})`);
+    return plugin.Id;
   }
 
-  private constructor(
-    private readonly jellyfin: JellyfinMediaService,
-    private readonly pluginId: string,
-  ) {}
-
   private async getFullConfig(): Promise<TraktPluginConfig> {
-    const config = await this.jellyfin.getPluginConfiguration(this.pluginId);
+    const config = await this.jellyfin.getPluginConfiguration(await this.resolvePluginId());
     return traktPluginConfigSchema.parse(config);
   }
 
@@ -127,7 +143,7 @@ export class TraktPlugin {
     } else {
       pluginConfig.TraktUsers.push(userConfig);
     }
-    await this.jellyfin.setPluginConfiguration(this.pluginId, pluginConfig);
+    await this.jellyfin.setPluginConfiguration(await this.resolvePluginId(), pluginConfig);
   }
 
   async getUsersAuthContext(): Promise<UserAuthContext[]> {

@@ -18,9 +18,17 @@ export class HealthChecksService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    // Fetchr is optional at runtime (auto-reconnect): its absence must not mark the engine unready.
     this.registry.addReadinessCheck('postgres', () => this.checkPostgres());
-    this.registry.addReadinessCheck('fetchr-ws', () => this.fetchrSync.isConnected());
     this.registry.addLivenessCheck('process', () => true);
+    this.registry.addLivenessCheck('fetchr-ws', () => this.reportFetchr());
+  }
+
+  private reportFetchr(): boolean {
+    if (!this.fetchrSync.isConnected()) {
+      HealthChecksService.logger.debug('Fetchr WS not connected (engine keeps running, reconnect pending)');
+    }
+    return true;
   }
 
   private async checkPostgres(): Promise<boolean> {

@@ -271,6 +271,8 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
       type: identification.mediaType === 'movie' ? MediaType.Movie : MediaType.Episode,
       title: identification.title,
       originalTitle: null,
+      frenchTitle: null,
+      originalLanguage: null,
       year: identification.year,
       seasonNumber: null,
       episodeNumber: null,

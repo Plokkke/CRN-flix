@@ -1,3 +1,4 @@
+import { displayTitle } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 
 import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from './email-styles';
@@ -37,14 +38,14 @@ export const requestUpdateTemplate = (
           (mediaA.episodeNumber || 0) - (mediaB.episodeNumber || 0)
         );
       }
-      return mediaA.title.localeCompare(mediaB.title);
+      return displayTitle(mediaA).localeCompare(displayTitle(mediaB));
     })
     .map((request) => {
       const media = request.media!;
       const posterUrl = media.imdbId ? posterUrlByImdbId[media.imdbId] : undefined;
 
       return getMediaCard(
-        media.title,
+        displayTitle(media),
         media.year?.toString() || '',
         posterUrl,
         request.status,
@@ -78,7 +79,7 @@ export const requestUpdateTemplate = (
 ${requests
   .map(
     (request) => `
-${request.media!.title} (${request.media!.year})
+${displayTitle(request.media!)} (${request.media!.year})
 ${request.media!.type === 'episode' ? `Saison ${request.media!.seasonNumber} - Episode ${request.media!.episodeNumber}\n` : ''}
 Statut: ${request.status.replace('_', ' ').toUpperCase()}
 ${getStatusDescription(request.status)}

@@ -9,6 +9,8 @@ const target: IndexerTarget = {
   imdbId: 'tt2887954',
   title: 'Tokyo Vice',
   originalTitle: null,
+  frenchTitle: null,
+  originalLanguage: null,
   year: 2022,
   episodes: Array.from({ length: 8 }, (_, i) => ({ season: 1, episode: i + 1, runtimeMinutes: 55 })),
 };

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { withDbRetry } from '@/helpers/db-retry';
 import { Emitter } from '@/helpers/events';
 import { ListenChannel, ListenHandle, listenWithReconnect } from '@/helpers/sql';
+import { MediaTitles } from '@/modules/indexer/contract';
 import { MediaEntity } from '@/services/database/medias';
 import { UserEntity } from '@/services/database/users';
 
@@ -45,12 +46,9 @@ export type SyncRequestSnapshot = {
 };
 
 /** One media of a show (or a movie) as the planner loads it: intent, availability, users. */
-export type PlannerStateRow = {
+export type PlannerStateRow = MediaTitles & {
   mediaId: string;
   imdbId: string;
-  title: string;
-  originalTitle: string | null;
-  year: number | null;
   seasonNumber: number | null;
   episodeNumber: number | null;
   runtimeMinutes: number | null;
@@ -240,6 +238,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                         'type', media.type,
                         'title', media.title,
                         'originalTitle', media.original_title,
+                        'frenchTitle', media.french_title,
+                        'originalLanguage', media.original_language,
                         'year', media.year,
                         'seasonNumber', media.season_number,
                         'episodeNumber', media.episode_number,
@@ -395,6 +395,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'type', media.type,
             'title', media.title,
             'originalTitle', media.original_title,
+            'frenchTitle', media.french_title,
+            'originalLanguage', media.original_language,
             'year', media.year,
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,
@@ -511,6 +513,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
          m.imdb_id as "imdbId",
          m.title,
          m.original_title as "originalTitle",
+         m.french_title as "frenchTitle",
+         m.original_language as "originalLanguage",
          m.year,
          m.season_number as "seasonNumber",
          m.episode_number as "episodeNumber",
@@ -536,6 +540,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
          m.imdb_id as "imdbId",
          m.title,
          m.original_title as "originalTitle",
+         m.french_title as "frenchTitle",
+         m.original_language as "originalLanguage",
          m.year,
          m.season_number as "seasonNumber",
          m.episode_number as "episodeNumber",
@@ -577,6 +583,8 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'type', media.type,
             'title', media.title,
             'originalTitle', media.original_title,
+            'frenchTitle', media.french_title,
+            'originalLanguage', media.original_language,
             'year', media.year,
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,

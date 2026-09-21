@@ -9,12 +9,14 @@ import {
   IndexerCandidate,
   IndexerFindResult,
   IndexerTarget,
+  MediaTitles,
   scopeKey,
   targetImdbId,
   targetTitle,
+  targetTitles,
 } from '@/modules/indexer/contract';
 import { EnginePreferences } from '@/modules/indexer/preferences';
-import { buildSearchQueries, SearchableTitle } from '@/modules/indexer/query';
+import { buildSearchQueries, isSameTitle } from '@/modules/indexer/query';
 
 import { LoadixApi } from './api';
 import { mapHost, mapLanguage, mapQuality } from './mapping';
@@ -22,6 +24,8 @@ import { LoadixLink, LoadixMediaDetail, LoadixSearchHit } from './schemas';
 
 /** Matching costs one detail fetch per plausible hit; cap them so one find() stays cheap. */
 const MAX_DETAIL_LOOKUPS = 5;
+/** Hits that merely resemble the title spend at most this much of the budget per query. */
+const FUZZY_LOOKUPS_PER_QUERY = 2;
 
 /**
  * Loadix files animation under its own `anime` type, whether it is a film or a show
@@ -132,31 +136,40 @@ export class LoadixIndexer implements Indexer {
   }
 
   private searchUrl(target: IndexerTarget): string {
-    const [query] = buildSearchQueries(searchableOf(target));
+    const [query] = loadixQueries(targetTitles(target));
     return `${this.siteHost}/search?q=${encodeURIComponent(query ?? targetTitle(target))}`;
   }
 
+  /**
+   * Queries in Loadix's own order (French title first), each hit list ranked so the ones
+   * carrying one of our titles are looked up before the fuzzy remainder: the budget must
+   * never be burnt on look-alikes of the first query before the next query gets its turn.
+   */
   private async findMedia(target: IndexerTarget): Promise<LoadixMediaDetail | null> {
     const acceptedTypes = target.kind === 'movie' ? MOVIE_HIT_TYPES : SHOW_HIT_TYPES;
-    const searchable = searchableOf(target);
+    const titles = targetTitles(target);
     const imdbId = targetImdbId(target);
     const inspected = new Set<string>();
 
-    for (const query of buildSearchQueries(searchable)) {
+    for (const query of loadixQueries(titles)) {
       const hits = await this.api.search(query);
+      const plausible = hits.filter((hit) => !inspected.has(hit.id) && isPlausibleHit(hit, titles, acceptedTypes));
+      let fuzzyLeft = FUZZY_LOOKUPS_PER_QUERY;
 
-      for (const hit of hits.filter((h) => isPlausibleHit(h, searchable, acceptedTypes))) {
-        if (inspected.has(hit.id)) {
-          continue;
-        }
+      for (const { hit, exact } of rankHits(plausible, titles)) {
         if (inspected.size >= MAX_DETAIL_LOOKUPS) {
-          LoadixIndexer.logger.debug(`Detail lookup budget exhausted for "${searchable.title}" (${imdbId})`);
+          LoadixIndexer.logger.debug(`Detail lookup budget exhausted for "${titles.title}" (${imdbId})`);
           return null;
         }
+        if (!exact && fuzzyLeft === 0) {
+          break;
+        }
+        fuzzyLeft -= exact ? 0 : 1;
         inspected.add(hit.id);
 
         const detail = await this.api.getMedia(hit.id);
         if (detail.media.imdbId === imdbId) {
+          LoadixIndexer.logger.debug(`Loadix matched "${hit.title}" for query "${query}" (${imdbId})`);
           return detail;
         }
       }
@@ -215,10 +228,22 @@ export class LoadixIndexer implements Indexer {
   }
 }
 
-function searchableOf(target: IndexerTarget): SearchableTitle {
-  return target.kind === 'movie'
-    ? target.media
-    : { title: target.title, originalTitle: target.originalTitle, year: target.year };
+/** A French catalogue: the French title is its key, the original one is searchable too. */
+function loadixQueries(titles: MediaTitles): string[] {
+  return buildSearchQueries([titles.frenchTitle, titles.originalTitle, titles.title], titles.year);
+}
+
+function carriesOneOfTitles(hit: LoadixSearchHit, titles: MediaTitles): boolean {
+  const known = [titles.frenchTitle, titles.originalTitle, titles.title];
+  return [hit.title, hit.originalTitle, ...(hit.titleAlt ?? [])].some((candidate) =>
+    known.some((title) => isSameTitle(candidate, title)),
+  );
+}
+
+function rankHits(hits: LoadixSearchHit[], titles: MediaTitles): Array<{ hit: LoadixSearchHit; exact: boolean }> {
+  return hits
+    .map((hit) => ({ hit, exact: carriesOneOfTitles(hit, titles) }))
+    .sort((a, b) => Number(b.exact) - Number(a.exact));
 }
 
 function linkScope(link: LoadixLink, target: IndexerTarget): CandidateScope | null {
@@ -259,7 +284,7 @@ function dedupeCandidates(candidates: IndexerCandidate[]): IndexerCandidate[] {
   return [...byKey.values()];
 }
 
-function isPlausibleHit(hit: LoadixSearchHit, media: SearchableTitle, acceptedTypes: string[]): boolean {
+function isPlausibleHit(hit: LoadixSearchHit, media: MediaTitles, acceptedTypes: string[]): boolean {
   if (!acceptedTypes.includes(hit.type) || hit.hasLinks === false) {
     return false;
   }

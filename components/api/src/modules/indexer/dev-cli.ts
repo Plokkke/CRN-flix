@@ -10,7 +10,14 @@ import { parseArgs } from 'node:util';
 
 import { Logger } from '@nestjs/common';
 
-import { assessCandidate, IndexerBookmark, IndexerShowEpisode, IndexerTarget, MediaType } from './contract';
+import {
+  assessCandidate,
+  IndexerBookmark,
+  IndexerShowEpisode,
+  IndexerTarget,
+  MediaTitles,
+  MediaType,
+} from './contract';
 import { preferencesFromEnv } from './preferences';
 import { createIndexers, IndexersConfig } from './registry';
 
@@ -25,7 +32,9 @@ Options:
   --imdb <id>              IMDB id (required)
   --title <title>          Title (required)
   --type <movie|show>      Target type (default: movie)
-  --original-title <t>     Original title
+  --original-title <t>     Original title (original language)
+  --french-title <t>       French title
+  --language <code>        Original language (ISO 639-1, e.g. ja)
   --year <n>               Release year
   --episodes <spec>        Show only: episode intent, e.g. "1:1-10,2:1-6" (season:from-to)
   --runtime <n>            Runtime in minutes (per episode for shows)
@@ -41,6 +50,8 @@ function parseCliArgs() {
       title: { type: 'string' },
       type: { type: 'string', default: 'movie' },
       'original-title': { type: 'string' },
+      'french-title': { type: 'string' },
+      language: { type: 'string' },
       year: { type: 'string' },
       episodes: { type: 'string' },
       runtime: { type: 'string' },
@@ -74,6 +85,16 @@ function parseEpisodesSpec(spec: string, runtimeMinutes: number | null): Indexer
   });
 }
 
+function titlesOf(values: CliValues): MediaTitles {
+  return {
+    title: values.title!,
+    originalTitle: values['original-title'] ?? null,
+    frenchTitle: values['french-title'] ?? null,
+    originalLanguage: values.language ?? null,
+    year: toNumber(values.year),
+  };
+}
+
 function buildTarget(values: CliValues): IndexerTarget {
   if (!values.imdb || !values.title) {
     console.error(USAGE);
@@ -88,9 +109,7 @@ function buildTarget(values: CliValues): IndexerTarget {
     return {
       kind: 'show',
       imdbId: values.imdb,
-      title: values.title,
-      originalTitle: values['original-title'] ?? null,
-      year: toNumber(values.year),
+      ...titlesOf(values),
       episodes: parseEpisodesSpec(values.episodes, toNumber(values.runtime)),
     };
   }
@@ -105,9 +124,7 @@ function buildTarget(values: CliValues): IndexerTarget {
     media: {
       imdbId: values.imdb,
       type: MediaType.Movie,
-      title: values.title,
-      originalTitle: values['original-title'] ?? null,
-      year: toNumber(values.year),
+      ...titlesOf(values),
       seasonNumber: null,
       episodeNumber: null,
       runtimeMinutes: toNumber(values.runtime),

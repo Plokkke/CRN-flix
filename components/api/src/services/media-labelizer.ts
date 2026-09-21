@@ -4,8 +4,8 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
-import { EnglishTitleResolver } from './english-title-resolver';
 import { IdentificationResult } from './media-identifier';
+import { MediaTitlesResolver } from './media-titles-resolver';
 
 export type MediaIdentity = Pick<
   IdentificationResult,
@@ -60,14 +60,14 @@ export class MediaLabelizerService {
 
   constructor(
     private readonly config: MediaPathsConfig,
-    private readonly englishTitle: EnglishTitleResolver,
+    private readonly titles: MediaTitlesResolver,
   ) {}
 
   async toCanonicalIdentity<T extends MediaIdentity>(identity: T): Promise<T> {
     if (!identity.imdbId) {
       return identity;
     }
-    const resolution = await this.englishTitle.resolve(identity.imdbId);
+    const resolution = await this.titles.resolve(identity.imdbId);
     return resolution.title ? { ...identity, title: resolution.title } : identity;
   }
 

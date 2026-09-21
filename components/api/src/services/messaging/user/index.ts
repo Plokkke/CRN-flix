@@ -28,9 +28,22 @@ export type LoginChallenge = {
   expiresInMinutes: number;
 };
 
+export const NOTICE_TONES = ['warning', 'success', 'info'] as const;
+export type NoticeTone = (typeof NOTICE_TONES)[number];
+
+/** A one-off announcement to subscribers (outage, restoration...), rendered by every channel. */
+export type ServiceNotice = {
+  subject: string;
+  title: string;
+  paragraphs: string[];
+  tone: NoticeTone;
+  cta?: { label: string; url: string };
+};
+
 export abstract class UserMessaging<ID> {
   abstract error(id: ID, message: string): Promise<void>;
   abstract registered(id: ID, user: UserEntity, password: string): Promise<void>;
   abstract requestUpdated(id: ID, request: RequestEntity): Promise<void>;
   abstract loginChallenge(id: ID, challenge: LoginChallenge): Promise<void>;
+  abstract announce(id: ID, notice: ServiceNotice): Promise<void>;
 }

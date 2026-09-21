@@ -21,6 +21,8 @@ function request(spec: MediaSpec, status: RequestStatus, users: string[] = ['ali
       type: isEpisode ? MediaType.Episode : MediaType.Movie,
       title: spec.title,
       originalTitle: null,
+      frenchTitle: null,
+      originalLanguage: null,
       year: 2020,
       seasonNumber: spec.season ?? null,
       episodeNumber: spec.episode ?? null,

@@ -87,9 +87,10 @@ export class DiscordService implements OnModuleDestroy {
     return thread.send(content);
   }
 
-  static async setThreadArchived(channel: TextChannel, threadId: string, archived: boolean): Promise<void> {
+  /** Deleting the starter message leaves the thread alive: it has to go on its own. */
+  static async deleteThread(channel: TextChannel, threadId: string): Promise<void> {
     const thread = await this.getThread(channel, threadId);
-    await thread.setArchived(archived);
+    await thread.delete();
   }
 
   private readonly client: Client;

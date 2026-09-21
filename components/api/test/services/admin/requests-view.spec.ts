@@ -36,6 +36,8 @@ function request(
       type: season === undefined ? MediaType.Movie : MediaType.Episode,
       title,
       originalTitle: null,
+      frenchTitle: null,
+      originalLanguage: null,
       year: 2020,
       seasonNumber: season ?? null,
       episodeNumber: episode ?? null,
