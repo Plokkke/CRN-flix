@@ -3,8 +3,11 @@ import { Logger } from '@nestjs/common';
 import { MediaTitles } from '@/modules/indexer/contract';
 import { TmdbApiService, TmdbMovie, TmdbTvShow } from '@/modules/tmdb/tmdb';
 
-/** `title` is the English one (null when TMDB has none), the rest as the contract defines. */
-export type MediaTitlesResolution = Omit<MediaTitles, 'title'> & { title: string | null };
+/**
+ * `title` is the English one (null when TMDB has none), the rest as the contract defines,
+ * plus the TMDB poster path (French artwork preferred) the engine keeps for its own display.
+ */
+export type MediaTitlesResolution = Omit<MediaTitles, 'title'> & { title: string | null; posterPath: string | null };
 
 const UNKNOWN: MediaTitlesResolution = {
   title: null,
@@ -12,6 +15,7 @@ const UNKNOWN: MediaTitlesResolution = {
   frenchTitle: null,
   originalLanguage: null,
   year: null,
+  posterPath: null,
 };
 
 const ENGLISH = 'en-US';
@@ -22,6 +26,7 @@ type Localized = {
   originalTitle: string | null;
   originalLanguage: string | null;
   year: number | null;
+  posterPath: string | null;
 };
 
 function yearOf(date: string | undefined): number | null {
@@ -34,6 +39,7 @@ function fromMovie(movie: TmdbMovie): Localized {
     originalTitle: movie.original_title || null,
     originalLanguage: movie.original_language ?? null,
     year: yearOf(movie.release_date),
+    posterPath: movie.poster_path ?? null,
   };
 }
 
@@ -43,6 +49,7 @@ function fromTvShow(show: TmdbTvShow): Localized {
     originalTitle: show.original_name || null,
     originalLanguage: show.original_language ?? null,
     year: yearOf(show.first_air_date),
+    posterPath: show.poster_path ?? null,
   };
 }
 
@@ -85,6 +92,7 @@ export class MediaTitlesResolver {
       frenchTitle: french?.title ?? null,
       originalLanguage: english.originalLanguage,
       year: english.year,
+      posterPath: french?.posterPath ?? english.posterPath,
     };
   }
 

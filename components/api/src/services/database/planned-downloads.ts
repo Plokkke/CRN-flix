@@ -179,6 +179,7 @@ const DETAILS_SELECT = `
         'originalTitle', m.original_title,
         'frenchTitle', m.french_title,
         'originalLanguage', m.original_language,
+        'posterPath', m.poster_path,
         'year', m.year,
         'seasonNumber', m.season_number,
         'episodeNumber', m.episode_number,

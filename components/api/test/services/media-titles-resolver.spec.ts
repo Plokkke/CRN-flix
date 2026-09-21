@@ -6,6 +6,7 @@ const hangover = {
   title: 'The Hangover',
   original_title: 'The Hangover',
   original_language: 'en',
+  poster_path: '/hangover-en.jpg',
   release_date: '2009-06-05',
   popularity: 1,
   vote_count: 1,
@@ -18,7 +19,9 @@ function tmdb(findByImdbId: jest.Mock): TmdbApiService {
 describe('MediaTitlesResolver', () => {
   it('resolves the English, French and original titles of a movie with two TMDB calls', async () => {
     const findByImdbId = jest.fn().mockImplementation((_imdbId: string, { language }: { language: string }) => ({
-      movies: [language === 'fr-FR' ? { ...hangover, title: 'Very Bad Trip' } : hangover],
+      movies: [
+        language === 'fr-FR' ? { ...hangover, title: 'Very Bad Trip', poster_path: '/hangover-fr.jpg' } : hangover,
+      ],
       tvShows: [],
     }));
     const resolver = new MediaTitlesResolver(tmdb(findByImdbId));
@@ -29,6 +32,7 @@ describe('MediaTitlesResolver', () => {
       frenchTitle: 'Very Bad Trip',
       originalLanguage: 'en',
       year: 2009,
+      posterPath: '/hangover-fr.jpg',
     });
     expect(findByImdbId.mock.calls.map(([, opts]) => opts.language)).toEqual(['en-US', 'fr-FR']);
   });

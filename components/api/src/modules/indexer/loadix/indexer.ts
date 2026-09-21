@@ -18,7 +18,7 @@ import {
 import { EnginePreferences } from '@/modules/indexer/preferences';
 import { buildSearchQueries, isSameTitle } from '@/modules/indexer/query';
 
-import { LoadixApi } from './api';
+import { LoadixApi, YearRange } from './api';
 import { mapHost, mapLanguage, mapQuality } from './mapping';
 import { LoadixLink, LoadixMediaDetail, LoadixSearchHit } from './schemas';
 
@@ -26,6 +26,8 @@ import { LoadixLink, LoadixMediaDetail, LoadixSearchHit } from './schemas';
 const MAX_DETAIL_LOOKUPS = 5;
 /** Hits that merely resemble the title spend at most this much of the budget per query. */
 const FUZZY_LOOKUPS_PER_QUERY = 2;
+/** Trakt and Loadix can disagree by a year on a release date (premiere vs. wide release). */
+const YEAR_TOLERANCE = 1;
 
 /**
  * Loadix files animation under its own `anime` type, whether it is a film or a show
@@ -136,23 +138,32 @@ export class LoadixIndexer implements Indexer {
   }
 
   private searchUrl(target: IndexerTarget): string {
-    const [query] = loadixQueries(targetTitles(target));
-    return `${this.siteHost}/search?q=${encodeURIComponent(query ?? targetTitle(target))}`;
+    const titles = targetTitles(target);
+    const [query] = loadixQueries(titles);
+    const params = new URLSearchParams({ q: query ?? targetTitle(target) });
+    const years = yearRange(titles);
+    if (years) {
+      params.set('year_from', String(years.from));
+      params.set('year_to', String(years.to));
+    }
+    return `${this.siteHost}/search?${params}`;
   }
 
   /**
-   * Queries in Loadix's own order (French title first), each hit list ranked so the ones
-   * carrying one of our titles are looked up before the fuzzy remainder: the budget must
-   * never be burnt on look-alikes of the first query before the next query gets its turn.
+   * Queries in Loadix's own order (French title first), narrowed server-side to the release
+   * year, each hit list ranked so the ones carrying one of our titles are looked up before
+   * the fuzzy remainder: the budget must never be burnt on look-alikes of the first query
+   * before the next query gets its turn.
    */
   private async findMedia(target: IndexerTarget): Promise<LoadixMediaDetail | null> {
     const acceptedTypes = target.kind === 'movie' ? MOVIE_HIT_TYPES : SHOW_HIT_TYPES;
     const titles = targetTitles(target);
     const imdbId = targetImdbId(target);
     const inspected = new Set<string>();
+    const years = yearRange(titles);
 
     for (const query of loadixQueries(titles)) {
-      const hits = await this.api.search(query);
+      const hits = await this.api.search(query, years);
       const plausible = hits.filter((hit) => !inspected.has(hit.id) && isPlausibleHit(hit, titles, acceptedTypes));
       let fuzzyLeft = FUZZY_LOOKUPS_PER_QUERY;
 
@@ -228,9 +239,16 @@ export class LoadixIndexer implements Indexer {
   }
 }
 
-/** A French catalogue: the French title is its key, the original one is searchable too. */
+/**
+ * A French catalogue: the French title is its key, the original one is searchable too.
+ * No "title year" variants: the year goes to the search endpoint as a filter.
+ */
 function loadixQueries(titles: MediaTitles): string[] {
-  return buildSearchQueries([titles.frenchTitle, titles.originalTitle, titles.title], titles.year);
+  return buildSearchQueries([titles.frenchTitle, titles.originalTitle, titles.title], null);
+}
+
+function yearRange(titles: MediaTitles): YearRange | null {
+  return titles.year ? { from: titles.year - YEAR_TOLERANCE, to: titles.year + YEAR_TOLERANCE } : null;
 }
 
 function carriesOneOfTitles(hit: LoadixSearchHit, titles: MediaTitles): boolean {
@@ -291,5 +309,5 @@ function isPlausibleHit(hit: LoadixSearchHit, media: MediaTitles, acceptedTypes:
   if (media.year === null || hit.year === null || hit.year === undefined) {
     return true;
   }
-  return Math.abs(hit.year - media.year) <= 1;
+  return Math.abs(hit.year - media.year) <= YEAR_TOLERANCE;
 }

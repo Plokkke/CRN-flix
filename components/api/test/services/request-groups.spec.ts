@@ -28,6 +28,7 @@ function request(spec: MediaSpec, status: RequestStatus, users: string[] = ['ali
       episodeNumber: spec.episode ?? null,
       runtimeMinutes: null,
       traktSlug: null,
+      posterPath: null,
       createdAt: now,
       updatedAt: now,
     },

@@ -1,4 +1,4 @@
-import { displayTitle } from '@/services/database/medias';
+import { displayTitle, posterUrl } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 
 import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from './email-styles';
@@ -19,13 +19,12 @@ export type RequestUpdateTemplateParams = {
   serviceName: string;
   mediaServerUrl: string;
   requests: RequestEntity[];
-  posterUrlByImdbId: Record<string, string>;
 };
 
 export const requestUpdateTemplate = (
   params: RequestUpdateTemplateParams,
 ): { subject: string; html: string; text: string } => {
-  const { serviceName, mediaServerUrl, requests, posterUrlByImdbId } = params;
+  const { serviceName, mediaServerUrl, requests } = params;
   const subject = `📺 Mise à jour de vos demandes (${requests.length})`;
 
   const mediaCards = requests
@@ -42,12 +41,11 @@ export const requestUpdateTemplate = (
     })
     .map((request) => {
       const media = request.media!;
-      const posterUrl = media.imdbId ? posterUrlByImdbId[media.imdbId] : undefined;
 
       return getMediaCard(
         displayTitle(media),
         media.year?.toString() || '',
-        posterUrl,
+        posterUrl(media) ?? undefined,
         request.status,
         getStatusDescription(request.status),
         request.status === RequestStatus.Fulfilled

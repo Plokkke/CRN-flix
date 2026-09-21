@@ -16,6 +16,7 @@ export type TmdbMovie = {
   title: string;
   original_title: string;
   original_language?: string;
+  poster_path?: string | null;
   release_date: string;
   popularity: number;
   vote_count: number;
@@ -26,6 +27,7 @@ export type TmdbTvShow = {
   name: string;
   original_name: string;
   original_language?: string;
+  poster_path?: string | null;
   first_air_date: string;
   popularity: number;
   vote_count: number;

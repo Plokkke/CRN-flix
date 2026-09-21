@@ -154,7 +154,6 @@ export class EmailUserMessaging extends UserMessaging<string> implements OnModul
           serviceName: this.contextService.name,
           mediaServerUrl: this.contextService.mediaServerUrl,
           requests,
-          posterUrlByImdbId: {}, // TODO get jellyfin item
         }),
       });
       EmailUserMessaging.logger.log(`Request update email sent successfully to ${email}`);

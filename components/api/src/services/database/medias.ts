@@ -5,12 +5,13 @@ import { IndexerMedia, MediaTitles, MediaType } from '@/modules/indexer/contract
 
 export { MediaType };
 
-/** Trakt's slug is engine metadata (direct links), not part of the indexer contract. */
-export type MediaInfos = IndexerMedia & { traktSlug?: string | null };
+/** Trakt's slug and the TMDB poster are engine metadata (links, artwork), not part of the indexer contract. */
+export type MediaInfos = IndexerMedia & { traktSlug?: string | null; posterPath?: string | null };
 
 export type MediaEntity = MediaInfos & {
   id: string;
   traktSlug: string | null;
+  posterPath: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -28,6 +29,7 @@ type MediaRecord = {
   episode_number: number | null;
   runtime_minutes: number | null;
   trakt_slug: string | null;
+  poster_path: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -46,6 +48,7 @@ function fromMediaRecord(record: MediaRecord): MediaEntity {
     episodeNumber: record.episode_number,
     runtimeMinutes: record.runtime_minutes,
     traktSlug: record.trakt_slug,
+    posterPath: record.poster_path,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -56,8 +59,17 @@ export function displayTitle(media: Pick<MediaTitles, 'title' | 'frenchTitle'>):
   return media.frenchTitle ?? media.title;
 }
 
-/** Titles resolved from TMDB; null fields leave the stored value untouched. */
-export type MediaTitlesPatch = { [K in Exclude<keyof MediaTitles, 'year'>]?: string | null };
+const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
+
+/** TMDB serves posters anonymously in fixed widths; w342 suits emails and cards. */
+export type PosterSize = 'w92' | 'w154' | 'w185' | 'w342' | 'w500' | 'original';
+
+export function posterUrl(media: Pick<MediaEntity, 'posterPath'>, size: PosterSize = 'w342'): string | null {
+  return media.posterPath ? `${TMDB_IMAGE_BASE_URL}/${size}${media.posterPath}` : null;
+}
+
+/** Titles and artwork resolved from TMDB; null fields leave the stored value untouched. */
+export type MediaTitlesPatch = { [K in Exclude<keyof MediaTitles, 'year'> | 'posterPath']?: string | null };
 
 export function isSameMedia(a: MediaInfos, b: MediaInfos): boolean {
   return (
@@ -108,8 +120,8 @@ export class MediasRepository {
 
   async upsert(infos: MediaInfos): Promise<MediaEntity> {
     const query = `
-      INSERT INTO medias (imdb_id, type, title, original_title, year, season_number, episode_number, runtime_minutes, trakt_slug, french_title, original_language)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO medias (imdb_id, type, title, original_title, year, season_number, episode_number, runtime_minutes, trakt_slug, french_title, original_language, poster_path)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       ON CONFLICT (imdb_id, COALESCE(season_number, -1), COALESCE(episode_number, -1))
       DO UPDATE SET
         title = $3,
@@ -118,7 +130,8 @@ export class MediasRepository {
         runtime_minutes = COALESCE($8, medias.runtime_minutes),
         trakt_slug = COALESCE($9, medias.trakt_slug),
         french_title = COALESCE($10, medias.french_title),
-        original_language = COALESCE($11, medias.original_language)
+        original_language = COALESCE($11, medias.original_language),
+        poster_path = COALESCE($12, medias.poster_path)
       RETURNING *
     `;
     const { rows } = await this.pool.query<MediaRecord>(query, [
@@ -133,6 +146,7 @@ export class MediasRepository {
       infos.traktSlug ?? null,
       infos.frenchTitle,
       infos.originalLanguage,
+      infos.posterPath ?? null,
     ]);
 
     if (rows.length) {
@@ -149,15 +163,18 @@ export class MediasRepository {
        SET title = COALESCE($2, title),
            original_title = COALESCE($3, original_title),
            french_title = COALESCE($4, french_title),
-           original_language = COALESCE($5, original_language)
+           original_language = COALESCE($5, original_language),
+           poster_path = COALESCE($6, poster_path)
        WHERE imdb_id = $1`,
-      [imdbId, titles.title, titles.originalTitle, titles.frenchTitle, titles.originalLanguage],
+      [imdbId, titles.title, titles.originalTitle, titles.frenchTitle, titles.originalLanguage, titles.posterPath],
     );
   }
 
   async listImdbIdsWithoutFrenchTitle(limit: number): Promise<string[]> {
     const { rows } = await this.pool.query<{ imdb_id: string }>(
-      `SELECT DISTINCT imdb_id FROM medias WHERE french_title IS NULL AND imdb_id <> '' LIMIT $1`,
+      `SELECT DISTINCT imdb_id FROM medias
+       WHERE (french_title IS NULL OR poster_path IS NULL) AND imdb_id <> ''
+       LIMIT $1`,
       [limit],
     );
     return rows.map((row) => row.imdb_id);

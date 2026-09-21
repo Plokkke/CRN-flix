@@ -232,8 +232,24 @@ describe('LoadixIndexer', () => {
       const { bookmark } = await indexer.find(hangover, ALLOW_ALL, null);
 
       expect(search).toHaveBeenCalledTimes(1);
-      expect(search).toHaveBeenCalledWith('Very Bad Trip');
-      expect(bookmark?.searchUrl).toBe(`${SITE_HOST}/search?q=Very%20Bad%20Trip`);
+      expect(search).toHaveBeenCalledWith('Very Bad Trip', { from: 2008, to: 2010 });
+      expect(bookmark?.searchUrl).toBe(`${SITE_HOST}/search?q=Very+Bad+Trip&year_from=2008&year_to=2010`);
+    });
+
+    it('searches without a year window when the year is unknown', async () => {
+      const search = jest.fn().mockResolvedValue([hangoverHit]);
+      const getMedia = jest.fn().mockResolvedValue(hangoverDetail);
+      const listLinks = jest.fn().mockResolvedValue([]);
+      const indexer = buildIndexer({ search, getMedia, listLinks });
+
+      const { bookmark } = await indexer.find(
+        { ...hangover, media: { ...hangover.media, year: null } },
+        ALLOW_ALL,
+        null,
+      );
+
+      expect(search).toHaveBeenCalledWith('Very Bad Trip', null);
+      expect(bookmark?.searchUrl).toBe(`${SITE_HOST}/search?q=Very+Bad+Trip`);
     });
 
     it('falls back to the original then the English title', async () => {
@@ -359,7 +375,7 @@ describe('LoadixIndexer', () => {
   describe('bookmarks', () => {
     const movieBookmark: IndexerBookmark = {
       pageUrl: `${SITE_HOST}/media/${MEDIA_ID}`,
-      searchUrl: `${SITE_HOST}/search?q=Taxi`,
+      searchUrl: `${SITE_HOST}/search?q=Taxi&year_from=1997&year_to=1999`,
       state: { mediaId: MEDIA_ID, seasons: [] },
     };
 
@@ -380,7 +396,11 @@ describe('LoadixIndexer', () => {
 
       const { bookmark } = await indexer.find(movieTarget, ALLOW_ALL, null);
 
-      expect(bookmark).toEqual({ pageUrl: null, searchUrl: `${SITE_HOST}/search?q=Taxi`, state: null });
+      expect(bookmark).toEqual({
+        pageUrl: null,
+        searchUrl: `${SITE_HOST}/search?q=Taxi&year_from=1997&year_to=1999`,
+        state: null,
+      });
     });
 
     it('skips search and detail lookups when handed a bookmark', async () => {

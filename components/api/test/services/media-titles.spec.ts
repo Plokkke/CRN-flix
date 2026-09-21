@@ -17,6 +17,7 @@ const resolved: MediaTitlesResolution = {
   frenchTitle: 'Very Bad Trip',
   originalLanguage: 'en',
   year: 2009,
+  posterPath: '/hangover.jpg',
 };
 
 function build(resolution: MediaTitlesResolution, imdbIdsWithoutFrench: string[] = []) {
@@ -42,7 +43,8 @@ describe('MediaTitlesService.ensure', () => {
   it('resolves, persists on every row of the imdb id and returns the completed titles', async () => {
     const { service, updateTitles } = build(resolved);
 
-    await expect(service.ensure('tt1119646', stored)).resolves.toEqual({ ...resolved, year: 2009 });
+    const { posterPath: _poster, ...titles } = resolved;
+    await expect(service.ensure('tt1119646', stored)).resolves.toEqual(titles);
     expect(updateTitles).toHaveBeenCalledWith('tt1119646', resolved);
   });
 

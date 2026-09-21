@@ -33,6 +33,9 @@ export type ListLinksOptions = {
   seasonId?: string;
 };
 
+/** Inclusive release-year window, applied server-side by the search endpoint. */
+export type YearRange = { from: number; to: number };
+
 export class LoadixUnparseableResponseError extends Error {
   constructor(context: string, preview: string) {
     super(`Unparseable Loadix response for ${context}: ${preview}`);
@@ -92,9 +95,15 @@ export class LoadixApi {
     return result.data;
   }
 
-  async search(query: string): Promise<LoadixSearchHit[]> {
+  async search(query: string, years: YearRange | null = null): Promise<LoadixSearchHit[]> {
     const response = await this.client.get('/media/search', {
-      params: { q: query, page: 1, pageSize: SEARCH_PAGE_SIZE, sort: 'relevance' },
+      params: {
+        q: query,
+        page: 1,
+        pageSize: SEARCH_PAGE_SIZE,
+        sort: 'relevance',
+        ...(years && { year_from: years.from, year_to: years.to }),
+      },
     });
     return this.parse(loadixSearchResponseSchema, response.data, `search "${query}"`).hits;
   }
