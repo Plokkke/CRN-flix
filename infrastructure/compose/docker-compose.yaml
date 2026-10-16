@@ -1,0 +1,147 @@
+networks:
+  media_network:
+    driver: bridge
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    security_opt: ['no-new-privileges:true']
+    networks:
+      - media_network
+    ports:
+      - "127.0.0.1:8096:8096"
+    volumes:
+      - ${HOST_CONFIG_PATH}/jellyfin/config:/config
+      - ${HOST_DATA_PATH}/medias:/medias:rslave
+
+  crn-flix-migration:
+    image: antoinecaron/crn-flix-migration:latest
+    container_name: crn-flix-migration
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt: ['no-new-privileges:true']
+    networks:
+      - media_network
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: ${POSTGRES_USER}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+  crn-flix-engine:
+    image: antoinecaron/crn-flix:latest
+    container_name: crn-flix-engine
+    restart: unless-stopped
+    init: true
+    depends_on:
+      crn-flix-migration:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health/readiness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    user: ${PUID}:${PGID}
+    security_opt: ['no-new-privileges:true']
+    networks:
+      - media_network
+    ports:
+      - "127.0.0.1:4040:3000"
+    volumes:
+      - ${HOST_DATA_PATH}:/data
+    environment:
+      PORT: 3000
+      LOG_LEVEL: ${ENGINE_LOG_LEVEL}
+      SHUTDOWN_TIMEOUT_MS: "30000"
+      SERVER_URL: ${ENGINE_SERVER_URL}
+      SERVICE_NAME: ${ENGINE_SERVICE_NAME}
+      TRAKT_HOST: ${TRAKT_HOST}
+      TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID}
+      TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET}
+      JELLYFIN_URL: ${JELLYFIN_URL}
+      JELLYFIN_TOKEN: ${JELLYFIN_TOKEN}
+      DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_ADMIN_IDS: ${DISCORD_ADMIN_IDS}
+      GMAIL_USER: ${GMAIL_USER}
+      GMAIL_PASSWORD: ${GMAIL_PASSWORD}
+      HYDRACKER_API_KEY: ${HYDRACKER_API_KEY:-}
+      HYDRACKER_HOST: ${HYDRACKER_HOST:-}
+      LOADIX_API_HOST: ${LOADIX_API_HOST:-}
+      LOADIX_SITE_HOST: ${LOADIX_SITE_HOST:-}
+      HYDRACKER_CONTACT_EMAIL: ${HYDRACKER_CONTACT_EMAIL:-}
+      INDEXER_ALLOWED_QUALITIES: ${INDEXER_ALLOWED_QUALITIES:-}
+      INDEXER_ALLOWED_LANGUAGES: ${INDEXER_ALLOWED_LANGUAGES:-}
+      INDEXER_ALLOWED_HOSTS: ${INDEXER_ALLOWED_HOSTS:-}
+      INDEXER_SIZE_TOLERANCE: ${INDEXER_SIZE_TOLERANCE:-1}
+      INDEXER_BYTES_PER_MIN_JSON: ${INDEXER_BYTES_PER_MIN_JSON:-}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: ${POSTGRES_DB}
+      DATABASE_USERNAME: ${POSTGRES_USER}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      TMDB_API_KEY: ${TMDB_API_KEY}
+      FETCHR_URL: ws://fetchr:3000
+      FETCHR_API_KEY: ${FETCHR_API_KEY}
+      FETCHR_DOWNLOADS_PREFIX: ${FETCHR_DOWNLOAD_PATH}
+      DOWNLOADS_PATH: /data/downloads
+      MEDIAS_PATH: /data/medias
+      JELLYFIN_LIBRARY_ROOT: /medias
+
+  fetchr:
+    image: antoinecaron/fetchr:latest
+    container_name: fetchr
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health/readiness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    user: ${PUID}:${PGID}
+    security_opt: ['no-new-privileges:true']
+    networks:
+      - media_network
+    ports:
+      - "127.0.0.1:4004:3000"
+    volumes:
+      - ${HOST_DATA_PATH}/downloads:${FETCHR_DOWNLOAD_PATH}
+    environment:
+      PORT: 3000
+      LOG_LEVEL: ${FETCHR_LOG_LEVEL}
+      SHUTDOWN_TIMEOUT_MS: "20000"
+      API_KEY: ${FETCHR_API_KEY}
+      DOWNLOADS_PATH: ${FETCHR_DOWNLOAD_PATH}
+      HOST_PLUGINS: ${FETCHR_HOST_PLUGINS}
+      ARCHIVE_PLUGINS: ${FETCHR_ARCHIVE_PLUGINS}
+      ONE_FICHIER_HOST: ${ONE_FICHIER_HOST}
+      ONE_FICHIER_API_KEY: ${ONE_FICHIER_API_KEY}
+
+  postgres:
+    image: postgres:17
+    container_name: crn-flix-postgres
+    restart: unless-stopped
+    security_opt: ['no-new-privileges:true']
+    networks:
+      - media_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ${HOST_CONFIG_PATH}/postgres/data:/var/lib/postgresql/data
+      - ${HOST_CONFIG_PATH}/postgres/init:/docker-entrypoint-initdb.d
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}

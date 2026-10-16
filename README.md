@@ -129,7 +129,7 @@ Validated at boot by `components/api/src/environment.ts`.
 
 ## Deployment
 
-Production runs as Docker containers next to PostgreSQL and the services behind each role. `../deploy.sh` builds and pushes `antoinecaron/crn-flix` (API) and `antoinecaron/crn-flix-migration`, syncs `../docker-compose.yaml` to the server and restarts the stack. The migration container runs first; the engine only waits on it and on PostgreSQL.
+Production runs as Docker containers next to PostgreSQL and the services behind each role. `infrastructure/compose/deploy.sh` builds and pushes `antoinecaron/crn-flix` (API) and `antoinecaron/crn-flix-migration`, syncs `infrastructure/compose/docker-compose.yaml` to the server and restarts the stack; the server's `.env` keys are listed in `infrastructure/compose/.env.example`. The compose file in this repository is the source of truth: never edit it on the server. The migration container runs first; the engine only waits on it and on PostgreSQL.
 
 Migrations are applied in filename order and hashed: **never edit an applied migration, add a new one.**
 
