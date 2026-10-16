@@ -4,7 +4,7 @@
 # The server's .env (secrets) is not versioned; .env.example lists its keys.
 set -e
 
-REMOTE_HOST="pi-remote"
+REMOTE_HOST="pi"
 REMOTE_DIR="/srv/docker/crn-flix"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
