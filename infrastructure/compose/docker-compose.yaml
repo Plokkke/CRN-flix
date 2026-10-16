@@ -89,42 +89,13 @@ services:
       DATABASE_USERNAME: ${POSTGRES_USER}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
       TMDB_API_KEY: ${TMDB_API_KEY}
-      FETCHR_URL: ws://fetchr:3000
+      # fetchr is its own stack (Plokkke/fetchr, Terraform), reached through its public URL.
+      FETCHR_URL: wss://fetchr.crn-tech.fr
       FETCHR_API_KEY: ${FETCHR_API_KEY}
       FETCHR_DOWNLOADS_PREFIX: ${FETCHR_DOWNLOAD_PATH}
       DOWNLOADS_PATH: /data/downloads
       MEDIAS_PATH: /data/medias
       JELLYFIN_LIBRARY_ROOT: /medias
-
-  fetchr:
-    image: antoinecaron/fetchr:latest
-    container_name: fetchr
-    restart: unless-stopped
-    init: true
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health/readiness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    user: ${PUID}:${PGID}
-    security_opt: ['no-new-privileges:true']
-    networks:
-      - media_network
-    ports:
-      - "127.0.0.1:4004:3000"
-    volumes:
-      - ${HOST_DATA_PATH}/downloads:${FETCHR_DOWNLOAD_PATH}
-    environment:
-      PORT: 3000
-      LOG_LEVEL: ${FETCHR_LOG_LEVEL}
-      SHUTDOWN_TIMEOUT_MS: "20000"
-      API_KEY: ${FETCHR_API_KEY}
-      DOWNLOADS_PATH: ${FETCHR_DOWNLOAD_PATH}
-      HOST_PLUGINS: ${FETCHR_HOST_PLUGINS}
-      ARCHIVE_PLUGINS: ${FETCHR_ARCHIVE_PLUGINS}
-      ONE_FICHIER_HOST: ${ONE_FICHIER_HOST}
-      ONE_FICHIER_API_KEY: ${ONE_FICHIER_API_KEY}
 
   postgres:
     image: postgres:17
