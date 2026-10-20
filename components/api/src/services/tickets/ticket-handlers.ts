@@ -134,7 +134,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
         user.jellyfinId = accountId;
         await this.usersRepository.setJellyfinId(user.id, accountId);
       }
-      // Best effort: the hourly account-policy pass catches up if the player refuses now.
+      // Best effort: the next player-sync catches up if the player refuses now.
       await this.playerAccounts.apply(user).catch((error: unknown) => {
         TicketHandlersService.logger.warn(`Account policy not applied to ${user.name}: ${describeError(error)}`);
       });

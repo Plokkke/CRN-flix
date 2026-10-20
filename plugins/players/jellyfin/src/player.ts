@@ -28,7 +28,8 @@ const VIEWER_POLICY = {
 
 /** The account's policy with the viewer rules applied, or null when it already complies. */
 export function viewerPolicy(current: JellyfinUserPolicy, policy: AccountPolicy): JellyfinUserPolicy | null {
-  const wanted = { ...VIEWER_POLICY, MaxActiveSessions: policy.maxStreams };
+  const wanted =
+    policy.maxStreams === undefined ? VIEWER_POLICY : { ...VIEWER_POLICY, MaxActiveSessions: policy.maxStreams };
   const complies = Object.entries(wanted).every(([key, value]) => current[key] === value);
   return complies ? null : { ...current, ...wanted };
 }
@@ -123,6 +124,10 @@ export class JellyfinPlayer implements Player {
     return existing.Id;
   }
 
+  async listAccountIds(): Promise<string[]> {
+    return (await this.jellyfin.listUsers()).map((user) => user.Id);
+  }
+
   async accountMaxStreams(accountId: string): Promise<number | null> {
     const policy = await this.jellyfin.getUserPolicy(accountId);
     return policy.IsAdministrator ? null : policy.MaxActiveSessions;
@@ -136,7 +141,8 @@ export class JellyfinPlayer implements Player {
       return false;
     }
     await this.jellyfin.setUserPolicy(accountId, next);
-    JellyfinPlayer.logger.log(`Viewer policy applied to account ${accountId} (${policy.maxStreams} stream(s))`);
+    const streams = policy.maxStreams === undefined ? 'stream limit kept' : `${policy.maxStreams} stream(s)`;
+    JellyfinPlayer.logger.log(`Viewer policy applied to account ${accountId} (${streams})`);
     return true;
   }
 

@@ -24,6 +24,8 @@ export interface CatalogAccountSource {
   listAccounts(): Promise<LinkedCatalogAccount[]>;
   /** Stores credentials a catalog renewed, so every holder of the account keeps working. */
   saveCredentials(playerAccountId: string, credentials: unknown): Promise<void>;
+  /** Puts every linked account back on the service's catalog settings; returns how many changed. */
+  enforceSettings(): Promise<number>;
 }
 
 /** The catalog refused to renew an account's credentials: only the user can link it again. */

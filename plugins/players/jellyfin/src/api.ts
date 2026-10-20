@@ -135,9 +135,14 @@ export class JellyfinMediaService {
     return this.config.url;
   }
 
-  async findUserByName(userName: string): Promise<JellyfinApiUser | null> {
+  async listUsers(): Promise<JellyfinApiUser[]> {
     const response = await this.api.get<JellyfinApiUser[]>('/Users');
-    return response.data.find((u) => u.Name.toLowerCase() === userName.toLowerCase()) ?? null;
+    return response.data;
+  }
+
+  async findUserByName(userName: string): Promise<JellyfinApiUser | null> {
+    const users = await this.listUsers();
+    return users.find((u) => u.Name.toLowerCase() === userName.toLowerCase()) ?? null;
   }
 
   async registerUser(userName: string, password: string): Promise<string> {

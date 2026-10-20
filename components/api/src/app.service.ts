@@ -34,7 +34,6 @@ import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { PlannerService } from '@/services/planner/planner';
-import { PlayerAccountsService } from '@/services/player-accounts';
 import { PlayerSyncService } from '@/services/player-sync';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { downloadActionResolution, isIdentificationError } from '@/services/tickets/auto-resolve';
@@ -72,7 +71,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly mediaTitles: MediaTitlesService,
     private readonly redelivery: NotificationRedeliveryService,
-    private readonly playerAccounts: PlayerAccountsService,
   ) {}
 
   onModuleInit(): void {
@@ -89,7 +87,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
       this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
       this.registerCronJob('notification-redelivery-job', '*/5 * * * *', () => this.redelivery.redeliver());
-      this.registerCronJob('account-policy-job', '40 * * * *', () => this.playerAccounts.applyAll());
     }
   }
 

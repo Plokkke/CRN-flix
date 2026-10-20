@@ -30,7 +30,7 @@ export class UsersAdminController {
     return adminUsersTemplate({ serviceName: this.contextService.name, users, flashMessage: message });
   }
 
-  /** Saved first, then applied: a player refusal is caught up by the hourly account-policy pass. */
+  /** Saved first, then applied: a player refusal is caught up by the next player-sync. */
   @Post(':id/max-streams')
   async setMaxStreams(@Param('id') id: string, @Body() body: unknown, @Res() res: Response): Promise<void> {
     const { maxStreams } = maxStreamsFormSchema.parse(body);

@@ -4,6 +4,7 @@ import { Player } from '@crn-flix/contracts';
 
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
+import { PlayerAccountsService } from '@/services/player-accounts';
 
 /** Whatever the player can serve is a fulfilled request: the status change notifies requesters. */
 export class PlayerSyncService {
@@ -13,6 +14,7 @@ export class PlayerSyncService {
     private readonly requestsRepository: RequestsRepository,
     private readonly mediasRepository: MediasRepository,
     private readonly player: Player,
+    private readonly accounts: PlayerAccountsService,
   ) {}
 
   async sync(): Promise<void> {
@@ -25,5 +27,6 @@ export class PlayerSyncService {
     }
 
     PlayerSyncService.logger.log(`${this.player.name} sync completed: ${assets.length} upserted`);
+    await this.accounts.applyAll();
   }
 }

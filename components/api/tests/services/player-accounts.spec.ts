@@ -1,4 +1,4 @@
-import { Player } from '@crn-flix/contracts';
+import { CatalogAccountSource, Player } from '@crn-flix/contracts';
 
 import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
 import { PlayerAccountsService } from '@/services/player-accounts';
@@ -6,7 +6,7 @@ import { PlayerAccountsService } from '@/services/player-accounts';
 const user = (overrides: Partial<UserEntity>): UserEntity =>
   ({ id: 'u1', name: 'one', jellyfinId: 'jf1', maxStreams: 1, status: UserStatus.Active, ...overrides }) as UserEntity;
 
-function build(users: UserEntity[]) {
+function build(users: UserEntity[], accountIds: string[] = []) {
   const usersRepository = {
     list: jest.fn().mockResolvedValue(users),
     setMaxStreams: jest.fn().mockResolvedValue(undefined),
@@ -14,9 +14,15 @@ function build(users: UserEntity[]) {
   const player = {
     accountMaxStreams: jest.fn().mockResolvedValue(3),
     applyAccountPolicy: jest.fn().mockResolvedValue(true),
+    listAccountIds: jest.fn().mockResolvedValue(accountIds),
   };
-  const service = new PlayerAccountsService(usersRepository as unknown as UsersRepository, player as unknown as Player);
-  return { usersRepository, player, service };
+  const catalogAccounts = { enforceSettings: jest.fn().mockResolvedValue(0) };
+  const service = new PlayerAccountsService(
+    usersRepository as unknown as UsersRepository,
+    player as unknown as Player,
+    catalogAccounts as unknown as CatalogAccountSource,
+  );
+  return { usersRepository, player, catalogAccounts, service };
 }
 
 describe('PlayerAccountsService', () => {
@@ -49,17 +55,24 @@ describe('PlayerAccountsService', () => {
     expect(player.applyAccountPolicy).not.toHaveBeenCalled();
   });
 
-  it('goes through every active user with an account, one failure not stopping the others', async () => {
-    const { player, service } = build([
-      user({ id: 'u1', jellyfinId: 'jf1' }),
-      user({ id: 'u2', jellyfinId: null }),
-      user({ id: 'u3', jellyfinId: 'jf3', status: UserStatus.Pending }),
-      user({ id: 'u4', jellyfinId: 'jf4' }),
-    ]);
+  it('applies the rules to every player account, the stream limit only where the database knows it', async () => {
+    const { player, catalogAccounts, service } = build(
+      [
+        user({ id: 'u1', jellyfinId: 'jf1', maxStreams: 2 }),
+        user({ id: 'u3', jellyfinId: 'jf3', status: UserStatus.Pending }),
+      ],
+      ['jf1', 'jf-guest', 'jf3', 'jf4'],
+    );
     player.applyAccountPolicy.mockRejectedValueOnce(new Error('502'));
 
     await service.applyAll();
 
-    expect(player.applyAccountPolicy.mock.calls.map(([accountId]) => accountId)).toEqual(['jf1', 'jf4']);
+    expect(player.applyAccountPolicy.mock.calls).toEqual([
+      ['jf1', { maxStreams: 2 }],
+      ['jf-guest', { maxStreams: undefined }],
+      ['jf3', { maxStreams: undefined }],
+      ['jf4', { maxStreams: undefined }],
+    ]);
+    expect(catalogAccounts.enforceSettings).toHaveBeenCalled();
   });
 });
