@@ -12,6 +12,7 @@ export class UserGuideController {
   getUserGuide(): string {
     return userGuideTemplate({
       serviceName: this.contextService.name,
+      userSpaceUrl: this.contextService.userSpaceUrl,
     });
   }
 }

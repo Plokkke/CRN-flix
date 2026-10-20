@@ -12,8 +12,7 @@ export const userLoginTemplate = ({ basePath, expiresInMinutes, ...params }: Use
   otpLoginTemplate({
     ...params,
     title: 'Mon espace',
-    requestHint:
-      'Indiquez votre pseudo : un code et un lien de connexion vous seront envoyés par email ou en message privé Discord, selon votre inscription.',
+    requestHint: 'Indiquez votre pseudo : un code et un lien de connexion vous seront envoyés par email.',
     codeHint: `Entrez le code reçu, ou cliquez sur le lien du message. Il expire dans ${expiresInMinutes} minutes.`,
     requestAction: `${basePath}/login/request`,
     verifyAction: `${basePath}/login/verify`,

@@ -1,4 +1,4 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { COLORS, escapeHtml, getWebTemplate, RADIUS, TONES } from '@crn-flix/design-system';
 import { PlanLabel } from '@crn-flix/planner';
 
 import { formatAge } from '@/helpers/format';
@@ -157,29 +157,33 @@ const ADDITIONAL_CSS = `
   ${DASHBOARD_LAYOUT_CSS}
   .container { max-width: 900px; }
   h2 { margin: 30px 0 15px 0; font-size: 20px; }
-  .flash-message { background-color: #f0f7ff; padding: 12px 16px; border-left: 4px solid ${COLORS.info}; border-radius: 4px; margin-bottom: 20px; }
+  .flash-message { background-color: ${TONES.info.bg}; color: ${TONES.info.text}; border: 1px solid ${TONES.info.border}; padding: 12px 16px; border-radius: ${RADIUS.md}; margin-bottom: 20px; }
   .intro { color: ${COLORS.textLight}; }
   .intro a, .group-meta a { color: ${COLORS.info}; }
-  .banner { background: ${COLORS.footerBg}; color: ${COLORS.textLight}; }
-  .tab { background: ${COLORS.borderLight}; color: ${COLORS.textLight}; }
-  .tab.active { background: ${COLORS.white}; color: ${COLORS.text}; border-color: ${COLORS.info}; }
-  .requests-table th { background-color: ${COLORS.footerBg}; color: ${COLORS.textLight}; }
+  .banner { background: ${COLORS.surfaceMuted}; color: ${COLORS.textMuted}; border: 1px solid ${COLORS.borderLight}; border-radius: ${RADIUS.md}; }
+  .tabs { gap: 4px; padding: 4px; background: ${COLORS.borderLight}; border-radius: ${RADIUS.md}; display: inline-flex; }
+  .tab { background: transparent; color: ${COLORS.textLight}; border: none; border-radius: ${RADIUS.sm}; font-weight: 500; }
+  .tab:hover { background: rgba(255, 255, 255, 0.6); }
+  .tab.active { background: ${COLORS.white}; color: ${COLORS.primary}; font-weight: 600; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08); }
+  .tab b { color: ${COLORS.textMuted}; font-weight: 600; }
+  .requests-table th { background-color: transparent; color: ${COLORS.textMuted}; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid ${COLORS.border}; }
   .requests-table td { border-bottom: 1px solid ${COLORS.borderLight}; }
-  .group-row:hover { background-color: ${COLORS.background}; }
-  .requests-table code { background-color: ${COLORS.borderLight}; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
-  .dl { background: ${COLORS.borderLight}; }
-  .dl.failed { background: ${COLORS.error}; color: #fff; }
+  .group-row:hover { background-color: ${COLORS.surfaceMuted}; }
+  .requests-table code { background-color: ${COLORS.borderLight}; padding: 2px 6px; border-radius: ${RADIUS.sm}; font-size: 12px; }
+  .dl { background: ${TONES.neutral.bg}; color: ${TONES.neutral.text}; border-radius: ${RADIUS.pill}; }
+  .dl.failed { background: ${TONES.danger.bg}; color: ${TONES.danger.text}; }
   .veiled { opacity: 0.4; cursor: help; }
   .group-row:not(.expandable) { cursor: default; }
   .group-row:not(.expandable) .group-title::before { content: ''; }
-  .sub-found { background: ${COLORS.info}; color: #fff; }
-  .sub-not-found { background: ${COLORS.gray}; color: #fff; }
+  .sub-found { background: ${TONES.info.bg}; color: ${TONES.info.text}; border-color: ${TONES.info.border}; }
+  .sub-not-found { background: ${TONES.neutral.bg}; color: ${TONES.neutral.text}; border-color: ${TONES.neutral.border}; }
   .episodes-table th { color: ${COLORS.textMuted}; }
   .episodes-table td { border-bottom: 1px solid ${COLORS.borderLight}; }
-  .action-card { border: 1px solid ${COLORS.border}; border-radius: 6px; padding: 10px 12px; margin: 6px 0; }
+  .action-card { border: 1px solid ${COLORS.border}; border-radius: ${RADIUS.md}; padding: 10px 12px; margin: 6px 0; }
   .dl-detail { color: ${COLORS.textLight}; }
   .logout-form { margin-top: 40px; text-align: right; }
-  .logout-form button { background-color: transparent; border: 1px solid ${COLORS.border}; color: ${COLORS.textMuted}; width: auto; padding: 8px 16px; font-size: 13px; }
+  .logout-form button { background-color: ${COLORS.white}; border: 1px solid ${COLORS.border}; color: ${COLORS.textLight}; width: auto; padding: 8px 16px; font-size: 13px; }
+  .logout-form button:hover { background-color: ${COLORS.surfaceMuted}; }
 `;
 
 export const userSpaceTemplate = (params: UserSpaceParams): string => {

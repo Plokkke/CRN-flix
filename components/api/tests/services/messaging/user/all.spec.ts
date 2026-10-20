@@ -2,11 +2,12 @@ import { UserChannel } from '@crn-flix/contracts';
 
 import { ContextService } from '@/services/context';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
+import { UserMessagesRepository } from '@/services/database/user-messages';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UserEntity } from '@/services/database/users';
 import { AllUserMessaging, UserMessagingDisabledError, UserMessagingMode } from '@/services/messaging/user/all';
 
-const ctxt = { key: 'email', id: 'antoine@test' };
+const ctxt = { key: 'email', id: 'antoine@test', userId: 'u1' };
 
 function request(mediaId: string, status: RequestStatus, episodeNumber: number): RequestEntity {
   return {
@@ -33,6 +34,7 @@ function build(mode: UserMessagingMode = 'send') {
     requestsUpdated: jest.fn().mockResolvedValue(undefined),
     loginChallenge: jest.fn().mockResolvedValue(undefined),
     announce: jest.fn().mockResolvedValue(undefined),
+    catalogRelink: jest.fn().mockResolvedValue(undefined),
   };
   const context = {
     userGuideUrl: 'https://crn.test/user-guide',
@@ -43,13 +45,15 @@ function build(mode: UserMessagingMode = 'send') {
     queue: jest.fn().mockResolvedValue(undefined),
     markSent: jest.fn().mockResolvedValue(undefined),
   };
+  const journal = { record: jest.fn().mockResolvedValue(undefined) };
   const messaging = new AllUserMessaging(
     [channel as UserChannel],
     context as unknown as ContextService,
     notifications as unknown as UserNotificationsRepository,
+    journal as unknown as UserMessagesRepository,
     mode,
   );
-  return { channel, notifications, messaging };
+  return { channel, notifications, journal, messaging };
 }
 
 describe('AllUserMessaging', () => {
@@ -89,8 +93,8 @@ describe('AllUserMessaging', () => {
   it('batches the notices of one user into one message and marks them sent once delivered', async () => {
     const { channel, notifications, messaging } = build();
 
-    await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Fulfilled, 1), 'u1');
-    await messaging.requestUpdated(ctxt, request('m2', RequestStatus.Rejected, 2), 'u1');
+    await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Fulfilled, 1));
+    await messaging.requestUpdated(ctxt, request('m2', RequestStatus.Rejected, 2));
     expect(notifications.queue).toHaveBeenCalledWith({ userId: 'u1', mediaId: 'm1', status: RequestStatus.Fulfilled });
     expect(notifications.markSent).not.toHaveBeenCalled();
     await jest.advanceTimersByTimeAsync(60_000);
@@ -112,7 +116,7 @@ describe('AllUserMessaging', () => {
     const { channel, notifications, messaging } = build();
     channel.requestsUpdated.mockRejectedValue(new Error('smtp down'));
 
-    await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Fulfilled, 1), 'u1');
+    await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Fulfilled, 1));
     await jest.advanceTimersByTimeAsync(60_000);
 
     expect(notifications.queue).toHaveBeenCalled();
@@ -122,7 +126,7 @@ describe('AllUserMessaging', () => {
   it('never notifies transient statuses', async () => {
     const { channel, notifications, messaging } = build();
 
-    await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Pending, 1), 'u1');
+    await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Pending, 1));
     await jest.advanceTimersByTimeAsync(60_000);
 
     expect(notifications.queue).not.toHaveBeenCalled();
@@ -133,7 +137,7 @@ describe('AllUserMessaging', () => {
     it('queues the notices but neither sends nor marks them sent', async () => {
       const { channel, notifications, messaging } = build('dry-run');
 
-      await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Fulfilled, 1), 'u1');
+      await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Fulfilled, 1));
       await jest.advanceTimersByTimeAsync(60_000);
 
       expect(notifications.queue).toHaveBeenCalled();
@@ -166,6 +170,56 @@ describe('AllUserMessaging', () => {
   it('fails loudly for a channel nobody plugged in', async () => {
     const { messaging } = build();
 
-    await expect(messaging.error({ key: 'discord', id: 'd1' }, 'boom')).rejects.toThrow('No user messaging channel');
+    await expect(messaging.error({ key: 'discord', id: 'd1', userId: 'u1' }, 'boom')).rejects.toThrow(
+      'No user messaging channel',
+    );
+  });
+
+  describe('delivery journal', () => {
+    it('journals a message once the channel delivered it', async () => {
+      const { journal, messaging } = build();
+
+      await messaging.catalogRelink(ctxt, 'antoine', 'Trakt');
+      await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Fulfilled, 1));
+      await jest.advanceTimersByTimeAsync(60_000);
+
+      expect(journal.record.mock.calls).toEqual([
+        ['u1', 'catalog-relink', 'email'],
+        ['u1', 'requests-updated', 'email'],
+      ]);
+    });
+
+    it('journals nothing in dry-run nor when the channel failed', async () => {
+      const dryRun = build('dry-run');
+      const failing = build();
+      failing.channel.loginChallenge.mockRejectedValue(new Error('smtp down'));
+      const challenge = { code: '1', link: 'l', serviceName: 's', expiresInMinutes: 10 };
+
+      await expect(dryRun.messaging.announce(ctxt, { subject: 's' } as never)).rejects.toThrow(
+        UserMessagingDisabledError,
+      );
+      await expect(failing.messaging.loginChallenge(ctxt, challenge)).rejects.toThrow('smtp down');
+
+      expect(dryRun.journal.record).not.toHaveBeenCalled();
+      expect(failing.journal.record).not.toHaveBeenCalled();
+    });
+
+    it('still reports a delivered message as sent when the journal fails', async () => {
+      const { journal, messaging } = build();
+      journal.record.mockRejectedValue(new Error('db down'));
+
+      await expect(messaging.error(ctxt, 'x')).resolves.toBeUndefined();
+    });
+
+    it('links the relink ask to the user own catalog page', async () => {
+      const { channel, messaging } = build();
+
+      await messaging.catalogRelink(ctxt, 'antoine', 'Trakt');
+
+      expect(channel.catalogRelink).toHaveBeenCalledWith(
+        { name: 'antoine', address: 'antoine@test' },
+        { catalogName: 'Trakt', linkUrl: 'https://crn.test/users/u1/trakt-link' },
+      );
+    });
   });
 });

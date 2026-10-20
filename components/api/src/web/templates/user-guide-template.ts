@@ -2,12 +2,13 @@ import { COLORS, getWebTemplate, TYPOGRAPHY } from '@crn-flix/design-system';
 
 export interface UserGuideTemplateParams {
   serviceName: string;
+  userSpaceUrl: string;
 }
 
 const getSection = (title: string, content: string) => `
-  <div style="margin: 30px 0; border-bottom: 1px solid ${COLORS.borderLight}; padding-bottom: 20px;">
+  <div style="margin: 0 0 24px; padding-bottom: 24px; border-bottom: 1px solid ${COLORS.borderLight};">
     <h2 style="${TYPOGRAPHY.h2}">${title}</h2>
-    <div style="color: #444444; font-size: 16px; line-height: 1.7;">${content}</div>
+    <div style="color: ${COLORS.textLight}; font-size: 15px; line-height: 1.7;">${content}</div>
   </div>
 `;
 
@@ -24,7 +25,7 @@ const getPreviewGallery = (images: Array<{ src: string; alt: string }>) => `
 `;
 
 export function userGuideTemplate(params: UserGuideTemplateParams): string {
-  const { serviceName } = params;
+  const { serviceName, userSpaceUrl } = params;
 
   const content = `
     ${getSection(
@@ -42,7 +43,7 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
       'Demander un nouveau contenu',
       `<p>Il manque un film ou une série que vous aimeriez regarder ? Faites-en la demande facilement :</p>
       <ol style="margin: 10px 0 10px 20px;">
-          <li style="margin-bottom: 8px;">Créez un compte sur la plateforme <a href="https://trakt.tv" target="_blank" rel="noopener noreferrer" style="color: ${COLORS.secondary};">Trakt</a></li>
+          <li style="margin-bottom: 8px;">Créez un compte sur la plateforme <a href="https://trakt.tv" target="_blank" rel="noopener noreferrer" style="color: ${COLORS.info};">Trakt</a></li>
           <li style="margin-bottom: 8px;">Utilisez le lien disponible dans votre email d'inscription pour connecter votre compte à ${serviceName} <span title="Si vous n'avez plus accès à cet email, contactez un administrateur">ℹ️</span></li>
           <li style="margin-bottom: 8px;">Ajoutez simplement les films ou séries souhaités à votre liste "Watchlist" sur Trakt</li>
       </ol>
@@ -59,6 +60,13 @@ export function userGuideTemplate(params: UserGuideTemplateParams): string {
         { src: '/assets/trakt-anticipated-page.png', alt: 'Page anticipated Trakt' },
         { src: '/assets/trakt-movie-detail-page.png', alt: 'Page détail film Trakt' },
       ])}`,
+    )}
+    ${getSection(
+      'Suivre mes demandes',
+      `<p>Votre <a href="${userSpaceUrl}" style="color: ${COLORS.info};">espace personnel</a> vous montre où en sont toutes vos demandes : en attente, disponibles ou refusées, et la progression des téléchargements en cours.</p>
+      <ul style="margin: 10px 0 10px 20px;">
+        <li>Connectez-vous avec votre <b>pseudo</b> : un code et un lien de connexion vous sont envoyés par email, sans mot de passe à retenir.</li>
+      </ul>`,
     )}
     ${getSection(
       'Quand mes demandes seront-elles disponibles ?',

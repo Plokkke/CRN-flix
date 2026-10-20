@@ -2,11 +2,11 @@ import * as nodemailer from 'nodemailer';
 
 import { RequestNotice } from '@crn-flix/contracts';
 
-import { EmailChannel, requestUpdateTemplate } from '../src';
+import { catalogRelinkTemplate, EmailChannel, requestUpdateTemplate } from '../src';
 
 jest.mock('nodemailer');
 
-const identity = { serviceName: 'CRN-Flix', playerUrl: 'https://watch.test' };
+const identity = { serviceName: 'CRN-Flix', playerUrl: 'https://watch.test', userSpaceUrl: 'https://crn.test/me' };
 
 const notice = (episodeNumber: number, outcome: RequestNotice['outcome']): RequestNotice => ({
   title: 'Silo',
@@ -25,6 +25,22 @@ describe('requestUpdateTemplate', () => {
     expect(subject).toBe('📺 Mise à jour de vos demandes (2)');
     expect(text.indexOf('Episode 1')).toBeLessThan(text.indexOf('Episode 2'));
     expect(text.match(/Regarder sur CRN-Flix: https:\/\/watch.test/g)).toHaveLength(1);
+    expect(text).toContain('votre espace: https://crn.test/me');
+  });
+});
+
+describe('catalogRelinkTemplate', () => {
+  it('names the catalog, says the requests are paused and links to the reconnection', () => {
+    const { subject, html, text } = catalogRelinkTemplate('CRN-Flix', 'Zoé <b>', {
+      catalogName: 'Trakt',
+      linkUrl: 'https://flix.test/users/u1/trakt-link',
+    });
+
+    expect(subject).toBe('🔗 Reconnectez votre compte Trakt à CRN-Flix');
+    expect(html).toContain('href="https://flix.test/users/u1/trakt-link"');
+    expect(html).toContain('Zoé &lt;b&gt;');
+    expect(text).toContain('en pause');
+    expect(text).toContain('Reconnecter Trakt : https://flix.test/users/u1/trakt-link');
   });
 });
 

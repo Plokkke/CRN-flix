@@ -2,6 +2,7 @@ import * as nodemailer from 'nodemailer';
 import { z } from 'zod';
 
 import {
+  CatalogRelink,
   createLogger,
   LoginChallenge,
   Recipient,
@@ -13,6 +14,7 @@ import {
 } from '@crn-flix/contracts';
 
 import {
+  catalogRelinkTemplate,
   errorTemplate,
   loginChallengeTemplate,
   registeredTemplate,
@@ -67,6 +69,7 @@ export class EmailChannel implements UserChannel {
     const rendered = registeredTemplate({
       serviceName: this.identity.serviceName,
       playerUrl: this.identity.playerUrl,
+      userSpaceUrl: this.identity.userSpaceUrl,
       userGuideUrl: welcome.userGuideUrl,
       catalogLinkUrl: welcome.catalogLinkUrl,
       userName: to.name,
@@ -87,6 +90,10 @@ export class EmailChannel implements UserChannel {
 
   announce(to: Recipient, notice: ServiceNotice): Promise<void> {
     return this.send(to, 'announcement', serviceNoticeTemplate(this.identity.serviceName, notice));
+  }
+
+  catalogRelink(to: Recipient, relink: CatalogRelink): Promise<void> {
+    return this.send(to, 'catalog relink', catalogRelinkTemplate(this.identity.serviceName, to.name, relink));
   }
 
   private async send(to: Recipient, purpose: string, rendered: Rendered): Promise<void> {

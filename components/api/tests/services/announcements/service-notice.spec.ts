@@ -1,8 +1,9 @@
+import { TONES } from '@crn-flix/design-system';
 import { serviceNoticeTemplate } from '@crn-flix/messaging-user-email';
 
 import { buildPresetNotice, NOTICE_PRESETS } from '@/services/announcements/presets';
 
-const ctx = { serviceName: 'CRN-Flix', mediaServerUrl: 'https://jellyfin.test' };
+const ctx = { serviceName: 'CRN-Flix', playerUrl: 'https://watch.test', userSpaceUrl: 'https://crn.test/me' };
 
 describe('serviceNoticeTemplate', () => {
   it('renders the header, the highlighted lead and the remaining paragraphs', () => {
@@ -16,10 +17,10 @@ describe('serviceNoticeTemplate', () => {
     expect(subject).toBe('Sujet');
     expect(html).toContain('Votre collection privée de films et séries');
     expect(html).toContain('⚠️ Titre');
-    expect(html.indexOf('border-left: 4px solid')).toBeLessThan(html.indexOf('Premier'));
-    expect(html).toContain(
-      '<p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 15px 0;">Second</p>',
-    );
+    const highlight = html.indexOf(TONES.warning.bg);
+    expect(highlight).toBeGreaterThan(-1);
+    expect(highlight).toBeLessThan(html.indexOf('Premier'));
+    expect(html.indexOf('Premier')).toBeLessThan(html.indexOf('>Second</p>'));
     expect(text).toContain('Premier\n\nSecond');
   });
 
@@ -47,6 +48,10 @@ describe('buildPresetNotice', () => {
   });
 
   it('restored links to the media server', () => {
-    expect(buildPresetNotice('restored', ctx).cta).toEqual({ label: 'Accéder à CRN-Flix', url: ctx.mediaServerUrl });
+    expect(buildPresetNotice('restored', ctx).cta).toEqual({ label: 'Accéder à CRN-Flix', url: ctx.playerUrl });
+  });
+
+  it('user-space links to the subscriber space', () => {
+    expect(buildPresetNotice('user-space', ctx).cta?.url).toBe(ctx.userSpaceUrl);
   });
 });

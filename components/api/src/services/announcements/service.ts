@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 
 import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
 import { ServiceNotice } from '@/services/messaging/user';
-import { AllUserMessaging } from '@/services/messaging/user/all';
+import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/all';
 
 export type DeliveryResult = { user: UserEntity; outcome: 'sent' | 'failed'; error?: string };
 
@@ -36,7 +36,7 @@ export class AnnouncementService {
 
   private async deliver(notice: ServiceNotice, user: UserEntity): Promise<DeliveryResult> {
     try {
-      await this.messaging.announce({ key: user.messagingKey, id: user.messagingId }, notice);
+      await this.messaging.announce(messagingContextOf(user), notice);
       return { user, outcome: 'sent' };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

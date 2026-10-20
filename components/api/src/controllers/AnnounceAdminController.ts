@@ -53,10 +53,7 @@ export class AnnounceAdminController {
   ) {}
 
   private presetNotice(preset: NoticePreset): ServiceNotice {
-    return buildPresetNotice(preset, {
-      serviceName: this.contextService.name,
-      mediaServerUrl: this.contextService.mediaServerUrl,
-    });
+    return buildPresetNotice(preset, this.contextService.identity);
   }
 
   @Get()

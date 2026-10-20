@@ -5,6 +5,7 @@ import { LoginChallenge, Recipient, RequestNotice, ServiceNotice, UserChannel } 
 import { ContextService } from '@/services/context';
 import { displayTitle } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
+import { UserMessageKind, UserMessagesRepository } from '@/services/database/user-messages';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UserEntity } from '@/services/database/users';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
@@ -14,7 +15,14 @@ import { DebouncedRequestQueue } from '@/services/messaging/user/notification-qu
 export type UserMessagingCtxt = {
   key: string;
   id: string;
+  userId: string;
 };
+
+export const messagingContextOf = (user: UserEntity): UserMessagingCtxt => ({
+  key: user.messagingKey,
+  id: user.messagingId,
+  userId: user.id,
+});
 
 /** `dry-run` logs what would reach users and sends nothing — nor records anything as sent. */
 export type UserMessagingMode = 'send' | 'dry-run';
@@ -39,7 +47,7 @@ const recipientOf = (ctxt: UserMessagingCtxt, name?: string): Recipient => ({
   address: ctxt.id,
 });
 
-const batchKeyOf = (ctxt: UserMessagingCtxt, userId: string): string => [ctxt.key, ctxt.id, userId].join(SEPARATOR);
+const batchKeyOf = (ctxt: UserMessagingCtxt): string => [ctxt.key, ctxt.id, ctxt.userId].join(SEPARATOR);
 
 function noticeOf(request: RequestEntity): RequestNotice {
   const media = request.media!;
@@ -72,6 +80,7 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
     channels: UserChannel[],
     private readonly context: ContextService,
     private readonly notifications: UserNotificationsRepository,
+    private readonly journal: UserMessagesRepository,
     readonly mode: UserMessagingMode,
   ) {
     this.channelByKind = new Map(channels.map((channel) => [channel.kind, channel]));
@@ -130,35 +139,47 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
   }
 
   async registered(ctxt: UserMessagingCtxt, user: UserEntity, password: string): Promise<void> {
-    this.ensureSending(`welcome to ${ctxt.id}`);
-    await this.channelOf(ctxt.key).welcome(recipientOf(ctxt, user.name), {
-      password,
-      userGuideUrl: this.context.userGuideUrl,
-      catalogLinkUrl: this.context.getTraktLinkUrl(user.id),
-      showcase: {
-        movies: await this.context.getRandomMedias(SHOWCASE_SIZE, 'movie'),
-        shows: await this.context.getRandomMedias(SHOWCASE_SIZE, 'show'),
-      },
-    });
+    await this.deliver(ctxt, 'welcome', 'welcome', async (channel) =>
+      channel.welcome(recipientOf(ctxt, user.name), {
+        password,
+        userGuideUrl: this.context.userGuideUrl,
+        catalogLinkUrl: this.context.getTraktLinkUrl(user.id),
+        showcase: {
+          movies: await this.context.getRandomMedias(SHOWCASE_SIZE, 'movie'),
+          shows: await this.context.getRandomMedias(SHOWCASE_SIZE, 'show'),
+        },
+      }),
+    );
   }
 
   async error(ctxt: UserMessagingCtxt, message: string): Promise<void> {
-    this.ensureSending(`error "${message}" to ${ctxt.id}`);
-    await this.channelOf(ctxt.key).error(recipientOf(ctxt), message);
+    await this.deliver(ctxt, 'error', `error "${message}"`, (channel) => channel.error(recipientOf(ctxt), message));
   }
 
   async loginChallenge(ctxt: UserMessagingCtxt, challenge: LoginChallenge): Promise<void> {
-    this.ensureSending(`login challenge to ${ctxt.id}`);
-    await this.channelOf(ctxt.key).loginChallenge(recipientOf(ctxt), challenge);
+    await this.deliver(ctxt, 'login', 'login challenge', (channel) =>
+      channel.loginChallenge(recipientOf(ctxt), challenge),
+    );
   }
 
   async announce(ctxt: UserMessagingCtxt, notice: ServiceNotice): Promise<void> {
-    this.ensureSending(`announcement "${notice.subject}" to ${ctxt.id}`);
-    await this.channelOf(ctxt.key).announce(recipientOf(ctxt), notice);
+    await this.deliver(ctxt, 'announce', `announcement "${notice.subject}"`, (channel) =>
+      channel.announce(recipientOf(ctxt), notice),
+    );
+  }
+
+  /** Asks the user to authorize the catalog again; throws when not delivered. */
+  async catalogRelink(ctxt: UserMessagingCtxt, userName: string, catalogName: string): Promise<void> {
+    await this.deliver(ctxt, 'catalog-relink', 'catalog relink', (channel) =>
+      channel.catalogRelink(recipientOf(ctxt, userName), {
+        catalogName,
+        linkUrl: this.context.getTraktLinkUrl(ctxt.userId),
+      }),
+    );
   }
 
   /** Queues the notice in the outbox (idempotent) and in the user's pending batch. */
-  async requestUpdated(ctxt: UserMessagingCtxt, request: RequestEntity, userId: string): Promise<void> {
+  async requestUpdated(ctxt: UserMessagingCtxt, request: RequestEntity): Promise<void> {
     if (!isUserNotifiableStatus(request.status)) {
       AllUserMessaging.logger.debug(`Skipping requestUpdated to ${ctxt.id} (status ${request.status} is transient)`);
       return;
@@ -171,8 +192,8 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
       AllUserMessaging.logger.error(`No "${ctxt.key}" channel to notify ${ctxt.id}`);
       return;
     }
-    await this.notifications.queue({ userId, mediaId: request.mediaId, status: request.status });
-    await this.queue.add(batchKeyOf(ctxt, userId), request);
+    await this.notifications.queue({ userId: ctxt.userId, mediaId: request.mediaId, status: request.status });
+    await this.queue.add(batchKeyOf(ctxt), request);
   }
 
   /** Throws (the queue logs it) when the send fails: the notices stay queued for redelivery. */
@@ -184,6 +205,29 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
     }
     await this.channelOf(kind).requestsUpdated({ name: address, address }, requests.map(noticeOf));
     await this.notifications.markSent(requests.map((r) => ({ userId, mediaId: r.mediaId, status: r.status })));
+    await this.journalize(userId, 'requests-updated', kind);
+  }
+
+  /** The single way out to users: nothing in dry-run, journaled only once the channel delivered. */
+  private async deliver(
+    ctxt: UserMessagingCtxt,
+    kind: UserMessageKind,
+    what: string,
+    send: (channel: UserChannel) => Promise<void>,
+  ): Promise<void> {
+    this.ensureSending(`${what} to ${ctxt.id}`);
+    const channel = this.channelOf(ctxt.key);
+    await send(channel);
+    await this.journalize(ctxt.userId, kind, channel.kind);
+  }
+
+  /** The message already left: a journal failure is logged, never turned into a failed send. */
+  private async journalize(userId: string, kind: UserMessageKind, channel: string): Promise<void> {
+    await this.journal.record(userId, kind, channel).catch((error: unknown) => {
+      AllUserMessaging.logger.error(
+        `Delivered ${kind} to user ${userId} but could not journal it: ${error instanceof Error ? error.message : error}`,
+      );
+    });
   }
 
   private ensureSending(what: string): void {

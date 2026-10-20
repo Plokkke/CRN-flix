@@ -31,7 +31,7 @@ import { UserNotificationsRepository } from '@/services/database/user-notificati
 import { UsersRepository } from '@/services/database/users';
 import { MediaTitlesService } from '@/services/media-titles';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
-import { AllUserMessaging } from '@/services/messaging/user/all';
+import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/all';
 import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { PlannerService } from '@/services/planner/planner';
 import { PlayerSyncService } from '@/services/player-sync';
@@ -175,8 +175,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             }
 
             AppService.logger.debug(`Notifying user ${user.name} (${user.messagingKey}:${user.messagingId})`);
-            const userCtxt = { key: user.messagingKey, id: user.messagingId };
-            await this.messaging.requestUpdated(userCtxt, request, userId);
+            await this.messaging.requestUpdated(messagingContextOf(user), request);
           }
         }),
       userJoined: (event: UserJoinedRequestEvent) =>
@@ -204,7 +203,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          await this.messaging.requestUpdated({ key: user.messagingKey, id: user.messagingId }, request, user.id);
+          await this.messaging.requestUpdated(messagingContextOf(user), request);
         }),
       userLeft: (event: UserLeftRequestEvent) =>
         this.trackEvent(async () => {

@@ -1,7 +1,12 @@
 import { Controller, Get, Header, Inject, NotFoundException, Param } from '@nestjs/common';
 
 import { MetadataSource, RequestNotice, RequestOutcome, ShowcaseItem } from '@crn-flix/contracts';
-import { registeredTemplate, requestUpdateTemplate, serviceNoticeTemplate } from '@crn-flix/messaging-user-email';
+import {
+  catalogRelinkTemplate,
+  registeredTemplate,
+  requestUpdateTemplate,
+  serviceNoticeTemplate,
+} from '@crn-flix/messaging-user-email';
 
 import { METADATA } from '@/providers/media-titles';
 import { buildPresetNotice, isNoticePreset } from '@/services/announcements/presets';
@@ -25,6 +30,7 @@ export class MailingController {
     const { html } = registeredTemplate({
       serviceName: this.contextService.name,
       playerUrl: this.contextService.mediaServerUrl,
+      userSpaceUrl: this.contextService.userSpaceUrl,
       userGuideUrl: this.contextService.userGuideUrl,
       catalogLinkUrl: this.contextService.getTraktLinkUrl('978ab97f-817d-4e9a-86b4-637b12dfc34c'),
       userName: 'UserName',
@@ -36,16 +42,22 @@ export class MailingController {
     return html;
   }
 
+  @Get('catalog-relink')
+  @Header('content-type', 'text/html')
+  previewCatalogRelinkEmail(): string {
+    return catalogRelinkTemplate(this.contextService.name, 'UserName', {
+      catalogName: 'Trakt',
+      linkUrl: this.contextService.getTraktLinkUrl('978ab97f-817d-4e9a-86b4-637b12dfc34c'),
+    }).html;
+  }
+
   @Get('service-notice/:preset')
   @Header('content-type', 'text/html')
   previewServiceNotice(@Param('preset') preset: string): string {
     if (!isNoticePreset(preset)) {
       throw new NotFoundException(`Unknown notice preset ${preset}`);
     }
-    const notice = buildPresetNotice(preset, {
-      serviceName: this.contextService.name,
-      mediaServerUrl: this.contextService.mediaServerUrl,
-    });
+    const notice = buildPresetNotice(preset, this.contextService.identity);
     return serviceNoticeTemplate(this.contextService.name, notice).html;
   }
 
@@ -71,10 +83,11 @@ export class MailingController {
       posterUrl: await this.posterUrlOf(item.imdbId),
     });
 
-    const { html: originalHtml } = requestUpdateTemplate(
-      { serviceName: this.contextService.name, playerUrl: this.contextService.mediaServerUrl },
-      [await notice(show, null, null), await notice(movie, null, null), await notice(episode, 2, 4)],
-    );
+    const { html: originalHtml } = requestUpdateTemplate(this.contextService.identity, [
+      await notice(show, null, null),
+      await notice(movie, null, null),
+      await notice(episode, 2, 4),
+    ]);
 
     // Add a button to navigate to the next status
     const nextStatusButton = `

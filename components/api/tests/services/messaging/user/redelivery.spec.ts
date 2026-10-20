@@ -29,7 +29,7 @@ describe('NotificationRedeliveryService', () => {
 
     await service.redeliver();
 
-    expect(messaging.requestUpdated).toHaveBeenCalledWith({ key: 'email', id: 'antoine@test' }, request, 'u1');
+    expect(messaging.requestUpdated).toHaveBeenCalledWith({ key: 'email', id: 'antoine@test', userId: 'u1' }, request);
   });
 
   it('drops a notification whose request moved on to another status', async () => {

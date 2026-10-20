@@ -30,11 +30,19 @@ export type Welcome = {
   showcase: { movies: ShowcaseItem[]; shows: ShowcaseItem[] };
 };
 
+/** The catalog refused to renew a subscriber's link: they must authorize it again. */
+export type CatalogRelink = {
+  catalogName: string;
+  linkUrl: string;
+};
+
 /** Fixed facts every channel words its messages with. */
 export type ServiceIdentity = {
   serviceName: string;
   /** Where subscribers watch (the player's url). */
   playerUrl: string;
+  /** Where subscribers follow their own requests. */
+  userSpaceUrl: string;
 };
 
 /** Proofs of a subscriber-space login: a code to type and a magic link, both single-use. */
@@ -71,4 +79,5 @@ export interface UserChannel {
   requestsUpdated(to: Recipient, notices: RequestNotice[]): Promise<void>;
   loginChallenge(to: Recipient, challenge: LoginChallenge): Promise<void>;
   announce(to: Recipient, notice: ServiceNotice): Promise<void>;
+  catalogRelink(to: Recipient, relink: CatalogRelink): Promise<void>;
 }

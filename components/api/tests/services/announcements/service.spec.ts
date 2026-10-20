@@ -8,6 +8,7 @@ const user = (id: string, name: string, status = UserStatus.Active, messagingKey
   name,
   jellyfinId: null,
   maxStreams: 1,
+  catalogRelinkRequestedAt: null,
   messagingKey,
   messagingId: `${name}@test`,
   status,
@@ -37,7 +38,7 @@ describe('AnnouncementService', () => {
     const results = await service.send(notice, ['1', '2', 'unknown']);
 
     expect(announce).toHaveBeenCalledTimes(2);
-    expect(announce).toHaveBeenCalledWith({ key: 'discord', id: 'b@test' }, notice);
+    expect(announce).toHaveBeenCalledWith({ key: 'discord', id: 'b@test', userId: '2' }, notice);
     expect(results.map((r) => [r.user.name, r.outcome, r.error])).toEqual([
       ['a', 'failed', 'smtp down'],
       ['b', 'sent', undefined],
