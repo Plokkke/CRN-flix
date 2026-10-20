@@ -1,4 +1,4 @@
-import { JellyfinMediaService, TraktPlugin } from '../src';
+import { DEFAULT_TRAKT_PLUGIN_CONFIG, JellyfinMediaService, TraktPlugin } from '../src';
 
 const config = { TraktUsers: [] };
 
@@ -22,7 +22,40 @@ describe('TraktPlugin', () => {
     await plugin.listAccounts();
     await plugin.listAccounts();
     expect(jellyfin.listPlugins).toHaveBeenCalledTimes(1);
-    expect(jellyfin.setPluginConfiguration).toHaveBeenCalledTimes(1);
+    expect(jellyfin.setPluginConfiguration).not.toHaveBeenCalled();
+  });
+
+  it('puts drifted accounts back on the preset, keeping the fields it does not own', async () => {
+    const { jellyfin, plugin } = setup();
+    const linked = (id: string, overrides: Record<string, unknown>) => ({
+      ...DEFAULT_TRAKT_PLUGIN_CONFIG,
+      LocationsExcluded: [],
+      LinkedMbUserId: id,
+      RefreshToken: `r-${id}`,
+      LastSyncFromTraktAt: '2026-10-20T00:00:00Z',
+      ...overrides,
+    });
+    jellyfin.getPluginConfiguration.mockResolvedValue({
+      TraktUsers: [linked('jf1', {}), linked('jf2', { PostWatchedHistory: true })],
+      Extra: 'kept',
+    });
+
+    await expect(plugin.enforceSettings()).resolves.toBe(1);
+
+    const [, written] = jellyfin.setPluginConfiguration.mock.calls[0];
+    expect(written.Extra).toBe('kept');
+    expect(written.TraktUsers[1]).toMatchObject({
+      PostWatchedHistory: false,
+      RefreshToken: 'r-jf2',
+      LastSyncFromTraktAt: '2026-10-20T00:00:00Z',
+    });
+  });
+
+  it('writes nothing when every account follows the preset', async () => {
+    const { jellyfin, plugin } = setup();
+
+    await expect(plugin.enforceSettings()).resolves.toBe(0);
+    expect(jellyfin.setPluginConfiguration).not.toHaveBeenCalled();
   });
 
   it('retries the resolution after a Jellyfin failure', async () => {
@@ -64,5 +97,15 @@ describe('TraktPlugin', () => {
     await Promise.all(['jf1', 'jf2', 'jf3'].map((id) => plugin.saveCredentials(id, tokens(`new-${id}`))));
 
     expect(stored.TraktUsers.map((user) => user.RefreshToken)).toEqual(['new-jf1', 'new-jf2', 'new-jf3']);
+  });
+
+  it('only scrobbles: every setting off but scrobbling and skipping the playback progress import', () => {
+    const { LocationsExcluded, ...settings } = DEFAULT_TRAKT_PLUGIN_CONFIG;
+
+    expect(LocationsExcluded).toEqual([]);
+    expect(Object.entries(settings).filter(([, enabled]) => enabled)).toEqual([
+      ['Scrobble', true],
+      ['SkipPlaybackProgressImportFromTrakt', true],
+    ]);
   });
 });

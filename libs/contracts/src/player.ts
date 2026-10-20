@@ -11,6 +11,11 @@ export class AccountNameTakenError extends Error {
   }
 }
 
+/** What the engine decides for a viewing account; `maxStreams` 0 means unlimited, absent leaves the account's own. */
+export type AccountPolicy = {
+  maxStreams?: number;
+};
+
 export type ShowcaseKind = 'movie' | 'show' | 'episode';
 
 /** A library entry to show off to users (welcome email), with its artwork. */
@@ -36,5 +41,11 @@ export interface Player {
    * otherwise adopts an account of the same name or creates one. Returns the account id.
    */
   upsertAccount(userName: string, password: string, accountId: string | null): Promise<string>;
+  /** Every viewing account, including those the engine did not create. */
+  listAccountIds(): Promise<string[]>;
+  /** The account's current stream limit, null when the player's own administrators manage it. */
+  accountMaxStreams(accountId: string): Promise<number | null>;
+  /** Applies the service's viewing rules to the account; false when nothing had to change. */
+  applyAccountPolicy(accountId: string, policy: AccountPolicy): Promise<boolean>;
   showcase(kind: ShowcaseKind, count: number): Promise<ShowcaseItem[]>;
 }

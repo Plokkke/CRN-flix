@@ -1,6 +1,38 @@
-import { createLogger, MediaType, Player, PlayerAsset, ShowcaseItem, ShowcaseKind } from '@crn-flix/contracts';
+import {
+  AccountPolicy,
+  createLogger,
+  MediaType,
+  Player,
+  PlayerAsset,
+  ShowcaseItem,
+  ShowcaseKind,
+} from '@crn-flix/contracts';
 
-import { JellyfinMedia, JellyfinMediaService } from './api';
+import { JellyfinMedia, JellyfinMediaService, JellyfinUserPolicy } from './api';
+
+/**
+ * Viewers watch from anywhere, without managing the server; there is no live TV so its
+ * access costs nothing. Audio may be transcoded and containers remuxed, video is never
+ * re-encoded (the server cannot afford it).
+ */
+const VIEWER_POLICY = {
+  IsAdministrator: false,
+  EnableRemoteAccess: true,
+  EnableLiveTvAccess: true,
+  EnableLiveTvManagement: false,
+  EnableAudioPlaybackTranscoding: true,
+  EnablePlaybackRemuxing: true,
+  EnableVideoPlaybackTranscoding: false,
+  EnableMediaConversion: false,
+} as const;
+
+/** The account's policy with the viewer rules applied, or null when it already complies. */
+export function viewerPolicy(current: JellyfinUserPolicy, policy: AccountPolicy): JellyfinUserPolicy | null {
+  const wanted =
+    policy.maxStreams === undefined ? VIEWER_POLICY : { ...VIEWER_POLICY, MaxActiveSessions: policy.maxStreams };
+  const complies = Object.entries(wanted).every(([key, value]) => current[key] === value);
+  return complies ? null : { ...current, ...wanted };
+}
 
 const ITEM_TYPE_BY_KIND: Record<ShowcaseKind, JellyfinMedia['Type']> = {
   movie: 'Movie',
@@ -90,6 +122,28 @@ export class JellyfinPlayer implements Player {
     }
     await this.jellyfin.resetUserPassword(existing.Id, password);
     return existing.Id;
+  }
+
+  async listAccountIds(): Promise<string[]> {
+    return (await this.jellyfin.listUsers()).map((user) => user.Id);
+  }
+
+  async accountMaxStreams(accountId: string): Promise<number | null> {
+    const policy = await this.jellyfin.getUserPolicy(accountId);
+    return policy.IsAdministrator ? null : policy.MaxActiveSessions;
+  }
+
+  /** Administrators are the owner's own accounts: never touched. */
+  async applyAccountPolicy(accountId: string, policy: AccountPolicy): Promise<boolean> {
+    const current = await this.jellyfin.getUserPolicy(accountId);
+    const next = current.IsAdministrator ? null : viewerPolicy(current, policy);
+    if (!next) {
+      return false;
+    }
+    await this.jellyfin.setUserPolicy(accountId, next);
+    const streams = policy.maxStreams === undefined ? 'stream limit kept' : `${policy.maxStreams} stream(s)`;
+    JellyfinPlayer.logger.log(`Viewer policy applied to account ${accountId} (${streams})`);
+    return true;
   }
 
   async showcase(kind: ShowcaseKind, count: number): Promise<ShowcaseItem[]> {

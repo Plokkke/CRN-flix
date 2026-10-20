@@ -16,6 +16,7 @@ function build(renewCredentials: jest.Mock = jest.fn().mockResolvedValue(null)) 
       { playerAccountId: 'jf-unknown', credentials: { token: 'b' } },
     ]),
     saveCredentials: jest.fn().mockResolvedValue(undefined),
+    enforceSettings: jest.fn().mockResolvedValue(0),
   };
   const service = new CatalogAccountsService(
     users as unknown as UsersRepository,

@@ -10,6 +10,8 @@ export type UserEntity = {
   id: string;
   name: string;
   jellyfinId: string | null;
+  /** Concurrent streams allowed on the player, 0 = unlimited; null until adopted from the player. */
+  maxStreams: number | null;
   messagingKey: string;
   messagingId: string;
   status: UserStatus;
@@ -21,6 +23,7 @@ type UserRecord = {
   id: string;
   name: string;
   jellyfin_id: string | null;
+  max_streams: number | null;
   messaging_key: string;
   messaging_id: string;
   status: UserStatus;
@@ -33,6 +36,7 @@ function fromUserRecord(record: UserRecord): UserEntity {
     id: record.id,
     name: record.name,
     jellyfinId: record.jellyfin_id,
+    maxStreams: record.max_streams,
     messagingKey: record.messaging_key,
     messagingId: record.messaging_id,
     status: record.status,
@@ -108,6 +112,10 @@ export class UsersRepository {
       WHERE id = $1
     `;
     await this.pool.query(query, [userId, jellyfinId]);
+  }
+
+  async setMaxStreams(userId: string, maxStreams: number): Promise<void> {
+    await this.pool.query(`UPDATE users SET max_streams = $2 WHERE id = $1`, [userId, maxStreams]);
   }
 
   async setStatus(userId: string, status: UserStatus): Promise<void> {

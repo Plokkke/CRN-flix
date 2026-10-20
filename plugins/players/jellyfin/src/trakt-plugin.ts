@@ -4,30 +4,32 @@ import { CatalogAccountSource, createLogger, LinkedCatalogAccount } from '@crn-f
 
 import { JellyfinMediaService } from './api';
 
-export const traktPluginUserConfigSchema = z.object({
-  LinkedMbUserId: z.string(),
+export const traktPluginUserConfigSchema = z
+  .object({
+    LinkedMbUserId: z.string(),
 
-  AccessToken: z.string().optional(),
-  RefreshToken: z.string().optional(),
-  AccessTokenExpiration: z.string().optional(),
+    AccessToken: z.string().optional(),
+    RefreshToken: z.string().optional(),
+    AccessTokenExpiration: z.string().optional(),
 
-  LocationsExcluded: z.array(z.string()).optional(),
-  Scrobble: z.boolean(),
+    LocationsExcluded: z.array(z.string()).optional(),
+    Scrobble: z.boolean(),
 
-  SkipUnwatchedImportFromTrakt: z.boolean(),
-  SkipPlaybackProgressImportFromTrakt: z.boolean(),
-  SkipWatchedImportFromTrakt: z.boolean(),
+    SkipUnwatchedImportFromTrakt: z.boolean(),
+    SkipPlaybackProgressImportFromTrakt: z.boolean(),
+    SkipWatchedImportFromTrakt: z.boolean(),
 
-  PostWatchedHistory: z.boolean(),
-  PostUnwatchedHistory: z.boolean(),
-  PostSetWatched: z.boolean(),
-  PostSetUnwatched: z.boolean(),
+    PostWatchedHistory: z.boolean(),
+    PostUnwatchedHistory: z.boolean(),
+    PostSetWatched: z.boolean(),
+    PostSetUnwatched: z.boolean(),
 
-  SynchronizeCollections: z.boolean(),
-  ExportMediaInfo: z.boolean(),
-  DontRemoveItemFromTrakt: z.boolean(),
-  ExtraLogging: z.boolean(),
-});
+    SynchronizeCollections: z.boolean(),
+    ExportMediaInfo: z.boolean(),
+    DontRemoveItemFromTrakt: z.boolean(),
+    ExtraLogging: z.boolean(),
+  })
+  .passthrough();
 
 export type TraktPluginUserConfig = z.infer<typeof traktPluginUserConfigSchema>;
 
@@ -37,13 +39,17 @@ const traktTokensSchema = z.object({
   accessTokenExpiration: z.string(),
 });
 
-export const traktPluginConfigSchema = z.object({
-  TraktUsers: z.array(traktPluginUserConfigSchema),
-});
+/** Passthrough: fields the engine does not own (e.g. `LastSyncFromTraktAt`) must survive a rewrite. */
+export const traktPluginConfigSchema = z
+  .object({
+    TraktUsers: z.array(traktPluginUserConfigSchema),
+  })
+  .passthrough();
 
 export type TraktPluginConfig = z.infer<typeof traktPluginConfigSchema>;
 
 export const TRAKT_PLUGIN_NAME = 'Trakt';
+/** Scrobbling only: watches go out to Trakt, nothing is imported back nor pushed beyond that. */
 export const DEFAULT_TRAKT_PLUGIN_CONFIG = {
   LocationsExcluded: [],
   Scrobble: true,
@@ -52,7 +58,7 @@ export const DEFAULT_TRAKT_PLUGIN_CONFIG = {
   SkipWatchedImportFromTrakt: false,
   SkipPlaybackProgressImportFromTrakt: true,
 
-  PostWatchedHistory: true,
+  PostWatchedHistory: false,
   PostUnwatchedHistory: false,
   PostSetWatched: false,
   PostSetUnwatched: false,
@@ -62,6 +68,17 @@ export const DEFAULT_TRAKT_PLUGIN_CONFIG = {
   DontRemoveItemFromTrakt: false,
   ExtraLogging: false,
 } as const;
+
+const defaultSettings = () => ({
+  ...DEFAULT_TRAKT_PLUGIN_CONFIG,
+  LocationsExcluded: DEFAULT_TRAKT_PLUGIN_CONFIG.LocationsExcluded.slice(),
+});
+
+function followsDefaults(user: TraktPluginUserConfig): boolean {
+  return Object.entries(defaultSettings()).every(
+    ([key, value]) => JSON.stringify(user[key as keyof TraktPluginUserConfig]) === JSON.stringify(value),
+  );
+}
 
 /**
  * Resolves the Jellyfin plugin lazily: Jellyfin may be down when the engine boots,
@@ -94,16 +111,21 @@ export class TraktPlugin implements CatalogAccountSource {
     if (!plugin) {
       throw new Error(`Plugin ${TRAKT_PLUGIN_NAME} not found`);
     }
-
-    const pluginConfig = traktPluginConfigSchema.parse(await this.jellyfin.getPluginConfiguration(plugin.Id));
-    pluginConfig.TraktUsers = pluginConfig.TraktUsers.map((c) => ({
-      ...c,
-      ...DEFAULT_TRAKT_PLUGIN_CONFIG,
-      LocationsExcluded: DEFAULT_TRAKT_PLUGIN_CONFIG.LocationsExcluded.slice(),
-    }));
-    await this.jellyfin.setPluginConfiguration(plugin.Id, pluginConfig);
     TraktPlugin.logger.log(`Trakt plugin ready (${plugin.Id})`);
     return plugin.Id;
+  }
+
+  /** The service's settings on every linked account, so a changed preset reaches existing users too. */
+  enforceSettings(): Promise<number> {
+    return this.serialized(async () => {
+      const pluginConfig = await this.getFullConfig();
+      const drifted = pluginConfig.TraktUsers.filter((user) => !followsDefaults(user));
+      if (drifted.length > 0) {
+        pluginConfig.TraktUsers = pluginConfig.TraktUsers.map((user) => ({ ...user, ...defaultSettings() }));
+        await this.jellyfin.setPluginConfiguration(await this.resolvePluginId(), pluginConfig);
+      }
+      return drifted.length;
+    });
   }
 
   private async getFullConfig(): Promise<TraktPluginConfig> {
@@ -125,15 +147,21 @@ export class TraktPlugin implements CatalogAccountSource {
    * accounts renewed at once) would each drop the others' tokens, so they run one after another.
    */
   setConfig(userId: string, tokens: z.infer<typeof traktTokensSchema>): Promise<void> {
-    const write = this.pendingWrite.then(() => this.writeTokens(userId, tokens));
-    this.pendingWrite = write.catch(() => undefined);
-    return write;
+    return this.serialized(() => this.writeTokens(userId, tokens));
+  }
+
+  private serialized<T>(write: () => Promise<T>): Promise<T> {
+    const next = this.pendingWrite.then(write);
+    this.pendingWrite = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
   }
 
   private async writeTokens(userId: string, tokens: z.infer<typeof traktTokensSchema>): Promise<void> {
     const userConfig: TraktPluginUserConfig = {
-      ...DEFAULT_TRAKT_PLUGIN_CONFIG,
-      LocationsExcluded: DEFAULT_TRAKT_PLUGIN_CONFIG.LocationsExcluded.slice(),
+      ...defaultSettings(),
       AccessToken: tokens.accessToken,
       RefreshToken: tokens.refreshToken,
       AccessTokenExpiration: tokens.accessTokenExpiration,

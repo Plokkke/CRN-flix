@@ -9,6 +9,7 @@ import { UsersRepository, UserStatus } from '@/services/database/users';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { PlannerService } from '@/services/planner/planner';
+import { PlayerAccountsService } from '@/services/player-accounts';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { TicketCategory, TicketEntity, TicketStatus } from '@/services/tickets/model';
 import { TICKET_ID_METADATA_KEY, TicketHandlersService } from '@/services/tickets/ticket-handlers';
@@ -93,6 +94,7 @@ function buildStubs() {
     },
     planner: { schedulePass: jest.fn() },
     downloadJobs: { get: jest.fn().mockResolvedValue({ status: DownloadJobStatus.Completed, errorMessage: null }) },
+    playerAccounts: { apply: jest.fn().mockResolvedValue(undefined) },
   };
 }
 
@@ -113,6 +115,7 @@ function buildService(stubs: Stubs): TicketHandlersService {
     stubs.mediaIdentifier as unknown as MediaIdentifierService,
     stubs.planner as unknown as PlannerService,
     stubs.downloadJobs as unknown as DownloadJobsRepository,
+    stubs.playerAccounts as unknown as PlayerAccountsService,
   );
 }
 
