@@ -1,6 +1,6 @@
-import { TicketsRepository } from '@/services/database/tickets';
-import { DiscordAdminChannel } from '@/services/messaging/admin/channel';
-import { DiscordChannelCleanup } from '@/services/messaging/admin/channel-cleanup';
+import { TextChannel } from 'discord.js';
+
+import { purgeChannel } from '../src/purge';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -35,33 +35,31 @@ function setup(messages: FakeMessage[], threadIds: string[]) {
       fetchArchived: jest.fn().mockResolvedValue({ threads: new Map(threads.slice(1).map((t) => [t.id, t])) }),
     },
   };
-  const tickets = { unbindAll: jest.fn().mockResolvedValue(3) } as unknown as TicketsRepository;
-  const cleanup = new DiscordChannelCleanup({ channel } as unknown as DiscordAdminChannel, tickets);
-  return { cleanup, bulkDelete, threads, tickets };
+  const purge = () => purgeChannel(channel as unknown as TextChannel);
+  return { purge, bulkDelete, threads };
 }
 
-describe('DiscordChannelCleanup', () => {
+describe('purgeChannel', () => {
   it('keeps pinned messages, bulk-deletes recent ones and deletes old ones individually', async () => {
     const pinned = message('pin', 1, true);
     const recent = message('recent', 2);
     const old = message('old', 20);
-    const { cleanup, bulkDelete, threads, tickets } = setup([pinned, recent, old], ['t1', 't2']);
+    const { purge, bulkDelete, threads } = setup([pinned, recent, old], ['t1', 't2']);
 
-    const report = await cleanup.run();
+    const report = await purge();
 
     expect(bulkDelete).toHaveBeenCalledWith([recent], true);
     expect(old.delete).toHaveBeenCalled();
     expect(pinned.delete).not.toHaveBeenCalled();
     expect(threads.every((t) => t.delete.mock.calls.length === 1)).toBe(true);
-    expect(tickets.unbindAll).toHaveBeenCalledWith('discord');
     expect(report).toEqual({ threads: 2, messages: 2, kept: 1 });
   });
 
   it('survives a message that refuses deletion', async () => {
     const stubborn = message('old', 30);
     stubborn.delete.mockRejectedValue(new Error('403'));
-    const { cleanup } = setup([stubborn], []);
+    const { purge } = setup([stubborn], []);
 
-    await expect(cleanup.run()).resolves.toEqual({ threads: 0, messages: 0, kept: 0 });
+    await expect(purge()).resolves.toEqual({ threads: 0, messages: 0, kept: 0 });
   });
 });

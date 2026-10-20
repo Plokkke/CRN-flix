@@ -11,7 +11,7 @@ import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { UsersRepository } from '@/services/database/users';
 import { MediaIdentifierService } from '@/services/media-identifier';
-import { DiscordTicketAdapter } from '@/services/messaging/admin/ticket-adapter';
+import { AdminTicketRelay } from '@/services/messaging/admin/relay';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { PlannerService } from '@/services/planner/planner';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
@@ -82,8 +82,8 @@ export const ticketProviders: Provider[] = [
   },
   {
     provide: TicketReconcilerService,
-    inject: [TicketsRepository, DiscordTicketAdapter],
-    useFactory: (tickets: TicketsRepository, adapter: DiscordTicketAdapter): TicketReconcilerService =>
-      new TicketReconcilerService(tickets, adapter),
+    inject: [TicketsRepository, AdminTicketRelay],
+    useFactory: (tickets: TicketsRepository, relay: AdminTicketRelay): TicketReconcilerService =>
+      new TicketReconcilerService(tickets, relay),
   },
 ];

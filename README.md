@@ -53,7 +53,7 @@ Links the engine shows to admins carry query params — `crn-flix-request-id` (p
 | Downloader | Fetchr | `plugins/downloaders/fetchr` (`FetchrDownloader`) | `Downloader` | Plugin; completions become download jobs in the engine (`services/downloads/intake.ts`) |
 | Layout | Jellyfin conventions | `plugins/layouts/jellyfin` (`JellyfinLayout`) | `LibraryLayout` | Plugin; file identification and moves stay in the engine |
 | Player | Jellyfin | `plugins/players/jellyfin` (`JellyfinPlayer`, Trakt plugin tokens) | `Player`, `CatalogAccountSource` | Plugin; the naming audit still reads library paths from the client directly |
-| Messaging (admin) | Discord | engine `modules/discord/`, `services/messaging/admin/` | ticket adapter (`services/tickets/`) | Coupled |
+| Messaging (admin) | Discord | `plugins/messaging-admin/discord` (`DiscordAdminChannel`) on `libs/discord` | `AdminChannel` | Plugin; tickets, bindings and text parsing stay in the engine (`services/messaging/admin/relay.ts`) |
 | Messaging (users) | Email | `plugins/messaging-user/email` (`EmailChannel`) | `UserChannel` | Plugin; batching and dispatch stay in the engine (`services/messaging/user/all.ts`) |
 | Policy | — | — | `Policy` | Defined only |
 
@@ -68,7 +68,8 @@ components/
 ├── api/          @crn-flix/api — the NestJS engine
 │   ├── src/controllers/   HTTP surface: /admin, /admin/tickets, /admin/announce, /me, /users, /mailing
 │   ├── src/services/      syncs, planner orchestration, tickets/, messaging/, database/ (raw pg repositories)
-│   ├── src/modules/       indexer registry + harness, Discord client (still coupled)
+│   ├── src/modules/       indexer registry + harness
+│   ├── src/web/templates/ every web page (dashboards, tickets, /me, login, guide)
 │   └── tests/             Jest unit tests + Stryker
 └── database/     SQL migrations (src/scripts/NNNNN_*.sql) + migration runner image
 libs/
@@ -76,6 +77,7 @@ libs/
 ├── planner/      @crn-flix/planner — pure planner core (runway, labels, set cover, diff, sourcing)
 ├── http/         @crn-flix/http — axios logging, retries, rate limiting for plugins
 ├── design-system/ @crn-flix/design-system — tokens, components, page and email layouts
+├── discord/      @crn-flix/discord — the shared Discord bot connection
 └── tooling/      @crn-flix/tooling — eslint, tsconfig and jest presets
 plugins/
 ├── catalogs/trakt        @crn-flix/catalog-trakt
@@ -84,6 +86,7 @@ plugins/
 ├── layouts/jellyfin      @crn-flix/layout-jellyfin
 ├── downloaders/fetchr    @crn-flix/downloader-fetchr
 ├── messaging-user/email  @crn-flix/messaging-user-email
+├── messaging-admin/discord @crn-flix/messaging-admin-discord
 └── players/jellyfin      @crn-flix/player-jellyfin
 infrastructure/compose/   production compose file + deploy script
 knowledge/        design docs (plugins, policy, download planner)

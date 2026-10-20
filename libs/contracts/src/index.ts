@@ -1,3 +1,4 @@
+export * from './admin';
 export * from './catalog';
 export * from './downloader';
 export * from './indexer';

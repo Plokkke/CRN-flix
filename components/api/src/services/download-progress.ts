@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 
-import { Downloader, Unsubscribe } from '@crn-flix/contracts';
+import { AdminChannel, Downloader, Unsubscribe } from '@crn-flix/contracts';
 
 import { DOWNLOADER } from '@/providers/downloader';
-import { DownloadsBoard } from '@/services/messaging/admin/downloads-board';
+import { ADMIN_CHANNEL } from '@/providers/messaging/admin';
+import { buildDownloadsBoardView } from '@/services/download-format';
 
 /**
  * Discord rate-limits message edits, and a download runs for minutes: a fixed tick is both
@@ -21,7 +22,7 @@ export class DownloadProgressService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     @Inject(DOWNLOADER) private readonly downloader: Downloader,
-    private readonly downloadsBoard: DownloadsBoard,
+    @Inject(ADMIN_CHANNEL) private readonly adminChannel: AdminChannel,
   ) {}
 
   onModuleInit(): void {
@@ -47,7 +48,7 @@ export class DownloadProgressService implements OnModuleInit, OnModuleDestroy {
     this.dirty = false;
 
     try {
-      await this.downloadsBoard.refresh(this.downloader.liveDownloads());
+      await this.adminChannel.showDownloads(buildDownloadsBoardView(this.downloader.liveDownloads()));
     } catch (error) {
       DownloadProgressService.logger.error(
         `Failed to publish download progress: ${error instanceof Error ? error.message : error}`,

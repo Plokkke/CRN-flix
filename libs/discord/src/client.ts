@@ -1,4 +1,3 @@
-import { Logger, OnModuleDestroy } from '@nestjs/common';
 import {
   ButtonInteraction,
   Channel,
@@ -20,6 +19,8 @@ import {
 } from 'discord.js';
 import { z } from 'zod';
 
+import { createLogger } from '@crn-flix/contracts';
+
 export const discordConfigSchema = z.object({
   bot: z.object({
     token: z.string(),
@@ -39,8 +40,12 @@ function registerListener<Event extends keyof ClientEvents>(
   };
 }
 
-export class DiscordService implements OnModuleDestroy {
-  private static readonly logger = new Logger(DiscordService.name);
+/**
+ * One bot connection shared by every Discord plugin (admin channel, …): created once by the
+ * engine, which also destroys it on shutdown.
+ */
+export class DiscordService {
+  private static readonly logger = createLogger(DiscordService.name);
 
   static async create(config: DiscordConfig): Promise<DiscordService> {
     const service = new DiscordService(config);
@@ -108,7 +113,7 @@ export class DiscordService implements OnModuleDestroy {
     });
   }
 
-  async onModuleDestroy(): Promise<void> {
+  async destroy(): Promise<void> {
     await this.client.destroy();
   }
 

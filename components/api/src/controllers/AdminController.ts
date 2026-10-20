@@ -34,7 +34,7 @@ import { PlannerFindingsRepository } from '@/services/database/planner-findings'
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
-import { DiscordChannelCleanup } from '@/services/messaging/admin/channel-cleanup';
+import { AdminTicketRelay } from '@/services/messaging/admin/relay';
 import { NamingAuditService } from '@/services/naming-audit';
 import { PlannerService } from '@/services/planner/planner';
 import { PlayerSyncService } from '@/services/player-sync';
@@ -50,7 +50,7 @@ const JOBS = [
   { name: 'player-sync', schedule: 'Every 15 minutes' },
   { name: 'ticket-sync', schedule: 'Every 5 minutes' },
   { name: 'naming-audit', schedule: 'Manual only' },
-  { name: 'discord-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
+  { name: 'admin-channel-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
 ] as const;
 
 type JobName = (typeof JOBS)[number]['name'];
@@ -89,7 +89,7 @@ export class AdminController {
     @Inject(DOWNLOADER) private readonly downloader: Downloader,
     private readonly namingAudit: NamingAuditService,
     private readonly namingAuditRepository: NamingAuditRepository,
-    private readonly channelCleanup: DiscordChannelCleanup,
+    private readonly adminRelay: AdminTicketRelay,
   ) {
     this.jobHandlers = {
       'catalog-sync': () => this.catalogSync.sync(),
@@ -99,8 +99,8 @@ export class AdminController {
       'naming-audit': async () => {
         await this.namingAudit.run();
       },
-      'discord-cleanup': async () => {
-        await this.channelCleanup.run();
+      'admin-channel-cleanup': async () => {
+        await this.adminRelay.purge();
         await this.ticketReconciler.sync();
       },
     };

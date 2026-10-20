@@ -1,50 +1,35 @@
 import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { AdminChannel } from '@crn-flix/contracts';
+import { DiscordService } from '@crn-flix/discord';
+import { DiscordAdminChannel } from '@crn-flix/messaging-admin-discord';
+
 import { Config } from '@/app.module';
-import { DiscordService } from '@/modules/discord/discord';
 import { TicketsRepository } from '@/services/database/tickets';
-import { DiscordAdminChannel } from '@/services/messaging/admin/channel';
-import { DiscordChannelCleanup } from '@/services/messaging/admin/channel-cleanup';
-import { DownloadsBoard } from '@/services/messaging/admin/downloads-board';
-import { DiscordTicketAdapter } from '@/services/messaging/admin/ticket-adapter';
+import { AdminTicketRelay } from '@/services/messaging/admin/relay';
 import { TicketContextLoader } from '@/services/tickets/context';
 import { TicketService } from '@/services/tickets/ticket.service';
 
+export const ADMIN_CHANNEL = Symbol('AdminChannel');
+
 export const adminMessagingProviders: Provider[] = [
   {
-    provide: DiscordAdminChannel,
+    provide: ADMIN_CHANNEL,
     inject: [ConfigService, DiscordService],
-    useFactory: async (
-      configService: ConfigService<Config, true>,
-      discordService: DiscordService,
-    ): Promise<DiscordAdminChannel> => {
-      const adminConfig = configService.get<Config['administration']>('administration');
-      return DiscordAdminChannel.create(
-        { channelId: adminConfig.discordChannelId, adminIds: adminConfig.adminIds },
-        discordService,
-      );
+    useFactory: (configService: ConfigService<Config, true>, discord: DiscordService): Promise<AdminChannel> => {
+      const { discordChannelId, adminIds } = configService.get<Config['administration']>('administration');
+      return DiscordAdminChannel.create({ channelId: discordChannelId, adminIds }, discord);
     },
   },
   {
-    provide: DiscordTicketAdapter,
-    inject: [DiscordAdminChannel, TicketsRepository, TicketService, TicketContextLoader],
+    provide: AdminTicketRelay,
+    inject: [ADMIN_CHANNEL, TicketsRepository, TicketService, TicketContextLoader],
     useFactory: (
-      adminChannel: DiscordAdminChannel,
+      channel: AdminChannel,
       tickets: TicketsRepository,
       ticketService: TicketService,
       contextLoader: TicketContextLoader,
-    ): DiscordTicketAdapter => new DiscordTicketAdapter(adminChannel, tickets, ticketService, contextLoader),
-  },
-  {
-    provide: DiscordChannelCleanup,
-    inject: [DiscordAdminChannel, TicketsRepository],
-    useFactory: (adminChannel: DiscordAdminChannel, tickets: TicketsRepository): DiscordChannelCleanup =>
-      new DiscordChannelCleanup(adminChannel, tickets),
-  },
-  {
-    provide: DownloadsBoard,
-    inject: [DiscordAdminChannel],
-    useFactory: (adminChannel: DiscordAdminChannel): DownloadsBoard => new DownloadsBoard(adminChannel),
+    ): AdminTicketRelay => new AdminTicketRelay(channel, tickets, ticketService, contextLoader),
   },
 ];

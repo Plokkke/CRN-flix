@@ -1,7 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
-import { DiscordService } from '@/modules/discord/discord';
+import { AdminChannel } from '@crn-flix/contracts';
+
 import {
   CODE_COOLDOWN_SECONDS,
   CODE_TTL_SECONDS,
@@ -42,7 +43,7 @@ export class AdminAuthService extends SessionAuthService {
     private readonly config: AdminAuthConfig,
     sessions: AdminSessionsRepository,
     private readonly cache: MemoryCacheService,
-    private readonly discord: DiscordService,
+    private readonly adminChannel: AdminChannel,
   ) {
     super({ secureCookies: config.secureCookies, cookiePath: '/admin' }, sessions);
   }
@@ -86,7 +87,7 @@ export class AdminAuthService extends SessionAuthService {
     const deliveries = await Promise.allSettled(
       this.config.adminIds.map(async (adminId): Promise<IssuedCode> => {
         const code = generateCode();
-        await this.discord.sendDirectMessage(
+        await this.adminChannel.notifyAdmin(
           adminId,
           `Code de connexion ${this.config.serviceName} : **${code}**\nValable 10 minutes.`,
         );

@@ -1,4 +1,4 @@
-import { LiveDownload } from '@crn-flix/contracts';
+import { DownloadsBoardView, LiveDownload } from '@crn-flix/contracts';
 
 const BAR_SLOTS = 12;
 const BYTE_UNITS = ['o', 'Ko', 'Mo', 'Go', 'To'];
@@ -101,4 +101,18 @@ export function sortForDisplay(downloads: LiveDownload[]): LiveDownload[] {
 
 export function countActive(downloads: LiveDownload[]): number {
   return downloads.filter(({ status }) => status !== 'completed' && status !== 'failed').length;
+}
+
+const MAX_BOARD_ENTRIES = 10;
+
+/** The admin channel's downloads board: every live download, worded and ordered. */
+export function buildDownloadsBoardView(downloads: LiveDownload[]): DownloadsBoardView {
+  const ordered = sortForDisplay(downloads);
+  return {
+    active: countActive(downloads),
+    entries: ordered
+      .slice(0, MAX_BOARD_ENTRIES)
+      .map((d) => ({ label: downloadLabel(d), status: downloadStatusLine(d) })),
+    hidden: Math.max(0, ordered.length - MAX_BOARD_ENTRIES),
+  };
 }

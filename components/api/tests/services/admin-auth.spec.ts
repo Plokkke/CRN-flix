@@ -1,4 +1,5 @@
-import { DiscordService } from '@/modules/discord/discord';
+import { AdminChannel } from '@crn-flix/contracts';
+
 import { AdminAuthService } from '@/services/admin-auth';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { AdminSessionsRepository } from '@/services/database/admin-sessions';
@@ -31,7 +32,7 @@ function buildHarness(overrides: { secureCookies?: boolean } = {}): Harness {
     { adminIds: ADMIN_IDS, serviceName: 'CRN-Flix', secureCookies: overrides.secureCookies ?? true },
     sessions,
     cache,
-    { sendDirectMessage } as unknown as DiscordService,
+    { notifyAdmin: sendDirectMessage } as unknown as AdminChannel,
   );
 
   return { service, cache, sentCodes, sessions, sendDirectMessage };

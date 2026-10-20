@@ -1,4 +1,4 @@
-import { parseButtonOperation, parseMessageOperation, parseSpontaneousUrl } from '@/services/messaging/admin/parse';
+import { parseMessageOperation, parseSpontaneousUrl } from '@/services/tickets/parse';
 
 describe('parseMessageOperation', () => {
   it('extracts an imdb id when the ticket accepts one', () => {
@@ -21,16 +21,6 @@ describe('parseMessageOperation', () => {
   it('ignores content the ticket cannot consume', () => {
     expect(parseMessageOperation('tt1234567', ['submitLink'])).toBeNull();
     expect(parseMessageOperation('un simple commentaire', ['submitImdb', 'submitLink'])).toBeNull();
-  });
-});
-
-describe('parseButtonOperation', () => {
-  it('maps the ticket button ids to operations', () => {
-    expect(parseButtonOperation('ticket-approve')).toEqual({ kind: 'approve' });
-    expect(parseButtonOperation('ticket-reject')).toEqual({ kind: 'reject' });
-    expect(parseButtonOperation('ticket-restore')).toEqual({ kind: 'restore' });
-    expect(parseButtonOperation('ticket-resolve')).toMatchObject({ kind: 'resolveManually' });
-    expect(parseButtonOperation('unknown')).toBeNull();
   });
 });
 

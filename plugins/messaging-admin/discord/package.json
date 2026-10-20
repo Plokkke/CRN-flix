@@ -1,0 +1,33 @@
+{
+  "name": "@crn-flix/messaging-admin-discord",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Admin messaging plugin on Discord: tickets as embeds with threads, buttons, downloads board",
+  "license": "ISC",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist reports",
+    "lint": "eslint \"{src,tests}/**/*.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "@crn-flix/contracts": "workspace:*",
+    "@crn-flix/discord": "workspace:*",
+    "discord.js": "14.25.1"
+  },
+  "devDependencies": {
+    "@crn-flix/tooling": "workspace:*",
+    "@types/jest": "catalog:",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "jest": "catalog:",
+    "ts-jest": "catalog:",
+    "typescript": "catalog:"
+  }
+}

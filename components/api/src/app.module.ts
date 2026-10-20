@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { traktConfigSchema } from '@crn-flix/catalog-trakt';
 import { Host, Language, Quality } from '@crn-flix/contracts';
+import { discordConfigSchema } from '@crn-flix/discord';
 import { fetchrConfigSchema } from '@crn-flix/downloader-fetchr';
 import { loadixConfigSchema } from '@crn-flix/indexer-loadix';
 import { emailConfigSchema } from '@crn-flix/messaging-user-email';
@@ -22,12 +23,11 @@ import { TicketsAdminController } from '@/controllers/TicketsAdminController';
 import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
-import { discordConfigSchema } from '@/modules/discord/discord';
 import { adminAuthProvider } from '@/providers/admin-auth';
 import { catalogProviders } from '@/providers/catalog';
 import { contextProvider } from '@/providers/context';
 import { repositoryProviders } from '@/providers/database';
-import { discordProvider } from '@/providers/discord';
+import { DiscordConnectionLifecycle, discordProvider } from '@/providers/discord';
 import { downloaderProviders } from '@/providers/downloader';
 import { jellyfinProvider } from '@/providers/jellyfin';
 import { mediaTitlesProviders } from '@/providers/media-titles';
@@ -146,6 +146,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
+      DiscordConnectionLifecycle,
       allUserMessagingProvider,
       announcementProvider,
       ...adminMessagingProviders,

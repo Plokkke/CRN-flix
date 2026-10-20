@@ -131,12 +131,7 @@ export class TicketService {
   }
 
   /** Free-text admin message kept in the timeline (rendered by the other adapters). */
-  async addAdminMessage(
-    ticketId: string,
-    actor: string,
-    content: string,
-    origin: 'discord' | 'dashboard',
-  ): Promise<void> {
+  async addAdminMessage(ticketId: string, actor: string, content: string, origin: string): Promise<void> {
     await this.tickets.addEvent(ticketId, TicketEventKind.AdminMessage, actor, content, { origin });
   }
 
