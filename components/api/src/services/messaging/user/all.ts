@@ -30,6 +30,8 @@ export class UserMessagingDisabledError extends Error {
 const SHOWCASE_SIZE = 5;
 const VERIFY_RETRY_MS = 60_000;
 const VERIFY_REFRESH_MS = 15 * 60_000;
+/** A lossy route to the provider fails one check now and then: only a lasting outage counts. */
+const FAILURES_BEFORE_UNREACHABLE = 3;
 const SEPARATOR = '\u0000';
 
 const recipientOf = (ctxt: UserMessagingCtxt, name?: string): Recipient => ({
@@ -63,6 +65,7 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
   private readonly channelByKind: Map<string, UserChannel>;
   private readonly queue: DebouncedRequestQueue;
   private reachable = false;
+  private consecutiveFailures = 0;
   private verifyTimer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -89,7 +92,7 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
     await this.queue.onEmpty();
   }
 
-  /** Whether every channel last proved it can send; false until the first check ends. */
+  /** False until a check succeeds, then only after several checks in a row failed. */
   get canReachUsers(): boolean {
     return this.reachable;
   }
@@ -97,13 +100,16 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
   /** Off the boot path: users cannot be served without a channel, but the engine still starts. */
   private async verifyChannels(): Promise<void> {
     const results = await Promise.all([...this.channelByKind.values()].map((channel) => this.verifyChannel(channel)));
-    const reachable = results.every(Boolean);
+    this.consecutiveFailures = results.every(Boolean) ? 0 : this.consecutiveFailures + 1;
+    const reachable =
+      this.consecutiveFailures === 0 || (this.reachable && this.consecutiveFailures < FAILURES_BEFORE_UNREACHABLE);
     if (reachable !== this.reachable) {
       const state = reachable ? 'every user channel can send' : 'users cannot be reached, retrying every minute';
       AllUserMessaging.logger[reachable ? 'log' : 'error'](`User messaging: ${state}`);
     }
     this.reachable = reachable;
-    this.verifyTimer = setTimeout(() => void this.verifyChannels(), reachable ? VERIFY_REFRESH_MS : VERIFY_RETRY_MS);
+    const delay = this.consecutiveFailures === 0 ? VERIFY_REFRESH_MS : VERIFY_RETRY_MS;
+    this.verifyTimer = setTimeout(() => void this.verifyChannels(), delay);
     this.verifyTimer.unref();
   }
 
