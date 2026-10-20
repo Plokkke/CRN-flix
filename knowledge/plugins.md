@@ -1,0 +1,58 @@
+# Architecture en plugins
+
+## Objectif
+
+Publier l'engine indépendamment de ses plugins, pour que n'importe qui compose son propre engine avec les plugins qu'il veut (un autre catalog que Trakt, un autre player que Jellyfin…). Chaque implémentation d'un service externe devient un paquet qui ne connaît que les contrats.
+
+## Rôles
+
+| Rôle | Ce qu'il fait | Contrat (`libs/contracts`) | Implémentation | État |
+|---|---|---|---|---|
+| **catalog** | Là où un utilisateur référence ses demandes (watchlist, séries en cours, notes) et sa position de lecture | `Catalog`, `CatalogAccountSource` | Trakt | Client extrait (`plugins/catalogs/trakt`), synchro dans l'engine |
+| **metadata** | Informe sans porter de demande : titres dans toutes les langues, affiches, identification d'un fichier | `MetadataSource` | TMDB | Client + résolution des titres extraits (`plugins/metadata/tmdb`) |
+| **policy** | Filtre automatique en sortie de catalog : accepter, refuser, faire relire (voir [policy.md](policy.md)) | `Policy` | — | Défini, pas implémenté |
+| **indexer** | Cherche les releases d'un film ou d'une série | `Indexer` | Loadix | **Plugin** (`plugins/indexers/loadix`) |
+| **downloader** | Télécharge une URL, rend compte de la progression | `Downloader` | Fetchr | Couplé (`services/fetchr-sync.ts`) |
+| **storage** | Où atterrissent les fichiers terminés et comment ils sont nommés | `Storage` | Disque local | Couplé (labelizer, identifier, pipeline) |
+| **player** | Sert la bibliothèque, porte les comptes de visionnage | `Player` | Jellyfin | Client extrait (`plugins/players/jellyfin`) |
+| **messaging** | Canal admin (tickets) et canaux utilisateurs (notifications, annonces, codes de connexion) | `UserChannel` | Discord, email | Couplé (`services/messaging/`) |
+
+Seul `Indexer` est implémenté et branché. Les autres contrats sont marqués **DRAFT** : typés d'après le code actuel, à valider au moment d'extraire le plugin correspondant.
+
+## Règles
+
+- **DÉCIDÉ (2026-10-20)** — Un plugin vit dans `plugins/<rôle au pluriel>/<nom>` (`indexers/loadix`, `catalogs/trakt`…), paquet `@crn-flix/<rôle>-<nom>`. Les paquets sont à la racine du monorepo car externalisables.
+- **DÉCIDÉ** — Un plugin dépend de `@crn-flix/contracts` (et au besoin de `@crn-flix/http`), **jamais de l'engine** (pas d'alias `@/`) ni de la base. Ce qu'il veut retenir passe par l'engine : il reçoit des données en entrée et rend ce qu'il faut sauvegarder (voir les mémos d'indexer, `IndexerBookmark`).
+- **DÉCIDÉ** — TMDB n'est pas un catalog : il ne permet pas à un utilisateur de référencer ses demandes. C'est une brique **metadata**.
+- **DÉCIDÉ** — La policy est une brique à part entière, définie mais pas encore développée.
+- Les services que l'engine fournit aux plugins sont des contrats eux aussi (`runtime.ts` : `PluginCache`). Un plugin ne reçoit jamais une classe de l'engine.
+- Chaque plugin expose son point d'entrée dans `src/index.ts` (schéma de config zod + fabrique, par exemple `createLoadixIndexer`). La composition reste **statique** dans l'engine (`modules/indexer/registry.ts`, providers Nest) tant que l'engine n'est pas publié seul.
+- Le cœur pur du planner (`libs/planner`) n'a aucune I/O : il dépend uniquement des contrats.
+
+## Paquets
+
+| Paquet | Rôle |
+|---|---|
+| `components/api` | L'engine NestJS : synchros, orchestration du planner, tickets, dashboards, persistance |
+| `components/database` | Migrations SQL + image du runner |
+| `libs/contracts` | Contrats de tous les rôles + types média partagés (`MediaItem`, `MediaTitles`, `Playhead`) |
+| `libs/planner` | Runway, labels, set cover, diff, sourcing, scoring |
+| `libs/http` | Logs axios, retries, rate limiter, `wait` |
+| `libs/tooling` | Presets eslint / tsconfig / jest |
+
+Build : chaque lib et plugin compile vers `dist/` (`tsc`). Turborepo construit les dépendances avant `typecheck`, `test` et `dev`. L'image de l'API se construit depuis la racine (`pnpm deploy --legacy`).
+
+## Couplages restants, dans l'ordre prévu
+
+1. **Logger** — les plugins importent `Logger` de `@nestjs/common`. Il faut un contrat de logger dans `runtime.ts` pour qu'un plugin ne dépende plus de Nest.
+2. **Catalog** — l'expansion Trakt → requêtes par épisode et les playheads (`trakt-sync.ts`, `trakt-playhead.ts`) doivent passer dans le plugin, qui implémentera `Catalog`. Les tokens Trakt viennent du plugin Trakt de Jellyfin : `player-jellyfin` implémentera `CatalogAccountSource`, et l'engine fera le lien sans que le catalog connaisse le player.
+3. **Downloader** — `fetchr-sync.ts` écrit lui-même dans `download_jobs`. Il faut l'inverser (`onCompleted` → l'engine crée le job), puis extraire `plugins/downloaders/fetchr`. Le vocabulaire d'événements Fetchr (`applyFetchrEvent`) part avec lui.
+4. **Player** — Jellyfin implémentera `Player` (`listAvailable`, `refreshLibrary`, `upsertAccount`). `services/context.ts` contient une URL d'affiche Jellyfin en dur.
+5. **Metadata** — `medias.ts:posterUrl` construit l'URL TMDB à partir de `poster_path` : c'est au plugin de fournir l'URL. `media-identifier.ts` appelle `TmdbApiService` directement : à remplacer par `identify`.
+6. **Messaging** — préalable : sortir les pages web de `services/messaging/user/email/templates/` (environ 20 pages qui ne sont pas des emails : dashboards, `/me`, tickets) vers `components/api/src/web/`. Ensuite `UserChannel` pour l'email et le DM Discord, puis l'adaptateur de tickets Discord (canal admin, authentification OTP admin).
+7. **Storage** — démêler les règles de nommage (pures), les I/O disque, l'identification et les tickets dans `media-labelizer`, `media-identifier`, `post-download-pipeline`, `naming-audit`.
+8. **Publication** — l'engine publié seul : la composition des plugins devient de la configuration.
+
+## Reporté
+
+- **DÉCIDÉ (2026-10-20)** — Migration Jest → Vitest, passage à Terraform et refonte des GitHub Actions : après cette réorganisation. Les workflows actuels (`.github/`) supposent encore npm et l'ancienne arborescence.
