@@ -1,4 +1,4 @@
-import { displayTitle, posterUrl } from '@/services/database/medias';
+import { displayTitle } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 
 import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from './email-styles';
@@ -45,7 +45,7 @@ export const requestUpdateTemplate = (
       return getMediaCard(
         displayTitle(media),
         media.year?.toString() || '',
-        posterUrl(media) ?? undefined,
+        media.posterUrl ?? undefined,
         request.status,
         getStatusDescription(request.status),
         request.status === RequestStatus.Fulfilled

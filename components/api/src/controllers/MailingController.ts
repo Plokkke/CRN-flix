@@ -1,7 +1,8 @@
-import { Controller, Get, Header, NotFoundException, Param } from '@nestjs/common';
+import { Controller, Get, Header, Inject, NotFoundException, Param } from '@nestjs/common';
 
-import { MediaTitlesResolver } from '@crn-flix/metadata-tmdb';
+import { MetadataSource } from '@crn-flix/contracts';
 
+import { METADATA } from '@/providers/media-titles';
 import { buildPresetNotice, isNoticePreset } from '@/services/announcements/presets';
 import { ContextService } from '@/services/context';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
@@ -13,12 +14,12 @@ import { serviceNoticeTemplate } from '@/services/messaging/user/email/templates
 export class MailingController {
   constructor(
     private readonly contextService: ContextService,
-    private readonly titles: MediaTitlesResolver,
+    @Inject(METADATA) private readonly metadata: MetadataSource,
   ) {}
 
-  /** Preview fixtures come from Jellyfin; the poster path is TMDB's, like in production. */
-  private async posterPathOf(imdbId: string): Promise<string | null> {
-    return (await this.titles.resolve(imdbId)).posterPath;
+  /** Preview fixtures come from the player; the poster is the metadata source's, like in production. */
+  private async posterUrlOf(imdbId: string): Promise<string | null> {
+    return (await this.metadata.describe(imdbId)).posterUrl;
   }
 
   @Get('registered')
@@ -75,7 +76,7 @@ export class MailingController {
             imdbId: show.imdbId!,
             type: show.type,
             title: show.title,
-            posterPath: await this.posterPathOf(show.imdbId!),
+            posterUrl: await this.posterUrlOf(show.imdbId!),
             year: 2025,
             seasonNumber: null,
             episodeNumber: null,
@@ -88,7 +89,7 @@ export class MailingController {
             imdbId: movie.imdbId!,
             type: movie.type,
             title: movie.title,
-            posterPath: await this.posterPathOf(movie.imdbId!),
+            posterUrl: await this.posterUrlOf(movie.imdbId!),
             year: 2025,
             seasonNumber: null,
             episodeNumber: null,
@@ -101,7 +102,7 @@ export class MailingController {
             imdbId: episode.imdbId!,
             type: episode.type,
             title: episode.title,
-            posterPath: await this.posterPathOf(episode.imdbId!),
+            posterUrl: await this.posterUrlOf(episode.imdbId!),
             year: 2025,
             seasonNumber: 2,
             episodeNumber: 4,

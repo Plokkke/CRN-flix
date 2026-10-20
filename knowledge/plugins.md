@@ -9,7 +9,7 @@ Publier l'engine indépendamment de ses plugins, pour que n'importe qui compose 
 | Rôle | Ce qu'il fait | Contrat (`libs/contracts`) | Implémentation | État |
 |---|---|---|---|---|
 | **catalog** | Là où un utilisateur référence ses demandes (watchlist, séries en cours, notes) et sa position de lecture | `Catalog`, `CatalogAccountSource` | Trakt | **Plugin** (`plugins/catalogs/trakt`, `TraktCatalog`) ; comptes fournis par `player-jellyfin` |
-| **metadata** | Informe sans porter de demande : titres dans toutes les langues, affiches, identification d'un fichier | `MetadataSource` | TMDB | Client + résolution des titres extraits (`plugins/metadata/tmdb`) |
+| **metadata** | Informe sans porter de demande : titres dans toutes les langues, affiches, identification d'un fichier | `MetadataSource` | TMDB | **Plugin** (`plugins/metadata/tmdb`) ; l'identification de fichiers appelle encore le client TMDB |
 | **policy** | Filtre automatique en sortie de catalog : accepter, refuser, faire relire (voir [policy.md](policy.md)) | `Policy` | — | Défini, pas implémenté |
 | **indexer** | Cherche les releases d'un film ou d'une série | `Indexer` | Loadix | **Plugin** (`plugins/indexers/loadix`) |
 | **downloader** | Télécharge une URL, rend compte de la progression | `Downloader` | Fetchr | **Plugin** (`plugins/downloaders/fetchr`) |
@@ -17,7 +17,7 @@ Publier l'engine indépendamment de ses plugins, pour que n'importe qui compose 
 | **player** | Sert la bibliothèque, porte les comptes de visionnage | `Player` | Jellyfin | **Plugin** (`plugins/players/jellyfin`) |
 | **messaging** | Canal admin (tickets) et canaux utilisateurs (notifications, annonces, codes de connexion) | `UserChannel` | Discord, email | Couplé (`services/messaging/`) |
 
-`Indexer`, `Catalog`, `CatalogAccountSource`, `Downloader` et `Player` sont implémentés et branchés. Les autres contrats sont marqués **DRAFT** : typés d'après le code actuel, à valider au moment d'extraire le plugin correspondant.
+`Indexer`, `Catalog`, `CatalogAccountSource`, `Downloader`, `Player` et `MetadataSource` sont implémentés et branchés. Les autres contrats sont marqués **DRAFT** : typés d'après le code actuel, à valider au moment d'extraire le plugin correspondant.
 
 ## Règles
 
@@ -48,7 +48,7 @@ Build : chaque lib et plugin compile vers `dist/` (`tsc`). Turborepo construit l
 2. ~~**Catalog**~~ — fait (2026-10-20) : `TraktCatalog` (expansion, activités, playheads), `TraktPlugin.listAccounts` implémente `CatalogAccountSource`, l'engine relie comptes et utilisateurs (`services/catalog/`). Reste : la liaison de compte (device auth Trakt + écriture du token, `UsersController`) utilise encore les classes concrètes ; un seul catalog est branché à la fois.
 3. ~~**Downloader**~~ — fait (2026-10-20) : `FetchrDownloader` signale les complétions (`onCompleted`, rejouées après reconnexion), l'engine crée les `download_jobs` (`services/downloads/intake.ts`, idempotent). Le vocabulaire d'événements Fetchr (`applyFetchrEvent`) est dans le plugin. Reste : les clés de corrélation (`crn-flix-request-id`…) restent un contrat implicite entre l'engine et « tout client qui les transmet ».
 4. ~~**Player**~~ — fait (2026-10-20) : `JellyfinPlayer` (disponibilité, rafraîchissement, comptes via `upsertAccount` / `AccountNameTakenError`, vitrine d'affiches construite depuis l'URL du player au lieu de `jellyfin.crn-tech.fr` en dur). Reste : `naming-audit` lit les chemins de la bibliothèque via `JellyfinMediaService` (relève du storage) ; la colonne `users.jellyfin_id` porte l'id de compte du player.
-5. **Metadata** — `medias.ts:posterUrl` construit l'URL TMDB à partir de `poster_path` : c'est au plugin de fournir l'URL. `media-identifier.ts` appelle `TmdbApiService` directement : à remplacer par `identify`.
+5. ~~**Metadata**~~ — fait (2026-10-20) : `TmdbMetadataSource.describe` (titres + URL d'affiche complète). Migration 00024 : `medias.poster_url` (rattrapée depuis `poster_path`) ; **`poster_path` est à supprimer dans une release ultérieure** (gardée pour le rollback). Reste : `media-identifier.ts` (identification d'un fichier par recherche TMDB) appelle `TmdbApiService` directement — à porter par une méthode `identify` du contrat au moment du storage.
 6. **Messaging** — préalable : sortir les pages web de `services/messaging/user/email/templates/` (environ 20 pages qui ne sont pas des emails : dashboards, `/me`, tickets) vers `components/api/src/web/`. Ensuite `UserChannel` pour l'email et le DM Discord, puis l'adaptateur de tickets Discord (canal admin, authentification OTP admin).
 7. **Storage** — démêler les règles de nommage (pures), les I/O disque, l'identification et les tickets dans `media-labelizer`, `media-identifier`, `post-download-pipeline`, `naming-audit`.
 8. **Publication** — l'engine publié seul : la composition des plugins devient de la configuration.

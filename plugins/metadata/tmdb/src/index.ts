@@ -1,2 +1,2 @@
 export * from './api';
-export * from './titles-resolver';
+export * from './metadata-source';

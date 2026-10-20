@@ -1,4 +1,4 @@
-import { MediaTitlesResolver } from '@crn-flix/metadata-tmdb';
+import { MetadataSource } from '@crn-flix/contracts';
 
 import { MediaIdentity, MediaLabelizerService } from '@/services/media-labelizer';
 
@@ -10,8 +10,8 @@ const config = {
   privateSeries: '/data/medias/private/series',
 };
 
-function resolver(title: string | null): MediaTitlesResolver {
-  return { resolve: jest.fn().mockResolvedValue({ title, year: 2005 }) } as unknown as MediaTitlesResolver;
+function resolver(title: string | null): MetadataSource {
+  return { describe: jest.fn().mockResolvedValue({ title, year: 2005 }) } as unknown as MetadataSource;
 }
 
 const frenchMovie: MediaIdentity = {
@@ -49,6 +49,6 @@ describe('MediaLabelizerService.toCanonicalIdentity', () => {
 
     await service.toCanonicalIdentity({ ...frenchMovie, imdbId: null as unknown as string });
 
-    expect(english.resolve).not.toHaveBeenCalled();
+    expect(english.describe).not.toHaveBeenCalled();
   });
 });

@@ -1,27 +1,19 @@
-import { MediaTitles, MediaType } from './media';
+import { MediaTitles } from './media';
 
-/** What a metadata source knows about a media beyond its catalog entry. */
-export type MediaMetadata = Partial<MediaTitles> & {
+/**
+ * What a metadata source knows about a media beyond its catalog entry; every field is
+ * null when unknown. `title` is the English one, the engine's canonical title.
+ */
+export type MediaMetadata = { [K in keyof MediaTitles]: MediaTitles[K] | null } & {
   posterUrl: string | null;
 };
 
-export type IdentificationQuery = {
-  type: MediaType;
-  title: string;
-  year: number | null;
-};
-
-export type IdentificationMatch = MediaTitles & {
-  imdbId: string;
-};
-
 /**
- * DRAFT — not wired yet. A metadata source informs, it never holds requests
- * (that is the catalog's job): every title of a media, its artwork, and the
- * reverse lookup from a release name to a media identity.
+ * A metadata source informs, it never holds requests (that is the catalog's job):
+ * every title of a media and its artwork. It never throws: an unknown or unreachable
+ * media is described with nulls.
  */
 export interface MetadataSource {
   readonly name: string;
   describe(imdbId: string): Promise<MediaMetadata>;
-  identify(query: IdentificationQuery): Promise<IdentificationMatch[]>;
 }

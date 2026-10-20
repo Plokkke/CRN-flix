@@ -41,7 +41,7 @@ function request(
       episodeNumber: episode ?? null,
       runtimeMinutes: null,
       traktSlug: null,
-      posterPath: null,
+      posterUrl: null,
       createdAt: now,
       updatedAt: now,
     },

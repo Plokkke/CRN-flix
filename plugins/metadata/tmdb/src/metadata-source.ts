@@ -1,20 +1,17 @@
-import { createLogger, MediaTitles } from '@crn-flix/contracts';
+import { createLogger, MediaMetadata, MetadataSource } from '@crn-flix/contracts';
 
 import { TmdbApiService, TmdbMovie, TmdbTvShow } from './api';
 
-/**
- * `title` is the English one (null when TMDB has none), the rest as the contract defines,
- * plus the TMDB poster path (French artwork preferred) the engine keeps for its own display.
- */
-export type MediaTitlesResolution = Omit<MediaTitles, 'title'> & { title: string | null; posterPath: string | null };
+/** TMDB serves posters anonymously in fixed widths; w342 suits emails and cards. */
+const POSTER_BASE_URL = 'https://image.tmdb.org/t/p/w342';
 
-const UNKNOWN: MediaTitlesResolution = {
+const UNKNOWN: MediaMetadata = {
   title: null,
   originalTitle: null,
   frenchTitle: null,
   originalLanguage: null,
   year: null,
-  posterPath: null,
+  posterUrl: null,
 };
 
 const ENGLISH = 'en-US';
@@ -27,6 +24,10 @@ type Localized = {
   year: number | null;
   posterPath: string | null;
 };
+
+function posterUrlOf(path: string | null): string | null {
+  return path ? `${POSTER_BASE_URL}${path}` : null;
+}
 
 function yearOf(date: string | undefined): number | null {
   return date ? Number(date.slice(0, 4)) : null;
@@ -55,22 +56,25 @@ function fromTvShow(show: TmdbTvShow): Localized {
 /**
  * Every name TMDB knows for an imdb id: the English title (canonical for the engine's
  * database and disk), the French one (what subscribers see and what French indexers key
- * on) and the original one. Two TMDB calls per id, memoised for the process lifetime.
+ * on) and the original one, plus the poster (French artwork preferred). Two TMDB calls
+ * per id, memoised for the process lifetime.
  */
-export class MediaTitlesResolver {
-  private static readonly logger = createLogger(MediaTitlesResolver.name);
+export class TmdbMetadataSource implements MetadataSource {
+  private static readonly logger = createLogger(TmdbMetadataSource.name);
 
-  private readonly cache = new Map<string, Promise<MediaTitlesResolution>>();
+  readonly name = 'tmdb';
+
+  private readonly cache = new Map<string, Promise<MediaMetadata>>();
 
   constructor(private readonly tmdb: TmdbApiService) {}
 
-  resolve(imdbId: string): Promise<MediaTitlesResolution> {
+  describe(imdbId: string): Promise<MediaMetadata> {
     const cached = this.cache.get(imdbId);
     if (cached) {
       return cached;
     }
     const resolution = this.lookup(imdbId).catch((error: unknown) => {
-      MediaTitlesResolver.logger.warn(
+      TmdbMetadataSource.logger.warn(
         `TMDB lookup failed for ${imdbId}: ${error instanceof Error ? error.message : error}`,
       );
       return UNKNOWN;
@@ -79,7 +83,7 @@ export class MediaTitlesResolver {
     return resolution;
   }
 
-  private async lookup(imdbId: string): Promise<MediaTitlesResolution> {
+  private async lookup(imdbId: string): Promise<MediaMetadata> {
     const english = await this.localized(imdbId, ENGLISH);
     if (!english) {
       return UNKNOWN;
@@ -91,7 +95,7 @@ export class MediaTitlesResolver {
       frenchTitle: french?.title ?? null,
       originalLanguage: english.originalLanguage,
       year: english.year,
-      posterPath: french?.posterPath ?? english.posterPath,
+      posterUrl: posterUrlOf(french?.posterPath ?? english.posterPath),
     };
   }
 

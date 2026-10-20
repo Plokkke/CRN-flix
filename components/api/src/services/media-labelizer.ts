@@ -4,7 +4,7 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
-import { MediaTitlesResolver } from '@crn-flix/metadata-tmdb';
+import { MetadataSource } from '@crn-flix/contracts';
 
 import { IdentificationResult } from './media-identifier';
 
@@ -61,14 +61,14 @@ export class MediaLabelizerService {
 
   constructor(
     private readonly config: MediaPathsConfig,
-    private readonly titles: MediaTitlesResolver,
+    private readonly titles: MetadataSource,
   ) {}
 
   async toCanonicalIdentity<T extends MediaIdentity>(identity: T): Promise<T> {
     if (!identity.imdbId) {
       return identity;
     }
-    const resolution = await this.titles.resolve(identity.imdbId);
+    const resolution = await this.titles.describe(identity.imdbId);
     return resolution.title ? { ...identity, title: resolution.title } : identity;
   }
 

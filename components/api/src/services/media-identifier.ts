@@ -4,13 +4,8 @@ import { Logger } from '@nestjs/common';
 import { parse as parseTorrentTitle } from 'parse-torrent-title';
 import { Pool } from 'pg';
 
-import {
-  MediaTitlesResolver,
-  TmdbApiService,
-  TmdbIdentification,
-  TmdbMovie,
-  TmdbTvShow,
-} from '@crn-flix/metadata-tmdb';
+import { MetadataSource } from '@crn-flix/contracts';
+import { TmdbApiService, TmdbIdentification, TmdbMovie, TmdbTvShow } from '@crn-flix/metadata-tmdb';
 
 import { MediasRepository, MediaType } from '@/services/database/medias';
 import { RequestsRepository, RequestStatus } from '@/services/database/requests';
@@ -43,7 +38,7 @@ export class MediaIdentifierService {
     private readonly pool: Pool,
     private readonly medias: MediasRepository,
     private readonly requests: RequestsRepository,
-    private readonly titles: MediaTitlesResolver,
+    private readonly titles: MetadataSource,
   ) {}
 
   parseFilename(filePath: string): ParsedMedia {
@@ -222,7 +217,7 @@ export class MediaIdentifierService {
     }
 
     // Identification runs in French (TMDB fr-FR); the database keeps the English title.
-    const titles = await this.titles.resolve(identification.imdbId!);
+    const titles = await this.titles.describe(identification.imdbId!);
     const media = await this.medias.upsert({
       imdbId: identification.imdbId!,
       type: identification.mediaType as MediaType,

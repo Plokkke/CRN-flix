@@ -1,5 +1,4 @@
-import { MediaTitles } from '@crn-flix/contracts';
-import { MediaTitlesResolution, MediaTitlesResolver } from '@crn-flix/metadata-tmdb';
+import { MediaTitles, MediaMetadata, MetadataSource } from '@crn-flix/contracts';
 
 import { MediasRepository } from '@/services/database/medias';
 import { MediaTitlesService } from '@/services/media-titles';
@@ -12,21 +11,21 @@ const stored: MediaTitles = {
   year: 2009,
 };
 
-const resolved: MediaTitlesResolution = {
+const resolved: MediaMetadata = {
   title: 'The Hangover',
   originalTitle: 'The Hangover',
   frenchTitle: 'Very Bad Trip',
   originalLanguage: 'en',
   year: 2009,
-  posterPath: '/hangover.jpg',
+  posterUrl: 'https://image.tmdb.org/t/p/w342/hangover.jpg',
 };
 
-function build(resolution: MediaTitlesResolution, imdbIdsWithoutFrench: string[] = []) {
+function build(resolution: MediaMetadata, imdbIdsWithoutFrench: string[] = []) {
   const resolve = jest.fn().mockResolvedValue(resolution);
   const updateTitles = jest.fn().mockResolvedValue(undefined);
   const listImdbIdsWithoutFrenchTitle = jest.fn().mockResolvedValue(imdbIdsWithoutFrench);
   const service = new MediaTitlesService(
-    { resolve } as unknown as MediaTitlesResolver,
+    { describe: resolve } as unknown as MetadataSource,
     { updateTitles, listImdbIdsWithoutFrenchTitle } as unknown as MediasRepository,
   );
   return { service, resolve, updateTitles };
@@ -44,13 +43,13 @@ describe('MediaTitlesService.ensure', () => {
   it('resolves, persists on every row of the imdb id and returns the completed titles', async () => {
     const { service, updateTitles } = build(resolved);
 
-    const { posterPath: _poster, ...titles } = resolved;
+    const { posterUrl: _poster, ...titles } = resolved;
     await expect(service.ensure('tt1119646', stored)).resolves.toEqual(titles);
     expect(updateTitles).toHaveBeenCalledWith('tt1119646', resolved);
   });
 
   it('keeps the stored titles when TMDB knows nothing', async () => {
-    const unknown: MediaTitlesResolution = { ...resolved, title: null, originalTitle: null, frenchTitle: null };
+    const unknown: MediaMetadata = { ...resolved, title: null, originalTitle: null, frenchTitle: null };
     const { service, updateTitles } = build(unknown);
 
     await expect(service.ensure('tt0', stored)).resolves.toBe(stored);

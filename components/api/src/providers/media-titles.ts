@@ -1,20 +1,23 @@
 import { Provider } from '@nestjs/common';
 
-import { MediaTitlesResolver, TmdbApiService } from '@crn-flix/metadata-tmdb';
+import { MetadataSource } from '@crn-flix/contracts';
+import { TmdbApiService, TmdbMetadataSource } from '@crn-flix/metadata-tmdb';
 
 import { MediasRepository } from '@/services/database/medias';
 import { MediaTitlesService } from '@/services/media-titles';
 
+export const METADATA = Symbol('MetadataSource');
+
 export const mediaTitlesProviders: Provider[] = [
   {
-    provide: MediaTitlesResolver,
+    provide: METADATA,
     inject: [TmdbApiService],
-    useFactory: (tmdb: TmdbApiService): MediaTitlesResolver => new MediaTitlesResolver(tmdb),
+    useFactory: (tmdb: TmdbApiService): MetadataSource => new TmdbMetadataSource(tmdb),
   },
   {
     provide: MediaTitlesService,
-    inject: [MediaTitlesResolver, MediasRepository],
-    useFactory: (resolver: MediaTitlesResolver, medias: MediasRepository): MediaTitlesService =>
-      new MediaTitlesService(resolver, medias),
+    inject: [METADATA, MediasRepository],
+    useFactory: (metadata: MetadataSource, medias: MediasRepository): MediaTitlesService =>
+      new MediaTitlesService(metadata, medias),
   },
 ];
