@@ -1,22 +1,19 @@
 import { ConfigService } from '@nestjs/config';
 
-import { TraktApi } from '@crn-flix/catalog-trakt';
 import { Indexer } from '@crn-flix/contracts';
-import { TraktPlugin } from '@crn-flix/player-jellyfin';
 
 import { Config } from '@/app.module';
 import { createIndexers, INDEXERS } from '@/modules/indexer/registry';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
+import { CatalogPlayheadService } from '@/services/catalog/playheads';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
 import { PlannedDownloadsRepository } from '@/services/database/planned-downloads';
 import { PlannerFindingsRepository } from '@/services/database/planner-findings';
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
-import { UsersRepository } from '@/services/database/users';
 import { FetchrSyncService } from '@/services/fetchr-sync';
 import { MediaTitlesService } from '@/services/media-titles';
 import { PlannerService } from '@/services/planner/planner';
-import { TraktPlayheadService } from '@/services/trakt-playhead';
 
 export const indexersRegistryProvider = {
   provide: INDEXERS,
@@ -27,13 +24,6 @@ export const indexersRegistryProvider = {
   },
 };
 
-export const traktPlayheadProvider = {
-  provide: TraktPlayheadService,
-  inject: [UsersRepository, TraktPlugin, TraktApi],
-  useFactory: (users: UsersRepository, traktPlugin: TraktPlugin, traktClient: TraktApi): TraktPlayheadService =>
-    new TraktPlayheadService(users, traktPlugin, traktClient),
-};
-
 export const plannerProvider = {
   provide: PlannerService,
   inject: [
@@ -41,7 +31,7 @@ export const plannerProvider = {
     INDEXERS,
     RequestsRepository,
     PlannedDownloadsRepository,
-    TraktPlayheadService,
+    CatalogPlayheadService,
     FetchrSyncService,
     MemoryCacheService,
     IndexerBookmarksRepository,
@@ -54,7 +44,7 @@ export const plannerProvider = {
     indexers: Indexer[],
     requests: RequestsRepository,
     plannedDownloads: PlannedDownloadsRepository,
-    playheads: TraktPlayheadService,
+    playheads: CatalogPlayheadService,
     fetchr: FetchrSyncService,
     cache: MemoryCacheService,
     bookmarks: IndexerBookmarksRepository,

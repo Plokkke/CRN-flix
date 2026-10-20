@@ -11,34 +11,43 @@ export enum RequestReason {
 }
 
 /**
- * A user's account on a catalog, as an account source hands it over.
- * `credentials` is opaque to the engine: only the catalog that issued it reads it.
+ * Catalog credentials as an account source stores them, tied to the user's player account.
+ * `credentials` is opaque to the engine: only the catalog that issued them reads them.
  */
+export type LinkedCatalogAccount = {
+  playerAccountId: string;
+  credentials: unknown;
+};
+
+/** Where catalog credentials live (today: the player's Trakt plugin configuration). */
+export interface CatalogAccountSource {
+  listAccounts(): Promise<LinkedCatalogAccount[]>;
+}
+
+/** An account as the engine hands it to a catalog: `userRef` is the engine's stable user id. */
 export type CatalogAccount = {
   userRef: string;
   credentials: unknown;
 };
 
-/** Where catalog accounts come from (today: tokens stored by the player's Trakt plugin). */
-export interface CatalogAccountSource {
-  listAccounts(): Promise<CatalogAccount[]>;
-}
-
-export type ShowPlayhead = {
-  imdbId: string;
-  playhead: Playhead | null;
+/** A requested media; `catalogSlug` lets humans be linked back to the catalog's page. */
+export type CatalogItem = MediaItem & {
+  catalogSlug: string | null;
 };
 
+/** When each reason last changed on the catalog side; a reason left out is always re-read. */
+export type CatalogActivity = Partial<Record<RequestReason, Date | null>>;
+
 /**
- * DRAFT — not wired yet. A catalog is where users reference what they want.
- * It returns the **full intent** (every episode, never truncated to a window);
- * the engine owns persistence, deduplication and planning.
+ * Where users reference what they want. A catalog returns the **full intent**
+ * (every aired episode, never truncated to a window); the engine owns persistence,
+ * deduplication, incremental scheduling and planning.
  */
 export interface Catalog {
   readonly name: string;
   readonly reasons: readonly RequestReason[];
-  listRequests(account: CatalogAccount, reason: RequestReason): Promise<MediaItem[]>;
-  listPlayheads(account: CatalogAccount): Promise<ShowPlayhead[]>;
-  /** A link to the media on the catalog, for humans. */
-  mediaUrl(media: Pick<MediaItem, 'imdbId' | 'type'>): string | null;
+  lastActivity(account: CatalogAccount): Promise<CatalogActivity>;
+  listRequests(account: CatalogAccount, reason: RequestReason): Promise<CatalogItem[]>;
+  /** `START_OF_SHOW` when the user never watched it, nulls when completed or dropped. */
+  playhead(account: CatalogAccount, showImdbId: string): Promise<Playhead>;
 }

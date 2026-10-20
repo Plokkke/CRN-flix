@@ -22,6 +22,7 @@ import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
 import { discordConfigSchema } from '@/modules/discord/discord';
 import { adminAuthProvider } from '@/providers/admin-auth';
+import { catalogProviders } from '@/providers/catalog';
 import { contextProvider } from '@/providers/context';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
@@ -33,23 +34,22 @@ import { adminMessagingProviders } from '@/providers/messaging/admin';
 import { allUserMessagingProvider, announcementProvider } from '@/providers/messaging/all';
 import { userMessagingProviders } from '@/providers/messaging/user';
 import { namingAuditProviders } from '@/providers/naming-audit';
-import { indexersRegistryProvider, plannerProvider, traktPlayheadProvider } from '@/providers/planner';
+import { indexersRegistryProvider, plannerProvider } from '@/providers/planner';
 import { postDownloadProviders } from '@/providers/post-download';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
 import { ticketProviders } from '@/providers/tickets';
 import { tmdbProvider } from '@/providers/tmdb';
 import { traktProvider } from '@/providers/trakt';
-import { traktSyncProvider } from '@/providers/trakt-sync';
 import { traktPluginProvider } from '@/providers/traktPlugin';
 import { userAuthProvider } from '@/providers/user-auth';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
+import { syncConfigSchema } from '@/services/catalog/sync';
 import { DownloadProgressService } from '@/services/download-progress';
 import { HealthChecksService } from '@/services/health-checks';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
 import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
 import { namingAuditConfigSchema } from '@/services/naming-audit';
 import { StartupRecoveryService } from '@/services/startup-recovery';
-import { syncConfigSchema } from '@/services/trakt-sync';
 
 export const configSchema = z.object({
   name: z.string(),
@@ -143,10 +143,9 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       traktProvider,
       syncDataSourceProvider,
       ...repositoryProviders,
-      traktSyncProvider,
+      ...catalogProviders,
       jellyfinSyncProvider,
       indexersRegistryProvider,
-      traktPlayheadProvider,
       plannerProvider,
       jellyfinProvider,
       traktPluginProvider,

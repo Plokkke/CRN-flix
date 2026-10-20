@@ -20,6 +20,7 @@ import { readCookie } from '@/helpers/cookies';
 import { executionByTrack, ExecutionView } from '@/services/admin/execution';
 import { buildDashboard, DashboardTab, TABS } from '@/services/admin/requests-view';
 import { ADMIN_SESSION_COOKIE, AdminAuthService, CodeRequestOutcome } from '@/services/admin-auth';
+import { CatalogSyncService } from '@/services/catalog/sync';
 import { ContextService } from '@/services/context';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
@@ -38,11 +39,10 @@ import { adminNamingAuditTemplate } from '@/services/messaging/user/email/templa
 import { NamingAuditService } from '@/services/naming-audit';
 import { PlannerService } from '@/services/planner/planner';
 import { TicketReconcilerService } from '@/services/tickets/reconciler';
-import { TraktSyncService } from '@/services/trakt-sync';
 import { truthy } from '@/utils';
 
 const JOBS = [
-  { name: 'trakt-sync', schedule: 'Every 5 minutes' },
+  { name: 'catalog-sync', schedule: 'Every 5 minutes' },
   { name: 'planner', schedule: 'Every hour' },
   { name: 'jellyfin-sync', schedule: 'Every 15 minutes' },
   { name: 'ticket-sync', schedule: 'Every 5 minutes' },
@@ -72,7 +72,7 @@ export class AdminController {
   constructor(
     private readonly adminAuth: AdminAuthService,
     private readonly contextService: ContextService,
-    private readonly traktSync: TraktSyncService,
+    private readonly catalogSync: CatalogSyncService,
     private readonly jellyfinSync: JellyfinSyncService,
     private readonly planner: PlannerService,
     private readonly ticketReconciler: TicketReconcilerService,
@@ -89,7 +89,7 @@ export class AdminController {
     private readonly channelCleanup: DiscordChannelCleanup,
   ) {
     this.jobHandlers = {
-      'trakt-sync': () => this.traktSync.sync(),
+      'catalog-sync': () => this.catalogSync.sync(),
       planner: () => this.planner.runAll(),
       'jellyfin-sync': () => this.jellyfinSync.sync(),
       'ticket-sync': () => this.ticketReconciler.sync(),

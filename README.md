@@ -47,7 +47,7 @@ Links the engine shows to admins carry query params — `crn-flix-request-id` (p
 
 | Role | Implementation | Code | Contract | Status |
 |---|---|---|---|---|
-| Catalog | Trakt | `plugins/catalogs/trakt` (client) + engine `services/trakt-sync.ts`, `trakt-playhead.ts` | `Catalog` (draft) | Client extracted, sync in the engine |
+| Catalog | Trakt | `plugins/catalogs/trakt` (`TraktCatalog`) | `Catalog`, `CatalogAccountSource` (Jellyfin's Trakt plugin) | Plugin; account linking (`UsersController`) still uses the concrete classes |
 | Metadata | TMDB | `plugins/metadata/tmdb` (client + titles resolver) + engine `services/media-titles.ts` | `MetadataSource` (draft) | Client extracted |
 | Indexer | Loadix | `plugins/indexers/loadix` | `Indexer` | Plugin |
 | Downloader | Fetchr | engine `services/fetchr-sync.ts` | `Downloader` (draft) | Coupled (writes download jobs) |

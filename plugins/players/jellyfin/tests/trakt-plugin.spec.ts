@@ -19,8 +19,8 @@ describe('TraktPlugin', () => {
 
   it('resolves the plugin once and reuses it', async () => {
     const { jellyfin, plugin } = setup();
-    await plugin.getUsersAuthContext();
-    await plugin.getUsersAuthContext();
+    await plugin.listAccounts();
+    await plugin.listAccounts();
     expect(jellyfin.listPlugins).toHaveBeenCalledTimes(1);
     expect(jellyfin.setPluginConfiguration).toHaveBeenCalledTimes(1);
   });
@@ -29,8 +29,8 @@ describe('TraktPlugin', () => {
     const { jellyfin, plugin } = setup();
     jellyfin.listPlugins.mockRejectedValueOnce(new Error('502'));
 
-    await expect(plugin.getUsersAuthContext()).rejects.toThrow('502');
-    await expect(plugin.getUsersAuthContext()).resolves.toEqual([]);
+    await expect(plugin.listAccounts()).rejects.toThrow('502');
+    await expect(plugin.listAccounts()).resolves.toEqual([]);
     expect(jellyfin.listPlugins).toHaveBeenCalledTimes(2);
   });
 });

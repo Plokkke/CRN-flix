@@ -8,7 +8,7 @@ Publier l'engine indépendamment de ses plugins, pour que n'importe qui compose 
 
 | Rôle | Ce qu'il fait | Contrat (`libs/contracts`) | Implémentation | État |
 |---|---|---|---|---|
-| **catalog** | Là où un utilisateur référence ses demandes (watchlist, séries en cours, notes) et sa position de lecture | `Catalog`, `CatalogAccountSource` | Trakt | Client extrait (`plugins/catalogs/trakt`), synchro dans l'engine |
+| **catalog** | Là où un utilisateur référence ses demandes (watchlist, séries en cours, notes) et sa position de lecture | `Catalog`, `CatalogAccountSource` | Trakt | **Plugin** (`plugins/catalogs/trakt`, `TraktCatalog`) ; comptes fournis par `player-jellyfin` |
 | **metadata** | Informe sans porter de demande : titres dans toutes les langues, affiches, identification d'un fichier | `MetadataSource` | TMDB | Client + résolution des titres extraits (`plugins/metadata/tmdb`) |
 | **policy** | Filtre automatique en sortie de catalog : accepter, refuser, faire relire (voir [policy.md](policy.md)) | `Policy` | — | Défini, pas implémenté |
 | **indexer** | Cherche les releases d'un film ou d'une série | `Indexer` | Loadix | **Plugin** (`plugins/indexers/loadix`) |
@@ -17,7 +17,7 @@ Publier l'engine indépendamment de ses plugins, pour que n'importe qui compose 
 | **player** | Sert la bibliothèque, porte les comptes de visionnage | `Player` | Jellyfin | Client extrait (`plugins/players/jellyfin`) |
 | **messaging** | Canal admin (tickets) et canaux utilisateurs (notifications, annonces, codes de connexion) | `UserChannel` | Discord, email | Couplé (`services/messaging/`) |
 
-Seul `Indexer` est implémenté et branché. Les autres contrats sont marqués **DRAFT** : typés d'après le code actuel, à valider au moment d'extraire le plugin correspondant.
+`Indexer`, `Catalog` et `CatalogAccountSource` sont implémentés et branchés. Les autres contrats sont marqués **DRAFT** : typés d'après le code actuel, à valider au moment d'extraire le plugin correspondant.
 
 ## Règles
 
@@ -45,7 +45,7 @@ Build : chaque lib et plugin compile vers `dist/` (`tsc`). Turborepo construit l
 ## Couplages restants, dans l'ordre prévu
 
 1. ~~**Logger**~~ — fait (2026-10-20) : `createLogger` / `setPluginLoggerFactory`, plus aucun plugin ne dépend de Nest.
-2. **Catalog** — l'expansion Trakt → requêtes par épisode et les playheads (`trakt-sync.ts`, `trakt-playhead.ts`) doivent passer dans le plugin, qui implémentera `Catalog`. Les tokens Trakt viennent du plugin Trakt de Jellyfin : `player-jellyfin` implémentera `CatalogAccountSource`, et l'engine fera le lien sans que le catalog connaisse le player.
+2. ~~**Catalog**~~ — fait (2026-10-20) : `TraktCatalog` (expansion, activités, playheads), `TraktPlugin.listAccounts` implémente `CatalogAccountSource`, l'engine relie comptes et utilisateurs (`services/catalog/`). Reste : la liaison de compte (device auth Trakt + écriture du token, `UsersController`) utilise encore les classes concrètes ; un seul catalog est branché à la fois.
 3. **Downloader** — `fetchr-sync.ts` écrit lui-même dans `download_jobs`. Il faut l'inverser (`onCompleted` → l'engine crée le job), puis extraire `plugins/downloaders/fetchr`. Le vocabulaire d'événements Fetchr (`applyFetchrEvent`) part avec lui.
 4. **Player** — Jellyfin implémentera `Player` (`listAvailable`, `refreshLibrary`, `upsertAccount`). `services/context.ts` contient une URL d'affiche Jellyfin en dur.
 5. **Metadata** — `medias.ts:posterUrl` construit l'URL TMDB à partir de `poster_path` : c'est au plugin de fournir l'URL. `media-identifier.ts` appelle `TmdbApiService` directement : à remplacer par `identify`.

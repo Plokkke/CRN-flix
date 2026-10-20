@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { createLogger } from '@crn-flix/contracts';
+import { CatalogAccountSource, createLogger, LinkedCatalogAccount } from '@crn-flix/contracts';
 
 import { JellyfinMediaService } from './api';
 
@@ -57,16 +57,11 @@ export const DEFAULT_TRAKT_PLUGIN_CONFIG = {
   ExtraLogging: false,
 } as const;
 
-export type UserAuthContext = {
-  jellyfinId: string;
-  accessToken: string;
-};
-
 /**
  * Resolves the Jellyfin plugin lazily: Jellyfin may be down when the engine boots,
  * and nothing else needs it until the first Trakt sync or user registration.
  */
-export class TraktPlugin {
+export class TraktPlugin implements CatalogAccountSource {
   private static readonly logger = createLogger(TraktPlugin.name);
 
   private pluginId: Promise<string> | null = null;
@@ -147,11 +142,12 @@ export class TraktPlugin {
     await this.jellyfin.setPluginConfiguration(await this.resolvePluginId(), pluginConfig);
   }
 
-  async getUsersAuthContext(): Promise<UserAuthContext[]> {
+  /** Trakt tokens of every Jellyfin user who linked their account. */
+  async listAccounts(): Promise<LinkedCatalogAccount[]> {
     const pluginConfig = await this.getFullConfig();
     return pluginConfig.TraktUsers.filter((c) => c.AccessToken).map((c) => ({
-      jellyfinId: c.LinkedMbUserId,
-      accessToken: c.AccessToken!,
+      playerAccountId: c.LinkedMbUserId,
+      credentials: { accessToken: c.AccessToken! },
     }));
   }
 }

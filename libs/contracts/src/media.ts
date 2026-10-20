@@ -35,3 +35,6 @@ export type Playhead = {
   nextSeason: number | null;
   nextEpisode: number | null;
 };
+
+/** Nothing watched yet: every episode lies ahead. */
+export const START_OF_SHOW: Playhead = { nextSeason: 0, nextEpisode: 0 };

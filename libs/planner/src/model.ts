@@ -1,4 +1,4 @@
-import { DEFAULT_EPISODE_RUNTIME_MINUTES, Playhead } from '@crn-flix/contracts';
+import { DEFAULT_EPISODE_RUNTIME_MINUTES, Playhead, START_OF_SHOW } from '@crn-flix/contracts';
 
 /**
  * Pure domain model of the download planner. Everything here is derived state:
@@ -55,11 +55,9 @@ export function runtimeHoursOf(episode: PlannerEpisode): number {
  * A user's position in a show. `null` season/episode means the user completed
  * or dropped the show: nothing is urgent for them anymore.
  */
-export { Playhead };
+export { Playhead, START_OF_SHOW };
 
 /** A user who never started the show: everything lies ahead of them. */
-export const START_OF_SHOW: Playhead = { nextSeason: 0, nextEpisode: 0 };
-
 export function sortEpisodes(episodes: PlannerEpisode[]): PlannerEpisode[] {
   return [...episodes].sort((a, b) => a.season - b.season || a.episode - b.episode);
 }

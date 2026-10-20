@@ -7,6 +7,7 @@ import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
 
 import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
+import { CatalogSyncService } from '@/services/catalog/sync';
 import {
   DownloadJobEntity,
   DownloadJobEvents,
@@ -38,7 +39,6 @@ import { TICKET_ID_METADATA_KEY, TicketCategory } from '@/services/tickets/model
 import { actionTitle } from '@/services/tickets/presenter';
 import { TicketReconcilerService } from '@/services/tickets/reconciler';
 import { TicketService } from '@/services/tickets/ticket.service';
-import { TraktSyncService } from '@/services/trakt-sync';
 
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
@@ -53,7 +53,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   constructor(
     readonly config: ConfigService<Config, true>,
     private readonly schedulerRegistry: SchedulerRegistry,
-    private readonly traktSync: TraktSyncService,
+    private readonly catalogSync: CatalogSyncService,
     private readonly jellyfinSync: JellyfinSyncService,
     private readonly planner: PlannerService,
     private readonly ticketService: TicketService,
@@ -78,7 +78,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     );
 
     if (process.env.NODE_ENV === 'production') {
-      this.registerCronJob('trakt-sync-job', '*/5 * * * *', () => this.runSync());
+      this.registerCronJob('catalog-sync-job', '*/5 * * * *', () => this.runSync());
       this.registerCronJob('planner-job', '0 * * * *', () => this.planner.runAll());
       this.registerCronJob('jellyfin-sync-job', '*/15 * * * *', () => this.jellyfinSync.sync());
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
@@ -110,7 +110,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
     this.isRunning = true;
     try {
-      await this.traktSync.sync();
+      await this.catalogSync.sync();
     } catch (error) {
       AppService.logger.error(`Sync failed: ${error instanceof Error ? error.message : error}`);
       if (error instanceof Error && error.stack) {
