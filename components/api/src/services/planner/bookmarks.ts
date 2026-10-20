@@ -10,6 +10,8 @@ import {
   targetImdbId,
 } from '@crn-flix/contracts';
 
+import { IntegrationTracker } from '@/services/integrations/monitor';
+
 export type BookmarkStore = {
   listByImdbId(imdbId: string): Promise<Map<string, IndexerBookmark>>;
   save(indexerName: string, imdbId: string, bookmark: IndexerBookmark | null): Promise<void>;
@@ -31,6 +33,7 @@ export async function findAcrossIndexers(
   prefs: EnginePreferences,
   store: BookmarkStore,
   logger: Logger,
+  integrations: IntegrationTracker,
 ): Promise<IndexersFindings> {
   const imdbId = targetImdbId(target);
   const bookmarks = await store.listByImdbId(imdbId).catch((err: Error) => {
@@ -43,7 +46,7 @@ export async function findAcrossIndexers(
   for (const indexer of indexers) {
     const before = bookmarks.get(indexer.name) ?? null;
     try {
-      const result = await indexer.find(target, prefs, before);
+      const result = await integrations.track(indexer.name, 'find', () => indexer.find(target, prefs, before));
       candidates.push(...result.candidates);
       referenced ||= typeof result.bookmark?.pageUrl === 'string';
       if (!_.isEqual(result.bookmark, before)) {

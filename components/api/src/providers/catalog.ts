@@ -13,6 +13,7 @@ import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { UsersRepository } from '@/services/database/users';
+import { IntegrationMonitor } from '@/services/integrations/monitor';
 import { PlannerService } from '@/services/planner/planner';
 import { TicketService } from '@/services/tickets/ticket.service';
 
@@ -38,9 +39,12 @@ export const catalogProviders: Provider[] = [
   },
   {
     provide: CatalogPlayheadService,
-    inject: [CatalogAccountsService, CATALOG],
-    useFactory: (accounts: CatalogAccountsService, catalog: Catalog): CatalogPlayheadService =>
-      new CatalogPlayheadService(accounts, catalog),
+    inject: [CatalogAccountsService, CATALOG, IntegrationMonitor],
+    useFactory: (
+      accounts: CatalogAccountsService,
+      catalog: Catalog,
+      integrations: IntegrationMonitor,
+    ): CatalogPlayheadService => new CatalogPlayheadService(accounts, catalog, integrations),
   },
   {
     provide: CatalogSyncService,
@@ -53,6 +57,7 @@ export const catalogProviders: Provider[] = [
       RequestsRepository,
       PlannerService,
       TicketService,
+      IntegrationMonitor,
     ],
     useFactory: (
       configService: ConfigService<Config, true>,
@@ -63,6 +68,7 @@ export const catalogProviders: Provider[] = [
       requests: RequestsRepository,
       planner: PlannerService,
       tickets: TicketService,
+      integrations: IntegrationMonitor,
     ): CatalogSyncService =>
       new CatalogSyncService(
         configService.get('sync'),
@@ -73,6 +79,7 @@ export const catalogProviders: Provider[] = [
         requests,
         planner,
         tickets,
+        integrations,
       ),
   },
 ];

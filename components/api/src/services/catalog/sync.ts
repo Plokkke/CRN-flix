@@ -10,6 +10,7 @@ import { MediaInfos, MediasRepository, MediaType } from '@/services/database/med
 import { RequestsRepository, RequestStatus, SyncRequestSnapshot } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { type UserEntity } from '@/services/database/users';
+import { IntegrationTracker } from '@/services/integrations/monitor';
 import { PlannerService } from '@/services/planner/planner';
 import { TicketCategory } from '@/services/tickets/model';
 import { TicketService } from '@/services/tickets/ticket.service';
@@ -72,6 +73,7 @@ export class CatalogSyncService {
     private readonly requestsRepository: RequestsRepository,
     private readonly planner: PlannerService,
     private readonly ticketService: TicketService,
+    private readonly integrations: IntegrationTracker,
   ) {}
 
   async sync(): Promise<void> {
@@ -169,7 +171,10 @@ export class CatalogSyncService {
    * re-plan signal for every show in progress (playheads are read live by the planner).
    */
   private async listRequests(account: CatalogAccount, kind: RequestReason): Promise<MediaInfos[]> {
-    const medias = (await this.catalog.listRequests(account, kind)).map(toMediaInfos);
+    const items = await this.integrations.track(this.catalog.name, `listRequests:${kind}`, () =>
+      this.catalog.listRequests(account, kind),
+    );
+    const medias = items.map(toMediaInfos);
     if (kind === RequestReason.Progress) {
       const imdbIds = _.uniq(medias.map((media) => media.imdbId).filter(Boolean));
       imdbIds.forEach((imdbId) => this.planner.schedulePass({ kind: 'show', imdbId }));
@@ -269,7 +274,9 @@ export class CatalogSyncService {
       return new Set(kinds);
     }
 
-    const activity = await this.catalog.lastActivity(account);
+    const activity = await this.integrations.track(this.catalog.name, 'lastActivity', () =>
+      this.catalog.lastActivity(account),
+    );
     return new Set(
       kinds.filter((kind) => {
         const lastSync = lastSyncByKind[kind];

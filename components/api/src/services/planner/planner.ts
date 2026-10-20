@@ -38,6 +38,7 @@ import {
 import { PlannerFindingsRepository } from '@/services/database/planner-findings';
 import { NewRequestState, RequestStatesRepository } from '@/services/database/request-states';
 import { PlannerStateRow, RequestsRepository, RequestStatus } from '@/services/database/requests';
+import { IntegrationTracker } from '@/services/integrations/monitor';
 import { MediaTitlesService } from '@/services/media-titles';
 import { truthy } from '@/utils';
 
@@ -133,6 +134,7 @@ export class PlannerService implements OnModuleDestroy {
     private readonly states: RequestStatesRepository,
     private readonly findings: PlannerFindingsRepository,
     private readonly mediaTitles: MediaTitlesService,
+    private readonly integrations: IntegrationTracker,
   ) {
     this.downloader.onLiveChanged(() => void this.onDownloadsChanged());
   }
@@ -461,7 +463,15 @@ export class PlannerService implements OnModuleDestroy {
     // Cached unassessed: the same findings serve any preference relaxation the admin applies.
     const findings = await this.cache.withCache(
       `planner:candidates:${key}:${fingerprint}`,
-      () => findAcrossIndexers(this.indexers, indexerTarget, prefs, this.bookmarks, PlannerService.logger),
+      () =>
+        findAcrossIndexers(
+          this.indexers,
+          indexerTarget,
+          prefs,
+          this.bookmarks,
+          PlannerService.logger,
+          this.integrations,
+        ),
       CANDIDATES_CACHE_TTL_SECONDS,
     );
     return {
