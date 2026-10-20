@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/reports
+**/.turbo
+**/.env
+**/.env.*
+.git
+.idea
+.vscode
+terraform
+infrastructure
+knowledge
