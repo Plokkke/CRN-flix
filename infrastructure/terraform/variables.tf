@@ -63,7 +63,7 @@ variable "user_messaging" {
 
 variable "log_level" {
   type    = string
-  default = "info"
+  default = "debug"
 }
 
 variable "service_name" {
@@ -97,7 +97,7 @@ variable "fetchr_downloads_prefix" {
 variable "loadix" {
   description = "Loadix indexer hosts; null disables the indexer"
   type        = object({ api_host = string, site_host = string })
-  default     = { api_host = "api.loadix.fun", site_host = "loadix.fun" }
+  default     = { api_host = "https://api.loadix.fun", site_host = "https://loadix.fun" }
   nullable    = true
 }
 
@@ -115,6 +115,6 @@ variable "indexer_preferences" {
     languages        = ["truefrench", "multi", "french"]
     hosts            = ["1fichier"]
     size_tolerance   = 1.25
-    bytes_per_minute = { "uhd-4k" = 200000000, "hd-1080p" = 50000000, "hd-720p" = 25000000, "sd" = 10000000 }
+    bytes_per_minute = { "uhd-4k" = 80000000, "hd-1080p" = 24000000, "hd-720p" = 12000000, "sd" = 6000000 }
   }
 }
