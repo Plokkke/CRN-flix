@@ -38,6 +38,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   image:
+    name: image (${{ matrix.component.name }})
     needs: release
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest

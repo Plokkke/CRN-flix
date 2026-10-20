@@ -24,6 +24,7 @@ jobs:
       - run: pnpm validate
 
   docker:
+    name: docker (${{ matrix.component.name }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
