@@ -87,6 +87,21 @@ async function rateLimitHandler<T, D>(
   return axios(config);
 }
 
+const OUT_OF_BAND_REDIRECT_URI = 'urn:ietf:wg:oauth:2.0:oob';
+/** `invalid_grant`: the refresh token was revoked, already used or expired. */
+const REFUSED_GRANT_STATUSES = [400, 401];
+
+function toTokens(data: unknown): TraktDeviceAuthResult {
+  const tokens = deviceTokenSchema.parse(data);
+  // Trakt returns `created_at` (unix s) and `expires_in` (s); compose absolute expiration.
+  const expirationMs = (tokens.created_at + tokens.expires_in) * 1000;
+  return {
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    accessTokenExpiration: new Date(expirationMs).toISOString(),
+  };
+}
+
 function getAuthorization(user: UserAuthCtxt): string {
   return `Bearer ${user.accessToken}`;
 }
@@ -236,14 +251,23 @@ export class TraktApi {
       throw new Error(`Trakt device authorization failed with status ${response.status}`);
     }
 
-    const tokens = deviceTokenSchema.parse(response.data);
-    // Trakt returns `created_at` (unix s) and `expires_in` (s); compose absolute expiration.
-    const expirationMs = (tokens.created_at + tokens.expires_in) * 1000;
-    return {
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      accessTokenExpiration: new Date(expirationMs).toISOString(),
-    };
+    return toTokens(response.data);
+  }
+
+  /** Trades a refresh token for a new pair (Trakt revokes the old one); null when Trakt refuses it. */
+  async refreshTokens(refreshToken: string): Promise<TraktDeviceAuthResult | null> {
+    const response = await this.api.post<unknown>(
+      '/oauth/token',
+      {
+        refresh_token: refreshToken,
+        client_id: this.config.clientId,
+        client_secret: this.config.clientSecret,
+        redirect_uri: OUT_OF_BAND_REDIRECT_URI,
+        grant_type: 'refresh_token',
+      },
+      { validateStatus: (status) => status === 200 || REFUSED_GRANT_STATUSES.includes(status) },
+    );
+    return response.status === 200 ? toTokens(response.data) : null;
   }
 
   private async requestUserSettings(user: UserAuthCtxt): Promise<UserSettings> {

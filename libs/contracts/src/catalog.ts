@@ -22,6 +22,16 @@ export type LinkedCatalogAccount = {
 /** Where catalog credentials live (today: the player's Trakt plugin configuration). */
 export interface CatalogAccountSource {
   listAccounts(): Promise<LinkedCatalogAccount[]>;
+  /** Stores credentials a catalog renewed, so every holder of the account keeps working. */
+  saveCredentials(playerAccountId: string, credentials: unknown): Promise<void>;
+}
+
+/** The catalog refused to renew an account's credentials: only the user can link it again. */
+export class CatalogAccountRevokedError extends Error {
+  constructor(reason: string) {
+    super(`Catalog account must be linked again: ${reason}`);
+    this.name = 'CatalogAccountRevokedError';
+  }
 }
 
 /** An account as the engine hands it to a catalog: `userRef` is the engine's stable user id. */
@@ -50,4 +60,9 @@ export interface Catalog {
   listRequests(account: CatalogAccount, reason: RequestReason): Promise<CatalogItem[]>;
   /** `START_OF_SHOW` when the user never watched it, nulls when completed or dropped. */
   playhead(account: CatalogAccount, showImdbId: string): Promise<Playhead>;
+  /**
+   * Fresh credentials when the current ones expire soon, null when they are still good;
+   * throws `CatalogAccountRevokedError` when the catalog refuses to renew them.
+   */
+  renewCredentials(credentials: unknown, now: Date): Promise<unknown>;
 }

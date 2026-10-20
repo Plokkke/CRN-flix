@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   Catalog,
   CatalogAccount,
+  CatalogAccountRevokedError,
   CatalogActivity,
   CatalogItem,
   createLogger,
@@ -14,7 +15,7 @@ import {
   START_OF_SHOW,
 } from '@crn-flix/contracts';
 
-import { TraktApi } from './api';
+import { TraktApi, TraktDeviceAuthResult } from './api';
 import { Episode, Media, Movie, MovieDetails, ProgressShow, Show, UserAuthCtxt } from './types';
 
 export type TraktCatalogConfig = {
@@ -22,7 +23,14 @@ export type TraktCatalogConfig = {
   ratingThreshold: number;
 };
 
-const credentialsSchema = z.object({ accessToken: z.string() });
+const credentialsSchema = z.object({
+  accessToken: z.string().optional(),
+  refreshToken: z.string().optional(),
+  accessTokenExpiration: z.string().optional(),
+});
+
+/** Renewed a day ahead, so a sync never runs on an expired token. */
+const RENEW_BEFORE_MS = 24 * 60 * 60 * 1000;
 
 const ACTIVITIES_BY_REASON: Record<RequestReason, string[]> = {
   [RequestReason.Watchlisted]: ['watchlist.updated_at'],
@@ -106,8 +114,28 @@ export class TraktCatalog implements Catalog {
     return { nextSeason: progress.next_episode.season, nextEpisode: progress.next_episode.number };
   }
 
+  async renewCredentials(credentials: unknown, now: Date): Promise<TraktDeviceAuthResult | null> {
+    const { accessToken, refreshToken, accessTokenExpiration } = credentialsSchema.parse(credentials);
+    const remainingMs = accessTokenExpiration ? Date.parse(accessTokenExpiration) - now.getTime() : Infinity;
+    if (accessToken && remainingMs > RENEW_BEFORE_MS) {
+      return null;
+    }
+    if (!refreshToken) {
+      throw new CatalogAccountRevokedError('no refresh token');
+    }
+    const renewed = await this.api.refreshTokens(refreshToken);
+    if (!renewed) {
+      throw new CatalogAccountRevokedError('Trakt refused the refresh token');
+    }
+    return renewed;
+  }
+
   private authOf(account: CatalogAccount): UserAuthCtxt {
-    return { id: account.userRef, accessToken: credentialsSchema.parse(account.credentials).accessToken };
+    const { accessToken } = credentialsSchema.parse(account.credentials);
+    if (!accessToken) {
+      throw new CatalogAccountRevokedError('no access token');
+    }
+    return { id: account.userRef, accessToken };
   }
 
   /** Full show expansion: watched episodes are simply already fulfilled or not wanted. */

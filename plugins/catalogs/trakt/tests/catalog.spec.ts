@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 
-import { CatalogAccount, RequestReason, START_OF_SHOW } from '@crn-flix/contracts';
+import { CatalogAccount, CatalogAccountRevokedError, RequestReason, START_OF_SHOW } from '@crn-flix/contracts';
 
 import { Episode, ProgressShow, Show, TraktApi, TraktCatalog } from '../src';
 
@@ -36,6 +36,7 @@ function buildApi() {
     requestUserWatched: jest.fn().mockResolvedValue([{ show }]),
     listExcludedShowIds: jest.fn().mockResolvedValue(new Set()),
     requestShowProgress: jest.fn().mockResolvedValue({ aired: 10, completed: 3, next_episode: null }),
+    refreshTokens: jest.fn().mockResolvedValue({ accessToken: 'new', refreshToken: 'r2', accessTokenExpiration: 'x' }),
   };
 }
 
@@ -124,6 +125,40 @@ describe('TraktCatalog', () => {
       const { catalog } = buildCatalog();
 
       await expect(catalog.playhead(account, 'tt0000000')).resolves.toEqual(START_OF_SHOW);
+    });
+  });
+
+  describe('renewCredentials', () => {
+    const NOW = new Date('2026-10-20T12:00:00Z');
+    const expiringAt = (iso: string) => ({ accessToken: 'tok', refreshToken: 'r1', accessTokenExpiration: iso });
+
+    it('keeps credentials valid for more than a day', async () => {
+      const { api, catalog } = buildCatalog();
+
+      await expect(catalog.renewCredentials(expiringAt('2026-10-22T12:00:00Z'), NOW)).resolves.toBeNull();
+      expect(api.refreshTokens).not.toHaveBeenCalled();
+    });
+
+    it('renews credentials expiring within a day, or already expired', async () => {
+      const { api, catalog } = buildCatalog();
+
+      await expect(catalog.renewCredentials(expiringAt('2026-10-21T06:00:00Z'), NOW)).resolves.toMatchObject({
+        accessToken: 'new',
+      });
+      await catalog.renewCredentials(expiringAt('2026-10-18T02:04:29Z'), NOW);
+      expect(api.refreshTokens).toHaveBeenCalledWith('r1');
+    });
+
+    it('asks the user to link again when Trakt refuses the refresh token or none exists', async () => {
+      const { api, catalog } = buildCatalog();
+      api.refreshTokens.mockResolvedValue(null);
+
+      await expect(catalog.renewCredentials(expiringAt('2026-10-18T02:04:29Z'), NOW)).rejects.toThrow(
+        CatalogAccountRevokedError,
+      );
+      await expect(catalog.renewCredentials({ accessTokenExpiration: '0001-01-01T00:00:00Z' }, NOW)).rejects.toThrow(
+        CatalogAccountRevokedError,
+      );
     });
   });
 });
