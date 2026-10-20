@@ -1,6 +1,5 @@
+import { ServiceNotice } from '@crn-flix/contracts';
 import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from '@crn-flix/design-system';
-
-import { ServiceNotice } from '@/services/messaging/user';
 
 const TITLE_ICON: Record<ServiceNotice['tone'], string> = {
   warning: '⚠️',

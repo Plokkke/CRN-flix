@@ -54,7 +54,7 @@ Links the engine shows to admins carry query params — `crn-flix-request-id` (p
 | Layout | Jellyfin conventions | `plugins/layouts/jellyfin` (`JellyfinLayout`) | `LibraryLayout` | Plugin; file identification and moves stay in the engine |
 | Player | Jellyfin | `plugins/players/jellyfin` (`JellyfinPlayer`, Trakt plugin tokens) | `Player`, `CatalogAccountSource` | Plugin; the naming audit still reads library paths from the client directly |
 | Messaging (admin) | Discord | engine `modules/discord/`, `services/messaging/admin/` | ticket adapter (`services/tickets/`) | Coupled |
-| Messaging (users) | Email | engine `services/messaging/user/` | `UserChannel` (draft) | Coupled; the Discord DM channel is not really implemented and will not be ported |
+| Messaging (users) | Email | `plugins/messaging-user/email` (`EmailChannel`) | `UserChannel` | Plugin; batching and dispatch stay in the engine (`services/messaging/user/all.ts`) |
 | Policy | — | — | `Policy` | Defined only |
 
 *Draft* contracts are typed in `libs/contracts` but not implemented by any plugin yet. Couplings left on the way, in order, are listed in [`knowledge/plugins.md`](knowledge/plugins.md).
@@ -83,6 +83,7 @@ plugins/
 ├── metadata/tmdb         @crn-flix/metadata-tmdb
 ├── layouts/jellyfin      @crn-flix/layout-jellyfin
 ├── downloaders/fetchr    @crn-flix/downloader-fetchr
+├── messaging-user/email  @crn-flix/messaging-user-email
 └── players/jellyfin      @crn-flix/player-jellyfin
 infrastructure/compose/   production compose file + deploy script
 knowledge/        design docs (plugins, policy, download planner)

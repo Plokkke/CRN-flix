@@ -8,6 +8,7 @@ import { traktConfigSchema } from '@crn-flix/catalog-trakt';
 import { Host, Language, Quality } from '@crn-flix/contracts';
 import { fetchrConfigSchema } from '@crn-flix/downloader-fetchr';
 import { loadixConfigSchema } from '@crn-flix/indexer-loadix';
+import { emailConfigSchema } from '@crn-flix/messaging-user-email';
 import { tmdbConfigSchema } from '@crn-flix/metadata-tmdb';
 import { jellyfinConfigSchema } from '@crn-flix/player-jellyfin';
 
@@ -32,7 +33,6 @@ import { jellyfinProvider } from '@/providers/jellyfin';
 import { mediaTitlesProviders } from '@/providers/media-titles';
 import { adminMessagingProviders } from '@/providers/messaging/admin';
 import { allUserMessagingProvider, announcementProvider } from '@/providers/messaging/all';
-import { userMessagingProviders } from '@/providers/messaging/user';
 import { namingAuditProviders } from '@/providers/naming-audit';
 import { indexersRegistryProvider, plannerProvider } from '@/providers/planner';
 import { playerProviders } from '@/providers/player';
@@ -48,7 +48,6 @@ import { syncConfigSchema } from '@/services/catalog/sync';
 import { DownloadProgressService } from '@/services/download-progress';
 import { HealthChecksService } from '@/services/health-checks';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
-import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
 import { namingAuditConfigSchema } from '@/services/naming-audit';
 import { StartupRecoveryService } from '@/services/startup-recovery';
 
@@ -61,7 +60,7 @@ export const configSchema = z.object({
   sync: syncConfigSchema,
   datasource: syncDataSourceConfigSchema,
   jellyfin: jellyfinConfigSchema,
-  mailing: mailingConfigSchema,
+  mailing: emailConfigSchema,
   discord: discordConfigSchema,
   indexer: z.object({
     loadix: loadixConfigSchema.nullable(),
@@ -147,7 +146,6 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
-      ...userMessagingProviders,
       allUserMessagingProvider,
       announcementProvider,
       ...adminMessagingProviders,

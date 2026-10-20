@@ -1,14 +1,11 @@
 import { Controller, Get, Header, Inject, NotFoundException, Param } from '@nestjs/common';
 
-import { MetadataSource } from '@crn-flix/contracts';
+import { MetadataSource, RequestNotice, RequestOutcome, ShowcaseItem } from '@crn-flix/contracts';
+import { registeredTemplate, requestUpdateTemplate, serviceNoticeTemplate } from '@crn-flix/messaging-user-email';
 
 import { METADATA } from '@/providers/media-titles';
 import { buildPresetNotice, isNoticePreset } from '@/services/announcements/presets';
 import { ContextService } from '@/services/context';
-import { RequestEntity, RequestStatus } from '@/services/database/requests';
-import { registeredTemplate } from '@/services/messaging/user/email/templates/registered';
-import { requestUpdateTemplate } from '@/services/messaging/user/email/templates/request-update';
-import { serviceNoticeTemplate } from '@/services/messaging/user/email/templates/service-notice';
 
 @Controller('mailing')
 export class MailingController {
@@ -27,9 +24,9 @@ export class MailingController {
   async previewRegistrationEmail(): Promise<string> {
     const { html } = registeredTemplate({
       serviceName: this.contextService.name,
-      mediaServerUrl: this.contextService.mediaServerUrl,
+      playerUrl: this.contextService.mediaServerUrl,
       userGuideUrl: this.contextService.userGuideUrl,
-      traktLinkUrl: this.contextService.getTraktLinkUrl('978ab97f-817d-4e9a-86b4-637b12dfc34c'),
+      catalogLinkUrl: this.contextService.getTraktLinkUrl('978ab97f-817d-4e9a-86b4-637b12dfc34c'),
       userName: 'UserName',
       password: 'Str0ngP4ssW0rd!',
       movies: await this.contextService.getRandomMedias(5, 'movie'),
@@ -54,62 +51,30 @@ export class MailingController {
 
   @Get(['media-request-updated/:status', 'media-request-updated'])
   @Header('content-type', 'text/html')
-  async previewMediaRequestUpdatedEmail(
-    @Param('status') status: RequestStatus = RequestStatus.Pending,
-  ): Promise<string> {
-    const statuses = Object.values(RequestStatus);
-    const statusIdx = statuses.indexOf(status);
-    const nextStatus = statuses[(statusIdx + 1) % statuses.length];
+  async previewMediaRequestUpdatedEmail(@Param('status') status: RequestOutcome = 'fulfilled'): Promise<string> {
+    const nextStatus: RequestOutcome = status === 'fulfilled' ? 'rejected' : 'fulfilled';
 
     const [movie] = await this.contextService.getRandomMedias(1, 'movie');
     const [show] = await this.contextService.getRandomMedias(1, 'show');
     const [episode] = await this.contextService.getRandomMedias(1, 'episode');
-
-    const { html: originalHtml } = requestUpdateTemplate({
-      serviceName: this.contextService.name,
-      mediaServerUrl: this.contextService.mediaServerUrl,
-      requests: [
-        {
-          mediaId: 'media.id',
-          status,
-          media: {
-            imdbId: show.imdbId!,
-            type: show.type,
-            title: show.title,
-            posterUrl: await this.posterUrlOf(show.imdbId!),
-            year: 2025,
-            seasonNumber: null,
-            episodeNumber: null,
-          },
-        } as unknown as RequestEntity,
-        {
-          mediaId: 'media.id',
-          status,
-          media: {
-            imdbId: movie.imdbId!,
-            type: movie.type,
-            title: movie.title,
-            posterUrl: await this.posterUrlOf(movie.imdbId!),
-            year: 2025,
-            seasonNumber: null,
-            episodeNumber: null,
-          },
-        } as unknown as RequestEntity,
-        {
-          mediaId: 'media.id',
-          status,
-          media: {
-            imdbId: episode.imdbId!,
-            type: episode.type,
-            title: episode.title,
-            posterUrl: await this.posterUrlOf(episode.imdbId!),
-            year: 2025,
-            seasonNumber: 2,
-            episodeNumber: 4,
-          },
-        } as unknown as RequestEntity,
-      ],
+    const notice = async (
+      item: ShowcaseItem,
+      season: number | null,
+      number: number | null,
+    ): Promise<RequestNotice> => ({
+      title: item.title,
+      year: 2025,
+      type: item.type === 'movie' ? 'movie' : 'episode',
+      seasonNumber: season,
+      episodeNumber: number,
+      outcome: status,
+      posterUrl: await this.posterUrlOf(item.imdbId),
     });
+
+    const { html: originalHtml } = requestUpdateTemplate(
+      { serviceName: this.contextService.name, playerUrl: this.contextService.mediaServerUrl },
+      [await notice(show, null, null), await notice(movie, null, null), await notice(episode, 2, 4)],
+    );
 
     // Add a button to navigate to the next status
     const nextStatusButton = `

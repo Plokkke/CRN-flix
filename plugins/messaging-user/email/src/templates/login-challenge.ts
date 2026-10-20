@@ -1,6 +1,5 @@
+import { LoginChallenge } from '@crn-flix/contracts';
 import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from '@crn-flix/design-system';
-
-import { LoginChallenge } from '@/services/messaging/user';
 
 export const loginChallengeTemplate = (challenge: LoginChallenge): { subject: string; html: string; text: string } => {
   const subject = `Votre code de connexion ${challenge.serviceName}`;

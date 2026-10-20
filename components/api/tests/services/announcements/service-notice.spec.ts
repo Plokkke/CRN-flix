@@ -1,5 +1,6 @@
+import { serviceNoticeTemplate } from '@crn-flix/messaging-user-email';
+
 import { buildPresetNotice, NOTICE_PRESETS } from '@/services/announcements/presets';
-import { serviceNoticeTemplate } from '@/services/messaging/user/email/templates/service-notice';
 
 const ctx = { serviceName: 'CRN-Flix', mediaServerUrl: 'https://jellyfin.test' };
 
