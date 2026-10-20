@@ -28,6 +28,8 @@ export class UserMessagingDisabledError extends Error {
 }
 
 const SHOWCASE_SIZE = 5;
+const VERIFY_RETRY_MS = 60_000;
+const VERIFY_REFRESH_MS = 15 * 60_000;
 const SEPARATOR = '\u0000';
 
 const recipientOf = (ctxt: UserMessagingCtxt, name?: string): Recipient => ({
@@ -60,6 +62,8 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
 
   private readonly channelByKind: Map<string, UserChannel>;
   private readonly queue: DebouncedRequestQueue;
+  private reachable = false;
+  private verifyTimer: NodeJS.Timeout | null = null;
 
   constructor(
     channels: UserChannel[],
@@ -71,21 +75,48 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
     this.queue = new DebouncedRequestQueue((key, requests) => this.flushRequests(key, requests));
   }
 
-  async onModuleInit(): Promise<void> {
+  onModuleInit(): void {
     if (this.mode === 'dry-run') {
       AllUserMessaging.logger.warn('User messaging in DRY-RUN: nothing reaches users, notifications stay queued');
     }
-    for (const channel of this.channelByKind.values()) {
-      await channel.verify?.().catch((error: unknown) => {
-        AllUserMessaging.logger.error(
-          `${channel.kind} channel verification failed: ${error instanceof Error ? error.message : error}`,
-        );
-      });
-    }
+    void this.verifyChannels();
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.verifyTimer) {
+      clearTimeout(this.verifyTimer);
+    }
     await this.queue.onEmpty();
+  }
+
+  /** Whether every channel last proved it can send; false until the first check ends. */
+  get canReachUsers(): boolean {
+    return this.reachable;
+  }
+
+  /** Off the boot path: users cannot be served without a channel, but the engine still starts. */
+  private async verifyChannels(): Promise<void> {
+    const results = await Promise.all([...this.channelByKind.values()].map((channel) => this.verifyChannel(channel)));
+    const reachable = results.every(Boolean);
+    if (reachable !== this.reachable) {
+      const state = reachable ? 'every user channel can send' : 'users cannot be reached, retrying every minute';
+      AllUserMessaging.logger[reachable ? 'log' : 'error'](`User messaging: ${state}`);
+    }
+    this.reachable = reachable;
+    this.verifyTimer = setTimeout(() => void this.verifyChannels(), reachable ? VERIFY_REFRESH_MS : VERIFY_RETRY_MS);
+    this.verifyTimer.unref();
+  }
+
+  private async verifyChannel(channel: UserChannel): Promise<boolean> {
+    try {
+      await channel.verify?.();
+      return true;
+    } catch (error) {
+      AllUserMessaging.logger.error(
+        `${channel.kind} channel verification failed: ${error instanceof Error ? error.message : error}`,
+      );
+      return false;
+    }
   }
 
   hasChannel(kind: string): boolean {

@@ -6,6 +6,7 @@ import { Downloader } from '@crn-flix/contracts';
 
 import { DOWNLOADER } from '@/providers/downloader';
 import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
+import { AllUserMessaging } from '@/services/messaging/user/all';
 
 const POOL_PROBE_TIMEOUT_MS = 2000;
 
@@ -17,11 +18,14 @@ export class HealthChecksService implements OnModuleInit {
     @Inject(SYNC_DATASOURCE) private readonly pool: Pool,
     @Inject(DOWNLOADER) private readonly downloader: Downloader,
     private readonly registry: HealthRegistryService,
+    private readonly messaging: AllUserMessaging,
   ) {}
 
   onModuleInit(): void {
     // The downloader is optional at runtime (auto-reconnect): its absence must not mark the engine unready.
     this.registry.addReadinessCheck('postgres', () => this.checkPostgres());
+    // Without a user channel nobody can register, log in or be notified: unready, so the platform alerts.
+    this.registry.addReadinessCheck('user-messaging', () => this.messaging.canReachUsers);
     this.registry.addLivenessCheck('process', () => true);
     this.registry.addLivenessCheck('downloader', () => this.reportDownloader());
   }

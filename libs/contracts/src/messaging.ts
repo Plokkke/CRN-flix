@@ -64,7 +64,7 @@ export type ServiceNotice = {
  */
 export interface UserChannel {
   readonly kind: string;
-  /** Checks the channel can send (credentials, connection); failures are only reported. */
+  /** Checks the channel can send (credentials, connection); throws when it cannot. */
   verify?(): Promise<void>;
   error(to: Recipient, message: string): Promise<void>;
   welcome(to: Recipient, welcome: Welcome): Promise<void>;

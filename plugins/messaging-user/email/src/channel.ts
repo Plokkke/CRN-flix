@@ -30,6 +30,9 @@ export type EmailConfig = z.infer<typeof emailConfigSchema>;
 
 type Rendered = { subject: string; html: string; text: string };
 
+/** Nodemailer waits 2 minutes by default before giving up on an unresponsive server. */
+const SMTP_TIMEOUT_MS = 15_000;
+
 /** Sends through Gmail's SMTP; `users.messaging_key = 'email'`, the address is the messaging id. */
 export class EmailChannel implements UserChannel {
   private static readonly logger = createLogger(EmailChannel.name);
@@ -46,12 +49,14 @@ export class EmailChannel implements UserChannel {
     this.transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: { user: config.gmailUser, pass: config.gmailPassword },
+      connectionTimeout: SMTP_TIMEOUT_MS,
+      greetingTimeout: SMTP_TIMEOUT_MS,
+      socketTimeout: SMTP_TIMEOUT_MS,
     });
   }
 
   async verify(): Promise<void> {
     await this.transporter.verify();
-    EmailChannel.logger.log('SMTP connection verified successfully');
   }
 
   error(to: Recipient, message: string): Promise<void> {
