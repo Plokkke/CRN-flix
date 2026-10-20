@@ -82,3 +82,26 @@ describe('TraktApi hidden and dropped shows', () => {
     expect(get).not.toHaveBeenCalledWith('/shows/2/progress/watched', expect.anything());
   });
 });
+
+describe('TraktApi progress of watched shows', () => {
+  const failingProgress = (failing: string[]) => (url: string) =>
+    failing.includes(url) ? Promise.reject(new Error('getaddrinfo EAI_AGAIN api.trakt.tv')) : respond(url);
+
+  beforeEach(() => {
+    RESPONSES['/sync/watched/shows'] = [watched(3, 'Watching'), watched(4, 'Other'), watched(5, 'Third')];
+    RESPONSES['/shows/4/progress/watched'] = progress;
+    RESPONSES['/shows/5/progress/watched'] = progress;
+  });
+
+  it('rejects the call, without any unhandled rejection, when progress lookups fail', async () => {
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+    get.mockImplementation(failingProgress(['/shows/3/progress/watched', '/shows/5/progress/watched']));
+
+    await expect(buildApi().getWatchingShows(user)).rejects.toThrow('EAI_AGAIN');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    process.off('unhandledRejection', unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+  });
+});
