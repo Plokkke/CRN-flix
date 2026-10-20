@@ -17,7 +17,7 @@ variable "image_tag" {
 variable "start_engine" {
   description = "false only for the cutover: the database is created first, the data transferred into it, then the migrations and the engine run on it (see knowledge/deploiement.md)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "docker_host" {
