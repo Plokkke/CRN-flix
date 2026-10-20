@@ -62,6 +62,10 @@ export class AdminTicketRelay implements AdminInbox, OnModuleInit, OnModuleDestr
     this.channel.stop();
   }
 
+  onChannelConnected(callback: () => void): () => void {
+    return this.channel.onConnected(callback);
+  }
+
   /** Wipes the channel and forgets every binding: the reconciler brings open tickets back. */
   async purge(): Promise<PurgeReport> {
     const report = await this.channel.purge();
@@ -128,15 +132,36 @@ export class AdminTicketRelay implements AdminInbox, OnModuleInit, OnModuleDestr
 
   /** The channel only shows open tickets. */
   private async onTicketStatusChange(ticketId: string, newStatus: TicketStatus): Promise<void> {
-    const rootRef = newStatus === TicketStatus.Open ? null : await this.rootBinding(ticketId);
+    if (newStatus !== TicketStatus.Open) {
+      await this.takeDown(ticketId);
+    }
+  }
+
+  /** Removes a closed ticket from the channel, then forgets it there: a binding left behind marks a missed closing. */
+  async takeDown(ticketId: string): Promise<void> {
+    const rootRef = await this.rootBinding(ticketId);
     if (!rootRef) {
       return;
     }
     try {
       await this.channel.closeTicket(rootRef);
+      await this.tickets.unbind(ticketId, this.adapter);
     } catch (error) {
       AdminTicketRelay.logger.error(`Failed to close ticket ${ticketId} (${rootRef}): ${describeError(error)}`);
     }
+  }
+
+  /** Re-renders the root of a shown ticket: updates may have been missed while the channel was down. */
+  async refresh(ticket: TicketEntity): Promise<void> {
+    const rootRef = await this.rootBinding(ticket.id);
+    if (!rootRef) {
+      return;
+    }
+    await this.channel
+      .updateTicket(rootRef, await this.viewOf(ticket))
+      .catch((error) =>
+        AdminTicketRelay.logger.error(`Failed to refresh ticket ${ticket.id}: ${describeError(error)}`),
+      );
   }
 
   // --- Inbound: channel → ticket operations ---

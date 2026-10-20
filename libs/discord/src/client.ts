@@ -3,6 +3,7 @@ import {
   Channel,
   Client,
   ClientEvents,
+  DiscordAPIError,
   Events,
   GatewayIntentBits,
   GuildMember,
@@ -13,6 +14,8 @@ import {
   PartialMessageReaction,
   Partials,
   PartialUser,
+  RESTJSONErrorCodes,
+  Status,
   TextChannel,
   ThreadChannel,
   User,
@@ -29,6 +32,19 @@ export const discordConfigSchema = z.object({
 
 export type DiscordConfig = z.infer<typeof discordConfigSchema>;
 
+const LOGIN_RETRY_MIN_MS = 5_000;
+const LOGIN_RETRY_MAX_MS = 5 * 60_000;
+
+const MISSING_RESOURCE_CODES: readonly unknown[] = [
+  RESTJSONErrorCodes.UnknownMessage,
+  RESTJSONErrorCodes.UnknownChannel,
+];
+
+/** The message or channel no longer exists on Discord (deleted by hand, or already cleaned up). */
+export function isMissingResource(error: unknown): boolean {
+  return error instanceof DiscordAPIError && MISSING_RESOURCE_CODES.includes(error.code);
+}
+
 function registerListener<Event extends keyof ClientEvents>(
   client: Client,
   event: Event,
@@ -42,16 +58,15 @@ function registerListener<Event extends keyof ClientEvents>(
 
 /**
  * One bot connection shared by every Discord plugin (admin channel, …): created once by the
- * engine, which also destroys it on shutdown.
+ * engine, which also destroys it on shutdown. It connects in the background, retrying until
+ * Discord accepts it, so the engine never waits for Discord to boot.
  */
 export class DiscordService {
   private static readonly logger = createLogger(DiscordService.name);
 
-  static async create(config: DiscordConfig): Promise<DiscordService> {
+  static create(config: DiscordConfig): DiscordService {
     const service = new DiscordService(config);
-
-    await service.login();
-
+    void service.connect(LOGIN_RETRY_MIN_MS);
     return service;
   }
 
@@ -99,6 +114,7 @@ export class DiscordService {
   }
 
   private readonly client: Client;
+  private retryTimer: NodeJS.Timeout | null = null;
 
   private constructor(private config: DiscordConfig) {
     this.client = new Client({
@@ -111,21 +127,48 @@ export class DiscordService {
       ],
       partials: [Partials.Message, Partials.Channel, Partials.Reaction],
     });
+    this.client.once(Events.ClientReady, (client) =>
+      DiscordService.logger.log(`Discord bot is connected as ${client.user.tag}`),
+    );
   }
 
   async destroy(): Promise<void> {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+    }
     await this.client.destroy();
   }
 
-  private async login(): Promise<void> {
-    await new Promise<void>(async (resolve) => {
-      this.client.once('ready', () => {
-        DiscordService.logger.log(`Discord bot is connected as ${this.client.user?.tag}`);
-        resolve();
-      });
+  /** The gateway is up: events flow in and messages can be sent. */
+  isConnected(): boolean {
+    return this.client.ws.status === Status.Ready;
+  }
 
+  /** Fired once connected, then after every reconnection: events of the outage were missed. */
+  onConnected(callback: () => void): () => void {
+    // `shardReady` also fires before the first `ready`, when the client is not usable yet.
+    const reconnected = (): void => {
+      if (this.client.isReady()) {
+        return callback();
+      }
+    };
+    const cleanups = [
+      registerListener(this.client, Events.ClientReady, () => callback()),
+      registerListener(this.client, Events.ShardReady, reconnected),
+      registerListener(this.client, Events.ShardResume, reconnected),
+    ];
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }
+
+  private async connect(retryMs: number): Promise<void> {
+    try {
       await this.client.login(this.config.bot.token);
-    });
+    } catch (error) {
+      DiscordService.logger.error(
+        `Discord login failed, retrying in ${retryMs / 1000}s: ${error instanceof Error ? error.message : error}`,
+      );
+      this.retryTimer = setTimeout(() => void this.connect(Math.min(retryMs * 2, LOGIN_RETRY_MAX_MS)), retryMs);
+    }
   }
 
   async getChannel(channelId: string): Promise<Channel> {

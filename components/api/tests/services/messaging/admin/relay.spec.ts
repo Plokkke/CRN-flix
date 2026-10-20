@@ -34,6 +34,7 @@ function build() {
     get: jest.fn().mockResolvedValue(ticket),
     getByBinding: jest.fn().mockResolvedValue(null),
     unbindAll: jest.fn().mockResolvedValue(2),
+    unbind: jest.fn().mockResolvedValue(undefined),
   };
   const ticketService = {
     addAdminMessage: jest.fn().mockResolvedValue(undefined),
@@ -142,6 +143,39 @@ describe('AdminTicketRelay', () => {
       tickets.get.mockResolvedValue({ ...ticket, status: TicketStatus.Resolved });
       await expect(relay.operation('root-1', { kind: 'approve' }, 'admin')).resolves.toBeNull();
     });
+  });
+
+  describe('takeDown', () => {
+    it('closes the ticket on the channel, then forgets it there', async () => {
+      const { relay, channel, tickets } = build();
+      tickets.getBindings.mockResolvedValue([{ kind: 'root', externalId: 'root-1' }]);
+
+      await relay.takeDown('t1');
+
+      expect(channel.closeTicket).toHaveBeenCalledWith('root-1');
+      expect(tickets.unbind).toHaveBeenCalledWith('t1', 'discord');
+    });
+
+    it('keeps the binding when the channel could not close it, so the reconciler retries', async () => {
+      const { relay, channel, tickets } = build();
+      tickets.getBindings.mockResolvedValue([{ kind: 'root', externalId: 'root-1' }]);
+      channel.closeTicket.mockRejectedValue(new Error('discord down'));
+
+      await relay.takeDown('t1');
+
+      expect(tickets.unbind).not.toHaveBeenCalled();
+    });
+  });
+
+  it('re-renders the root of a shown ticket, and nothing for one never shown', async () => {
+    const { relay, channel, tickets } = build();
+
+    await relay.refresh(ticket);
+    expect(channel.updateTicket).not.toHaveBeenCalled();
+
+    tickets.getBindings.mockResolvedValue([{ kind: 'root', externalId: 'root-1' }]);
+    await relay.refresh(ticket);
+    expect(channel.updateTicket).toHaveBeenCalledWith('root-1', view);
   });
 
   it('purges the channel and forgets its bindings', async () => {

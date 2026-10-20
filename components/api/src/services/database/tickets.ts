@@ -286,6 +286,25 @@ export class TicketsRepository extends Emitter<TicketNotifyEvents> implements On
     return result.rowCount ?? 0;
   }
 
+  async unbind(ticketId: string, adapter: string): Promise<void> {
+    await this.pool.query(`DELETE FROM ticket_bindings WHERE ticket_id = $1 AND adapter = $2`, [ticketId, adapter]);
+  }
+
+  /** Tickets still shown on the adapter: open ones, or closed ones whose closing never reached it. */
+  async findBound(adapter: string, kind: 'root' | 'thread', open: boolean): Promise<TicketEntity[]> {
+    const { rows } = await this.pool.query<TicketRecord>(
+      `SELECT t.* FROM tickets t
+       WHERE (t.status = 'open') = $3
+         AND EXISTS (
+           SELECT 1 FROM ticket_bindings tb
+           WHERE tb.ticket_id = t.id AND tb.adapter = $1 AND tb.kind = $2
+         )
+       ORDER BY t.created_at`,
+      [adapter, kind, open],
+    );
+    return rows.map(fromRecord);
+  }
+
   async findOpenWithoutBinding(adapter: string, kind: 'root' | 'thread', olderThan: Date): Promise<TicketEntity[]> {
     const { rows } = await this.pool.query<TicketRecord>(
       `SELECT t.* FROM tickets t

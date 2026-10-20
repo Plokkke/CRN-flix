@@ -17,9 +17,9 @@ export const adminMessagingProviders: Provider[] = [
   {
     provide: ADMIN_CHANNEL,
     inject: [ConfigService, DiscordService],
-    useFactory: (configService: ConfigService<Config, true>, discord: DiscordService): Promise<AdminChannel> => {
+    useFactory: (configService: ConfigService<Config, true>, discord: DiscordService): AdminChannel => {
       const { discordChannelId, adminIds } = configService.get<Config['administration']>('administration');
-      return DiscordAdminChannel.create({ channelId: discordChannelId, adminIds }, discord);
+      return new DiscordAdminChannel({ channelId: discordChannelId, adminIds }, discord);
     },
   },
   {

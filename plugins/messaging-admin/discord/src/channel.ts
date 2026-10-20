@@ -9,7 +9,7 @@ import {
   TicketTimelineEntry,
   TicketView,
 } from '@crn-flix/contracts';
-import { DiscordService } from '@crn-flix/discord';
+import { DiscordService, isMissingResource } from '@crn-flix/discord';
 
 import { parseButtonOperation } from './buttons';
 import {
@@ -40,19 +40,11 @@ export class DiscordAdminChannel implements AdminChannel {
 
   private cleanups: (() => void)[] = [];
   private downloadsMessage: Message | null = null;
+  private channel: Promise<TextChannel> | null = null;
 
-  static async create(config: DiscordAdminChannelConfig, discord: DiscordService): Promise<DiscordAdminChannel> {
-    const channel = await discord.getChannel(config.channelId);
-    if (channel.type !== ChannelType.GuildText) {
-      throw new Error(`Channel with ID ${config.channelId} is not a text channel`);
-    }
-    return new DiscordAdminChannel(config, discord, channel as TextChannel);
-  }
-
-  private constructor(
+  constructor(
     private readonly config: DiscordAdminChannelConfig,
     private readonly discord: DiscordService,
-    private readonly channel: TextChannel,
   ) {}
 
   get adminIds(): readonly string[] {
@@ -71,50 +63,67 @@ export class DiscordAdminChannel implements AdminChannel {
     this.cleanups = [];
   }
 
+  isConnected(): boolean {
+    return this.discord.isConnected();
+  }
+
+  onConnected(callback: () => void): () => void {
+    return this.discord.onConnected(callback);
+  }
+
   async postTicket(view: TicketView): Promise<string> {
-    const message = await this.channel.send({ embeds: [buildTicketEmbed(view)], components: buildTicketButtons(view) });
+    const channel = await this.textChannel();
+    const message = await channel.send({ embeds: [buildTicketEmbed(view)], components: buildTicketButtons(view) });
     await DiscordService.startThread(message, view.title);
     return message.id;
   }
 
   async adoptMessage(ref: string, title: string): Promise<void> {
-    await DiscordService.startThread(await DiscordService.getMessage(this.channel, ref), title);
+    await DiscordService.startThread(await DiscordService.getMessage(await this.textChannel(), ref), title);
   }
 
   async updateTicket(rootRef: string, view: TicketView): Promise<void> {
-    const message = await DiscordService.getMessage(this.channel, rootRef);
+    const message = await DiscordService.getMessage(await this.textChannel(), rootRef);
     if (this.isOwn(message)) {
       await message.edit({ embeds: [buildTicketEmbed(view)], components: buildTicketButtons(view) });
     }
   }
 
   async appendToTicket(rootRef: string, entry: TicketTimelineEntry): Promise<void> {
+    const channel = await this.textChannel();
     const content = formatTimelineEntry(entry);
     try {
-      await DiscordService.sendInThread(this.channel, rootRef, { content });
+      await DiscordService.sendInThread(channel, rootRef, { content });
     } catch {
       // Thread missing (crash between send and startThread): recreate it from the root.
-      const thread = await DiscordService.startThread(await DiscordService.getMessage(this.channel, rootRef), 'ticket');
+      const thread = await DiscordService.startThread(await DiscordService.getMessage(channel, rootRef), 'ticket');
       await thread.send({ content });
     }
   }
 
   /** The thread always goes; the root too, unless it is the admin's own message (a manual link). */
   async closeTicket(rootRef: string): Promise<void> {
+    const channel = await this.textChannel();
     try {
-      await DiscordService.deleteThread(this.channel, rootRef);
+      await DiscordService.deleteThread(channel, rootRef);
     } catch {
       // No thread was ever created (or already gone) — nothing to delete.
     }
-    const message = await DiscordService.getMessage(this.channel, rootRef);
-    if (this.isOwn(message)) {
-      await message.delete();
+    try {
+      const message = await DiscordService.getMessage(channel, rootRef);
+      if (this.isOwn(message)) {
+        await message.delete();
+      }
+    } catch (error) {
+      if (!isMissingResource(error)) {
+        throw error;
+      }
     }
   }
 
   async acknowledge(ref: string, outcome: 'succeeded' | 'failed'): Promise<void> {
     try {
-      await (await DiscordService.getMessage(this.channel, ref)).react(outcome === 'failed' ? '❌' : '✅');
+      await (await DiscordService.getMessage(await this.textChannel(), ref)).react(outcome === 'failed' ? '❌' : '✅');
     } catch (error) {
       DiscordAdminChannel.logger.error(`Failed to react to message ${ref}: ${describeError(error)}`);
     }
@@ -135,7 +144,7 @@ export class DiscordAdminChannel implements AdminChannel {
   }
 
   async purge(): Promise<PurgeReport> {
-    const { threads, messages, kept } = await purgeChannel(this.channel);
+    const { threads, messages, kept } = await purgeChannel(await this.textChannel());
     return { removed: threads + messages, kept };
   }
 
@@ -143,8 +152,25 @@ export class DiscordAdminChannel implements AdminChannel {
     return this.discord.sendDirectMessage(adminId, text);
   }
 
+  /** Resolved on first use, not at boot: Discord may be unreachable then. A failure is retried next time. */
+  private textChannel(): Promise<TextChannel> {
+    this.channel ??= this.fetchTextChannel().catch((error: unknown) => {
+      this.channel = null;
+      throw error;
+    });
+    return this.channel;
+  }
+
+  private async fetchTextChannel(): Promise<TextChannel> {
+    const channel = await this.discord.getChannel(this.config.channelId);
+    if (channel.type !== ChannelType.GuildText) {
+      throw new Error(`Channel with ID ${this.config.channelId} is not a text channel`);
+    }
+    return channel as TextChannel;
+  }
+
   private isOwn(message: Message): boolean {
-    return message.author.id === this.channel.client.user.id;
+    return message.author.id === message.client.user.id;
   }
 
   private isAdmin(userId: string): boolean {
@@ -200,7 +226,8 @@ export class DiscordAdminChannel implements AdminChannel {
     if (this.downloadsMessage) {
       return this.downloadsMessage;
     }
-    const { items } = await this.channel.messages.fetchPins();
+    const channel = await this.textChannel();
+    const { items } = await channel.messages.fetchPins();
     const existing = items.find(
       ({ message }) => this.isOwn(message) && !!message.embeds[0]?.title?.startsWith(DOWNLOADS_TITLE),
     )?.message;
@@ -209,7 +236,9 @@ export class DiscordAdminChannel implements AdminChannel {
   }
 
   private async createDownloadsMessage(): Promise<Message> {
-    const message = await this.channel.send({
+    const message = await (
+      await this.textChannel()
+    ).send({
       embeds: [buildDownloadsEmbed({ active: 0, entries: [], hidden: 0 })],
       flags: MessageFlags.SuppressNotifications,
     });
