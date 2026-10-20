@@ -1,9 +1,9 @@
 import { Provider } from '@nestjs/common';
 
-import { TmdbApiService } from '@/modules/tmdb/tmdb';
+import { MediaTitlesResolver, TmdbApiService } from '@crn-flix/metadata-tmdb';
+
 import { MediasRepository } from '@/services/database/medias';
 import { MediaTitlesService } from '@/services/media-titles';
-import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 
 export const mediaTitlesProviders: Provider[] = [
   {

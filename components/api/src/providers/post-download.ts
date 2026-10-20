@@ -2,8 +2,9 @@ import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool } from 'pg';
 
+import { MediaTitlesResolver, TmdbApiService } from '@crn-flix/metadata-tmdb';
+
 import { Config } from '@/app.module';
-import { TmdbApiService } from '@/modules/tmdb/tmdb';
 import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
@@ -11,7 +12,6 @@ import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { MediaLabelizerService } from '@/services/media-labelizer';
-import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 
 export const identificationProvider: Provider = {

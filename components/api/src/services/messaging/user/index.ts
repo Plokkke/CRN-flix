@@ -1,5 +1,9 @@
+import { LoginChallenge, ServiceNotice } from '@crn-flix/contracts';
+
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { UserEntity } from '@/services/database/users';
+export { LoginChallenge, NOTICE_TONES, NoticeTone, ServiceNotice } from '@crn-flix/contracts';
+
 export const USER_MESSAGING_TYPES = ['discord', 'whatsapp', 'email'] as const;
 export type UserMessagingType = (typeof USER_MESSAGING_TYPES)[number];
 
@@ -18,26 +22,6 @@ export type Config = {
   trakt: {
     url: string;
   };
-};
-
-/** Proofs of a subscriber-space login: a code to type and a magic link, both single-use. */
-export type LoginChallenge = {
-  code: string;
-  link: string;
-  serviceName: string;
-  expiresInMinutes: number;
-};
-
-export const NOTICE_TONES = ['warning', 'success', 'info'] as const;
-export type NoticeTone = (typeof NOTICE_TONES)[number];
-
-/** A one-off announcement to subscribers (outage, restoration...), rendered by every channel. */
-export type ServiceNotice = {
-  subject: string;
-  title: string;
-  paragraphs: string[];
-  tone: NoticeTone;
-  cta?: { label: string; url: string };
 };
 
 export abstract class UserMessaging<ID> {

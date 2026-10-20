@@ -4,11 +4,16 @@ import { Logger } from '@nestjs/common';
 import { parse as parseTorrentTitle } from 'parse-torrent-title';
 import { Pool } from 'pg';
 
+import {
+  MediaTitlesResolver,
+  TmdbApiService,
+  TmdbIdentification,
+  TmdbMovie,
+  TmdbTvShow,
+} from '@crn-flix/metadata-tmdb';
+
 import { MediasRepository, MediaType } from '@/services/database/medias';
 import { RequestsRepository, RequestStatus } from '@/services/database/requests';
-import { MediaTitlesResolver } from '@/services/media-titles-resolver';
-
-import { TmdbApiService, TmdbIdentification, TmdbMovie, TmdbTvShow } from '../modules/tmdb/tmdb';
 
 export type ParsedMedia = {
   title: string;

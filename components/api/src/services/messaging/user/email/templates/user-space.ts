@@ -1,3 +1,5 @@
+import { PlanLabel } from '@crn-flix/planner';
+
 import { formatAge } from '@/helpers/format';
 import {
   Dashboard,
@@ -7,8 +9,7 @@ import {
   SubscriberSourcing,
 } from '@/services/admin/requests-view';
 import { RequestStatus } from '@/services/database/requests';
-import { PlanLabel } from '@/services/planner/model';
-import { formatSeasonRanges, episodeRangesBySeason } from '@/services/request-groups';
+import { episodeRangesBySeason, formatSeasonRanges } from '@/services/request-groups';
 import { actionTitle } from '@/services/tickets/presenter';
 
 import { DASHBOARD_LAYOUT_CSS, dashboardJs, executionDetailBlock, executionIndicator } from './dashboard-shared';

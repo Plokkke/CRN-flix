@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 
+import { IndexerCandidate, scopeKey } from '@crn-flix/contracts';
+
 import { appendQueryParams } from '@/helpers/url';
-import { IndexerCandidate, scopeKey } from '@/modules/indexer/contract';
 import { PlannedDownloadEntity } from '@/services/database/planned-downloads';
 
 /** Query params the fetchr-grab extension carries over to the download it registers. */

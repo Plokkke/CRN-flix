@@ -1,20 +1,6 @@
-/** A download as Fetchr describes it, in `download::list` snapshots and `download::registered`. */
-export type LiveDownload = {
-  id: string;
-  status: string;
-  fileName: string;
-  filePaths: string[];
-  size: number | null;
-  downloaded: number;
-  progress: number | null;
-  speed: number;
-  eta: number | null;
-  error: string | null;
-  source: string;
-  metadata?: Record<string, string>;
-  downloadedAt: string | null;
-  completedAt: string | null;
-};
+import { LiveDownload } from '@crn-flix/contracts';
+
+export { LiveDownload };
 
 export type FetchrEvent = { topic: string; payload: unknown };
 

@@ -1,8 +1,9 @@
 import { ConfigService } from '@nestjs/config';
 
+import { EnginePreferences } from '@crn-flix/contracts';
+import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import { Config } from '@/app.module';
-import { EnginePreferences } from '@/modules/indexer/preferences';
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { MediaItem } from '@/services/messaging/user/email/templates/registered';
 
 export class ContextService {

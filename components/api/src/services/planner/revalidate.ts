@@ -1,5 +1,5 @@
-import { assessCandidate, IndexerTarget, RejectReason } from '@/modules/indexer/contract';
-import { EnginePreferences } from '@/modules/indexer/preferences';
+import { assessCandidate, EnginePreferences, IndexerTarget, RejectReason } from '@crn-flix/contracts';
+
 import { PlannedDownloadEntity, PlannedDownloadStatus } from '@/services/database/planned-downloads';
 import { candidateOf } from '@/services/indexer-link';
 

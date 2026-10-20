@@ -3,9 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 
+import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import {
   DownloadJobEntity,
   DownloadJobEvents,

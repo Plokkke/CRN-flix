@@ -1,10 +1,11 @@
 import { ConfigService } from '@nestjs/config';
 
+import { TraktApi } from '@crn-flix/catalog-trakt';
+import { Indexer } from '@crn-flix/contracts';
+import { TraktPlugin } from '@crn-flix/player-jellyfin';
+
 import { Config } from '@/app.module';
-import { Indexer, INDEXERS } from '@/modules/indexer/contract';
-import { createIndexers } from '@/modules/indexer/registry';
-import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
-import { TraktApi } from '@/modules/trakt/api';
+import { createIndexers, INDEXERS } from '@/modules/indexer/registry';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
 import { PlannedDownloadsRepository } from '@/services/database/planned-downloads';

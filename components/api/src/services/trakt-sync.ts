@@ -3,14 +3,24 @@ import * as _ from 'lodash';
 import { DateTime } from 'luxon';
 import { z } from 'zod';
 
+import {
+  Episode,
+  Media,
+  Movie,
+  MovieDetails,
+  ProgressShow,
+  Show,
+  TraktApi,
+  UserAuthCtxt,
+} from '@crn-flix/catalog-trakt';
+import { RequestReason } from '@crn-flix/contracts';
+import { TraktPlugin } from '@crn-flix/player-jellyfin';
+
 import { concurrent } from '@/helpers/concurrent';
-import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
-import { TraktApi } from '@/modules/trakt/api';
-import { Episode, Media, Movie, MovieDetails, ProgressShow, Show, UserAuthCtxt } from '@/modules/trakt/types';
 import { MediaInfos, MediasRepository, MediaType } from '@/services/database/medias';
 import { RequestsRepository, RequestStatus, SyncRequestSnapshot } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
-import { UsersRepository, type UserEntity } from '@/services/database/users';
+import { type UserEntity, UsersRepository } from '@/services/database/users';
 import { PlannerService } from '@/services/planner/planner';
 import { TicketCategory } from '@/services/tickets/model';
 import { TicketService } from '@/services/tickets/ticket.service';
@@ -26,18 +36,11 @@ export const syncConfigSchema = z.object({
 
 export type SyncConfig = z.infer<typeof syncConfigSchema>;
 
-export enum RequestKind {
-  Watchlisted = 'WATCHLISTED',
-  // Listed = 'LISTED',
-  Progress = 'PROGRESS',
-  HighRated = 'HIGH_RATED',
-}
-
-export const ACTIVITIES_INVOLVED_BY_REQUEST_KIND: Record<RequestKind, string[]> = {
-  [RequestKind.Watchlisted]: ['watchlist.updated_at'],
-  // [RequestKind.Listed]: ['lists.liked_at'],
-  [RequestKind.HighRated]: ['movies.rated_at', 'episodes.rated_at', 'shows.rated_at', 'seasons.rated_at'],
-  [RequestKind.Progress]: ['shows.hidden_at', 'shows.dropped_at', 'movies.watched_at', 'episodes.watched_at'],
+export const ACTIVITIES_INVOLVED_BY_REQUEST_KIND: Record<RequestReason, string[]> = {
+  [RequestReason.Watchlisted]: ['watchlist.updated_at'],
+  // [RequestReason.Listed]: ['lists.liked_at'],
+  [RequestReason.HighRated]: ['movies.rated_at', 'episodes.rated_at', 'shows.rated_at', 'seasons.rated_at'],
+  [RequestReason.Progress]: ['shows.hidden_at', 'shows.dropped_at', 'movies.watched_at', 'episodes.watched_at'],
 };
 
 type MediaCompositeKey = string;
@@ -54,12 +57,12 @@ const NEW_REQUEST_CONCURRENCY = 5;
 
 type DesiredMedia = {
   mediaInfos: MediaInfos;
-  requestKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>;
+  requestKindsByUserId: Record<UserEntity['id'], Set<RequestReason>>;
 };
 
 type GatheredData = {
   desiredMediaByKey: Record<MediaCompositeKey, DesiredMedia>;
-  syncedKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>;
+  syncedKindsByUserId: Record<UserEntity['id'], Set<RequestReason>>;
   mediaRequests: SyncRequestSnapshot[];
 };
 
@@ -96,7 +99,7 @@ type UserWithAuthContext = UserEntity & {
 export class TraktSyncService {
   private static readonly logger = new Logger(TraktSyncService.name);
 
-  private readonly requestHandlerByKind: Record<RequestKind, (user: UserAuthCtxt) => Promise<MediaInfos[]>> = {
+  private readonly requestHandlerByKind: Record<RequestReason, (user: UserAuthCtxt) => Promise<MediaInfos[]>> = {
     WATCHLISTED: async (user) => {
       const watchlistedMedias = await this.traktClient.requestUserWatchlist(user, true);
       return this.expand(watchlistedMedias);
@@ -215,16 +218,16 @@ export class TraktSyncService {
 
   private async syncRequestReasons(
     request: SyncRequestSnapshot,
-    desiredKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>,
-    syncedKindsByUserId: Record<UserEntity['id'], Set<RequestKind>>,
+    desiredKindsByUserId: Record<UserEntity['id'], Set<RequestReason>>,
+    syncedKindsByUserId: Record<UserEntity['id'], Set<RequestReason>>,
   ): Promise<void> {
     const existingReasonsByUserId = new Map(
-      (request.userReasons ?? []).map((ur) => [ur.userId, new Set(<RequestKind[]>ur.reasons)]),
+      (request.userReasons ?? []).map((ur) => [ur.userId, new Set(<RequestReason[]>ur.reasons)]),
     );
 
     for (const [userId, concernedKinds] of Object.entries(syncedKindsByUserId)) {
-      const desiredKinds = desiredKindsByUserId[userId] ?? new Set<RequestKind>();
-      const existingKinds = existingReasonsByUserId.get(userId) ?? new Set<RequestKind>();
+      const desiredKinds = desiredKindsByUserId[userId] ?? new Set<RequestReason>();
+      const existingKinds = existingReasonsByUserId.get(userId) ?? new Set<RequestReason>();
 
       for (const kind of concernedKinds) {
         if (desiredKinds.has(kind) && !existingKinds.has(kind)) {
@@ -311,10 +314,10 @@ export class TraktSyncService {
     return matchedUsers;
   }
 
-  private async getLastUpdatedAtByKind(user: UserAuthCtxt): Promise<Record<RequestKind, DateTime<true> | null>> {
+  private async getLastUpdatedAtByKind(user: UserAuthCtxt): Promise<Record<RequestReason, DateTime<true> | null>> {
     const lastActivities = await this.traktClient.getLastActivities(user);
 
-    return Object.values(RequestKind).reduce(
+    return Object.values(RequestReason).reduce(
       (acc, kind) => {
         acc[kind] = ACTIVITIES_INVOLVED_BY_REQUEST_KIND[kind].reduce(
           (date: DateTime<true> | null, activityPath: string) => {
@@ -331,13 +334,13 @@ export class TraktSyncService {
         )!;
         return acc;
       },
-      {} as Record<RequestKind, DateTime<true>>,
+      {} as Record<RequestReason, DateTime<true>>,
     );
   }
 
-  private async getKindsToSync(user: UserAuthCtxt): Promise<Set<RequestKind>> {
+  private async getKindsToSync(user: UserAuthCtxt): Promise<Set<RequestReason>> {
     const lastUpdatedAtByKind = await this.userActivitiesRepository.getForUserId(user.id);
-    const allKinds = Object.values(RequestKind);
+    const allKinds = Object.values(RequestReason);
 
     const fullSyncCutoff = DateTime.now().minus({ hours: this.config.fullSyncIntervalHours });
     const needsFullSync = allKinds.some((kind) => {

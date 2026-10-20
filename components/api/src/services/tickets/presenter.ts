@@ -1,11 +1,12 @@
 import * as _ from 'lodash';
 
+import { PlanLabel } from '@crn-flix/planner';
+
 import { formatBytes } from '@/helpers/format';
 import { displayTitle, MediaEntity } from '@/services/database/medias';
 import { PlannedDownloadEntity } from '@/services/database/planned-downloads';
 import { UserEntity } from '@/services/database/users';
 import { actionDisplayLink } from '@/services/indexer-link';
-import { PlanLabel } from '@/services/planner/model';
 import {
   OPERATIONS_BY_CATEGORY,
   TicketCategory,

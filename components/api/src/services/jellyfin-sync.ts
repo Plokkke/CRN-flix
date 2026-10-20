@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 
-import { JellyfinMedia, JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
+import { JellyfinMedia, JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import { MediaInfos, MediasRepository, MediaType } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 

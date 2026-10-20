@@ -1,10 +1,10 @@
 import { Logger } from '@nestjs/common';
 
-import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
-import { TraktApi } from '@/modules/trakt/api';
-import { UserAuthCtxt } from '@/modules/trakt/types';
+import { TraktApi, UserAuthCtxt } from '@crn-flix/catalog-trakt';
+import { Playhead, START_OF_SHOW } from '@crn-flix/planner';
+import { TraktPlugin } from '@crn-flix/player-jellyfin';
+
 import { UsersRepository } from '@/services/database/users';
-import { Playhead, START_OF_SHOW } from '@/services/planner/model';
 
 /** Completed or dropped: the show only ever contributes deferred urgency. */
 const COMPLETED: Playhead = { nextSeason: null, nextEpisode: null };

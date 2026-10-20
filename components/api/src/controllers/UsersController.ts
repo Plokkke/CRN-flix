@@ -2,8 +2,9 @@ import { Body, Controller, Get, Header, Param, Post, Res } from '@nestjs/common'
 import { Response } from 'express';
 import { z } from 'zod';
 
-import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
-import { TraktApi } from '@/modules/trakt/api';
+import { TraktApi } from '@crn-flix/catalog-trakt';
+import { TraktPlugin } from '@crn-flix/player-jellyfin';
+
 import { ContextService } from '@/services/context';
 import { UsersRepository } from '@/services/database/users';
 import { registrationFormTemplate } from '@/services/messaging/user/email/templates';

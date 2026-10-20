@@ -1,7 +1,8 @@
 import { Pool } from 'pg';
 
+import { IndexerBookmark } from '@crn-flix/contracts';
+
 import { withDbRetry } from '@/helpers/db-retry';
-import { IndexerBookmark } from '@/modules/indexer/contract';
 
 export type IndexerBookmarkEntity = IndexerBookmark & {
   indexerName: string;

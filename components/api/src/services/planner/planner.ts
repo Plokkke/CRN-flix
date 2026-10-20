@@ -2,8 +2,23 @@ import { createHash } from 'node:crypto';
 
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 
-import { assessCandidate, Indexer, IndexerTarget, MediaTitles } from '@/modules/indexer/contract';
-import { EnginePreferences } from '@/modules/indexer/preferences';
+import { assessCandidate, EnginePreferences, Indexer, IndexerTarget, MediaTitles } from '@crn-flix/contracts';
+import {
+  AssessedCandidate,
+  assessSourcing,
+  ChosenAction,
+  diffPlan,
+  isMissing,
+  labelEpisodes,
+  LiveAction,
+  maxLabel,
+  PlanLabel,
+  PlannerEpisode,
+  Playhead,
+  resolvePlan,
+  urgencyOf,
+} from '@crn-flix/planner';
+
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
 import { displayTitle, MediaType } from '@/services/database/medias';
@@ -21,12 +36,7 @@ import { MediaTitlesService } from '@/services/media-titles';
 import { truthy } from '@/utils';
 
 import { findAcrossIndexers } from './bookmarks';
-import { diffPlan, LiveAction } from './diff';
-import { labelEpisodes } from './labels';
-import { isMissing, maxLabel, Playhead, PlanLabel, PlannerEpisode, urgencyOf } from './model';
-import { ChosenAction, resolvePlan } from './resolve';
 import { staleProposals } from './revalidate';
-import { AssessedCandidate, assessSourcing } from './sourcing';
 
 export const PLANNED_DOWNLOAD_ID_METADATA_KEY = 'crn-flix-planned-download-id';
 export const REQUEST_ID_METADATA_KEY = 'crn-flix-request-id';

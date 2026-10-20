@@ -1,8 +1,9 @@
 import { Logger } from '@nestjs/common';
 
-import { MediaTitles } from '@/modules/indexer/contract';
+import { MediaTitles } from '@crn-flix/contracts';
+import { MediaTitlesResolution, MediaTitlesResolver } from '@crn-flix/metadata-tmdb';
+
 import { MediasRepository } from '@/services/database/medias';
-import { MediaTitlesResolution, MediaTitlesResolver } from '@/services/media-titles-resolver';
 
 /** One TMDB pair of calls per title, twice a second at most: an hour of backlog per run. */
 const BACKFILL_BATCH = 200;

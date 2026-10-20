@@ -1,8 +1,9 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AxiosError } from 'axios';
 
+import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import { Listener } from '@/helpers/events';
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediaEntity, MediasRepository, MediaType } from '@/services/database/medias';
 import { PlannedDownloadsRepository, PlannedDownloadStatus } from '@/services/database/planned-downloads';

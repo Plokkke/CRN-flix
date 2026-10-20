@@ -4,7 +4,9 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
-import { JellyfinMedia, JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
+import { MediaTitlesResolver } from '@crn-flix/metadata-tmdb';
+import { JellyfinMedia, JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import {
   NamingAuditItemEntity,
   NamingAuditItemInput,
@@ -12,7 +14,6 @@ import {
   NamingAuditRepository,
 } from '@/services/database/naming-audit';
 import { MediaIdentity, MediaLabelizerService } from '@/services/media-labelizer';
-import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 
 export const namingAuditConfigSchema = z.object({
   jellyfinLibraryRoot: z.string(),

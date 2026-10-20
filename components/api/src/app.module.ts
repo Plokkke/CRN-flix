@@ -4,6 +4,12 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from '@plokkke/nest-health-registry';
 import { z } from 'zod';
 
+import { traktConfigSchema } from '@crn-flix/catalog-trakt';
+import { Host, Language, Quality } from '@crn-flix/contracts';
+import { loadixConfigSchema } from '@crn-flix/indexer-loadix';
+import { tmdbConfigSchema } from '@crn-flix/metadata-tmdb';
+import { jellyfinConfigSchema } from '@crn-flix/player-jellyfin';
+
 import { AppService } from '@/app.service';
 import { AdminController } from '@/controllers/AdminController';
 import { AnnounceAdminController } from '@/controllers/AnnounceAdminController';
@@ -15,11 +21,6 @@ import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
 import { discordConfigSchema } from '@/modules/discord/discord';
-import { configSchema as loadixConfigSchema } from '@/modules/indexer/loadix/api';
-import { Host, Language, Quality } from '@/modules/indexer/preferences';
-import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
-import { tmdbConfigSchema } from '@/modules/tmdb/tmdb';
-import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
 import { adminAuthProvider } from '@/providers/admin-auth';
 import { contextProvider } from '@/providers/context';
 import { repositoryProviders } from '@/providers/database';

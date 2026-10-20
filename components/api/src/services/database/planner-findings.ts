@@ -1,7 +1,8 @@
 import { Pool } from 'pg';
 
+import { AssessedCandidate } from '@crn-flix/planner';
+
 import { withDbRetry } from '@/helpers/db-retry';
-import { AssessedCandidate } from '@/services/planner/sourcing';
 
 export type PlannerFindingEntity = {
   targetKey: string;

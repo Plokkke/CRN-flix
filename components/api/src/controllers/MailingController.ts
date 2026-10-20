@@ -1,9 +1,10 @@
 import { Controller, Get, Header, NotFoundException, Param } from '@nestjs/common';
 
+import { MediaTitlesResolver } from '@crn-flix/metadata-tmdb';
+
 import { buildPresetNotice, isNoticePreset } from '@/services/announcements/presets';
 import { ContextService } from '@/services/context';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
-import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 import { registeredTemplate } from '@/services/messaging/user/email/templates/registered';
 import { requestUpdateTemplate } from '@/services/messaging/user/email/templates/request-update';
 import { serviceNoticeTemplate } from '@/services/messaging/user/email/templates/service-notice';

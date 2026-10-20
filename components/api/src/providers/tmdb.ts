@@ -1,8 +1,9 @@
 import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { TmdbApiService } from '@crn-flix/metadata-tmdb';
+
 import { Config } from '@/app.module';
-import { TmdbApiService } from '@/modules/tmdb/tmdb';
 
 export const tmdbProvider: Provider = {
   provide: TmdbApiService,

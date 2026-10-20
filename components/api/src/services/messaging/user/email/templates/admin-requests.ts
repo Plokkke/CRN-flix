@@ -1,5 +1,7 @@
+import { IndexerCandidate, RejectReason } from '@crn-flix/contracts';
+import { PlanLabel, Sourcing } from '@crn-flix/planner';
+
 import { formatAge, formatBytes } from '@/helpers/format';
-import { IndexerCandidate, RejectReason } from '@/modules/indexer/contract';
 import {
   ActionView,
   Dashboard,
@@ -13,8 +15,6 @@ import {
   URGENCY_LABELS,
 } from '@/services/admin/requests-view';
 import { actionDisplayLink, candidateOf } from '@/services/indexer-link';
-import { PlanLabel } from '@/services/planner/model';
-import { Sourcing } from '@/services/planner/sourcing';
 import { episodeRangesBySeason, formatSeasonRanges } from '@/services/request-groups';
 import { actionTitle } from '@/services/tickets/presenter';
 

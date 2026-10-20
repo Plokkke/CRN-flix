@@ -1,7 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 
+import { TraktApi } from '@crn-flix/catalog-trakt';
+
 import { Config } from '@/app.module';
-import { TraktApi } from '@/modules/trakt/api';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 
 export const traktProvider = {

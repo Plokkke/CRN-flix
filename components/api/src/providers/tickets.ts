@@ -1,6 +1,7 @@
 import { Provider } from '@nestjs/common';
 
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
+import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
 import { PlannedDownloadsRepository } from '@/services/database/planned-downloads';

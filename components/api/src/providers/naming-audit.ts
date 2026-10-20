@@ -1,11 +1,12 @@
 import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { MediaTitlesResolver } from '@crn-flix/metadata-tmdb';
+import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import { Config } from '@/app.module';
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
 import { MediaLabelizerService } from '@/services/media-labelizer';
-import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 import { NamingAuditService } from '@/services/naming-audit';
 
 export const namingAuditProvider: Provider = {

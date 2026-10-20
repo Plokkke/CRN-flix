@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 
-import { IndexerMedia, MediaTitles, MediaType } from '@/modules/indexer/contract';
+import { IndexerMedia, MediaTitles, MediaType } from '@crn-flix/contracts';
 
 export { MediaType };
 

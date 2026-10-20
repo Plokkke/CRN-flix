@@ -1,5 +1,4 @@
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
-import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
+import { JellyfinMediaService, TraktPlugin } from '@crn-flix/player-jellyfin';
 
 export const traktPluginProvider = {
   provide: TraktPlugin,

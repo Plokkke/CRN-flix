@@ -4,8 +4,9 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
+import { MediaTitlesResolver } from '@crn-flix/metadata-tmdb';
+
 import { IdentificationResult } from './media-identifier';
-import { MediaTitlesResolver } from './media-titles-resolver';
 
 export type MediaIdentity = Pick<
   IdentificationResult,

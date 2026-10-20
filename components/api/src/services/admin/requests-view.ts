@@ -1,5 +1,6 @@
-import { IndexerCandidate, RejectReason } from '@/modules/indexer/contract';
-import { EnginePreferences } from '@/modules/indexer/preferences';
+import { EnginePreferences, IndexerCandidate, RejectReason } from '@crn-flix/contracts';
+import { AssessedCandidate, PlanLabel, PlannerEpisode, resolvePlan, Sourcing, urgencyOf } from '@crn-flix/planner';
+
 import {
   actionTrack,
   candidateTrack,
@@ -22,9 +23,6 @@ import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { LiveDownload } from '@/services/download-live-state';
 import { candidateDisplayLink, candidateId } from '@/services/indexer-link';
 import { IndexerLinkView } from '@/services/messaging/user/email/templates/request-widgets';
-import { PlanLabel, PlannerEpisode, urgencyOf } from '@/services/planner/model';
-import { resolvePlan } from '@/services/planner/resolve';
-import { AssessedCandidate, Sourcing } from '@/services/planner/sourcing';
 import { episodeRangesBySeason, formatSeasonRanges, groupRequests, RequestGroup } from '@/services/request-groups';
 import { isDeadLetter, TicketCategory, TicketEntity, TicketPayloadMap, TicketView } from '@/services/tickets/model';
 import { buildTicketView } from '@/services/tickets/presenter';

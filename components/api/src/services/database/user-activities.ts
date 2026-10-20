@@ -1,14 +1,14 @@
 import { DateTime } from 'luxon';
 import { Pool } from 'pg';
 
-import { RequestKind } from '@/services/trakt-sync';
+import { RequestReason } from '@crn-flix/contracts';
 
-export type UserActivity = Record<RequestKind, DateTime<true> | null>;
+export type UserActivity = Record<RequestReason, DateTime<true> | null>;
 
 export class UserActivitiesRepository {
   constructor(private readonly pool: Pool) {}
 
-  async upsert(userId: string, requestKind: RequestKind): Promise<void> {
+  async upsert(userId: string, requestKind: RequestReason): Promise<void> {
     const query = `
         INSERT INTO user_activities (user_id, type, updated_at)
         VALUES ($1, $2, CURRENT_TIMESTAMP)
@@ -27,7 +27,7 @@ export class UserActivitiesRepository {
       `;
 
     const result = await this.pool
-      .query<{ type: RequestKind; updated_at: Date | null }>(query, [userId])
+      .query<{ type: RequestReason; updated_at: Date | null }>(query, [userId])
       .catch(() => ({ rows: [] }));
 
     const lastSyncDates: UserActivity = {
@@ -39,7 +39,7 @@ export class UserActivitiesRepository {
 
     for (const row of result.rows) {
       const updatedAt = row.updated_at ? DateTime.fromJSDate(row.updated_at) : null;
-      lastSyncDates[row.type as RequestKind] = updatedAt && updatedAt.isValid ? updatedAt : null;
+      lastSyncDates[row.type as RequestReason] = updatedAt && updatedAt.isValid ? updatedAt : null;
     }
 
     return lastSyncDates;

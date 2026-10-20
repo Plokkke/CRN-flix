@@ -1,8 +1,9 @@
 import { ConfigService } from '@nestjs/config';
 
+import { TraktApi } from '@crn-flix/catalog-trakt';
+import { TraktPlugin } from '@crn-flix/player-jellyfin';
+
 import { Config } from '@/app.module';
-import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
-import { TraktApi } from '@/modules/trakt/api';
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 import { UserActivitiesRepository } from '@/services/database/user-activities';

@@ -1,4 +1,5 @@
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
+import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';

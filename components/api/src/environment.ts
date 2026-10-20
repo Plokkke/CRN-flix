@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import { z } from 'zod';
 
-import { preferencesFromEnv } from '@/modules/indexer/preferences';
+import { preferencesFromEnv } from '@/modules/indexer/preferences-env';
 import { logger } from '@/services/logger';
 
 export const environmentVariablesSchema = z
