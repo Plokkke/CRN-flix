@@ -29,13 +29,13 @@ import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
 import { downloaderProviders } from '@/providers/downloader';
 import { jellyfinProvider } from '@/providers/jellyfin';
-import { jellyfinSyncProvider } from '@/providers/jellyfin-sync';
 import { mediaTitlesProviders } from '@/providers/media-titles';
 import { adminMessagingProviders } from '@/providers/messaging/admin';
 import { allUserMessagingProvider, announcementProvider } from '@/providers/messaging/all';
 import { userMessagingProviders } from '@/providers/messaging/user';
 import { namingAuditProviders } from '@/providers/naming-audit';
 import { indexersRegistryProvider, plannerProvider } from '@/providers/planner';
+import { playerProviders } from '@/providers/player';
 import { postDownloadProviders } from '@/providers/post-download';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
 import { ticketProviders } from '@/providers/tickets';
@@ -141,7 +141,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       syncDataSourceProvider,
       ...repositoryProviders,
       ...catalogProviders,
-      jellyfinSyncProvider,
+      ...playerProviders,
       indexersRegistryProvider,
       plannerProvider,
       jellyfinProvider,

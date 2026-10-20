@@ -52,7 +52,7 @@ Links the engine shows to admins carry query params — `crn-flix-request-id` (p
 | Indexer | Loadix | `plugins/indexers/loadix` | `Indexer` | Plugin |
 | Downloader | Fetchr | `plugins/downloaders/fetchr` (`FetchrDownloader`) | `Downloader` | Plugin; completions become download jobs in the engine (`services/downloads/intake.ts`) |
 | Storage | Local filesystem | engine `services/media-labelizer.ts`, `media-identifier.ts`, `post-download-pipeline.ts` | `Storage` (draft) | Coupled |
-| Player | Jellyfin | `plugins/players/jellyfin` (client + Trakt plugin tokens) + engine `services/jellyfin-sync.ts` | `Player` (draft) | Client extracted |
+| Player | Jellyfin | `plugins/players/jellyfin` (`JellyfinPlayer`, Trakt plugin tokens) | `Player`, `CatalogAccountSource` | Plugin; the naming audit still reads library paths from the client directly |
 | Messaging (admin) | Discord | engine `modules/discord/`, `services/messaging/admin/` | ticket adapter (`services/tickets/`) | Coupled |
 | Messaging (users) | Email, Discord DM | engine `services/messaging/user/` | `UserChannel` (draft) | Coupled |
 | Policy | — | — | `Policy` | Defined only |

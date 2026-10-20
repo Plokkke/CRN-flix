@@ -1,9 +1,9 @@
 import { Provider } from '@nestjs/common';
 
-import { Downloader } from '@crn-flix/contracts';
-import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+import { Downloader, Player } from '@crn-flix/contracts';
 
 import { DOWNLOADER } from '@/providers/downloader';
+import { PLAYER } from '@/providers/player';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
 import { PlannedDownloadsRepository } from '@/services/database/planned-downloads';
@@ -37,7 +37,7 @@ export const ticketProviders: Provider[] = [
     inject: [
       TicketService,
       TicketsRepository,
-      JellyfinMediaService,
+      PLAYER,
       AllUserMessaging,
       UsersRepository,
       RequestsRepository,
@@ -52,7 +52,7 @@ export const ticketProviders: Provider[] = [
     useFactory: (
       ticketService: TicketService,
       ticketsRepository: TicketsRepository,
-      jellyfin: JellyfinMediaService,
+      player: Player,
       messaging: AllUserMessaging,
       usersRepository: UsersRepository,
       requestsRepository: RequestsRepository,
@@ -67,7 +67,7 @@ export const ticketProviders: Provider[] = [
       new TicketHandlersService(
         ticketService,
         ticketsRepository,
-        jellyfin,
+        player,
         messaging,
         usersRepository,
         requestsRepository,

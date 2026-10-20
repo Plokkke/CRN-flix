@@ -1,5 +1,4 @@
-import { Downloader } from '@crn-flix/contracts';
-import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+import { AccountNameTakenError, Downloader, Player } from '@crn-flix/contracts';
 
 import { DownloadJobsRepository, DownloadJobStatus } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
@@ -37,10 +36,9 @@ function buildStubs() {
   return {
     ticketService: { registerHandler: jest.fn(), applyOperation: jest.fn() },
     ticketsRepository: { listen: jest.fn().mockReturnValue({ cleanup: jest.fn() }), get: jest.fn() },
-    jellyfin: {
-      resetUserPassword: jest.fn().mockResolvedValue(undefined),
-      findUserByName: jest.fn().mockResolvedValue(null),
-      registerUser: jest.fn().mockResolvedValue('jf-1'),
+    player: {
+      name: 'jellyfin',
+      upsertAccount: jest.fn().mockResolvedValue('jf-1'),
     },
     messaging: { registered: jest.fn(), error: jest.fn() },
     usersRepository: {
@@ -104,7 +102,7 @@ function buildService(stubs: Stubs): TicketHandlersService {
   return new TicketHandlersService(
     stubs.ticketService as unknown as TicketService,
     stubs.ticketsRepository as unknown as TicketsRepository,
-    stubs.jellyfin as unknown as JellyfinMediaService,
+    stubs.player as unknown as Player,
     stubs.messaging as unknown as AllUserMessaging,
     stubs.usersRepository as unknown as UsersRepository,
     stubs.requestsRepository as unknown as RequestsRepository,
@@ -142,7 +140,7 @@ describe('TicketHandlersService', () => {
 
     it('keeps the ticket open when Jellyfin fails (no more zombie approvals)', async () => {
       const stubs = buildStubs();
-      stubs.jellyfin.registerUser.mockRejectedValue(new Error('jellyfin down'));
+      stubs.player.upsertAccount.mockRejectedValue(new Error('jellyfin down'));
       const handle = handlerFor(stubs, TicketCategory.UserApproval);
 
       const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), { kind: 'approve' });
@@ -150,6 +148,18 @@ describe('TicketHandlersService', () => {
       expect(outcome.status).toBe('failed');
       expect(outcome.message).toContain('jellyfin down');
       expect(stubs.usersRepository.setStatus).not.toHaveBeenCalled();
+    });
+
+    it('asks the user for another name when the player refuses theirs', async () => {
+      const stubs = buildStubs();
+      stubs.player.upsertAccount.mockRejectedValue(new AccountNameTakenError('antoine'));
+      const handle = handlerFor(stubs, TicketCategory.UserApproval);
+
+      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), { kind: 'approve' });
+
+      expect(outcome.status).toBe('failed');
+      expect(outcome.message).toContain('existe déjà sur jellyfin');
+      expect(stubs.messaging.error).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('existe déjà'));
     });
 
     it('rejects by deleting the user after notifying them', async () => {

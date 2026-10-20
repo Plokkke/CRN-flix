@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { z } from 'zod';
 
-import { createLogger, PluginLogger } from '@crn-flix/contracts';
+import { AccountNameTakenError, createLogger, PluginLogger } from '@crn-flix/contracts';
 import { applyAxiosRetry, logAxiosError, logAxiosRequest, logAxiosResponse } from '@crn-flix/http';
 
 export type JellyfinUser = {
@@ -135,7 +135,7 @@ export class JellyfinMediaService {
       .post('/Users/New', { Name: userName, Password: password })
       .catch((error: AxiosError) => {
         if (error.response?.status === 400) {
-          throw new Error('User already exists');
+          throw new AccountNameTakenError(userName);
         }
         throw error;
       });

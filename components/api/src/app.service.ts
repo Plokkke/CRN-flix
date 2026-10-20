@@ -3,12 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 
-import { Downloader } from '@crn-flix/contracts';
-import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+import { Downloader, Player } from '@crn-flix/contracts';
 
 import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
 import { DOWNLOADER } from '@/providers/downloader';
+import { PLAYER } from '@/providers/player';
 import { CatalogSyncService } from '@/services/catalog/sync';
 import {
   DownloadJobEntity,
@@ -29,11 +29,11 @@ import {
 } from '@/services/database/requests';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UsersRepository } from '@/services/database/users';
-import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { MediaTitlesService } from '@/services/media-titles';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { PlannerService } from '@/services/planner/planner';
+import { PlayerSyncService } from '@/services/player-sync';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { downloadActionResolution, isIdentificationError } from '@/services/tickets/auto-resolve';
 import { TICKET_ID_METADATA_KEY, TicketCategory } from '@/services/tickets/model';
@@ -55,11 +55,11 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     readonly config: ConfigService<Config, true>,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly catalogSync: CatalogSyncService,
-    private readonly jellyfinSync: JellyfinSyncService,
+    private readonly playerSync: PlayerSyncService,
     private readonly planner: PlannerService,
     private readonly ticketService: TicketService,
     private readonly ticketReconciler: TicketReconcilerService,
-    private readonly jellyfin: JellyfinMediaService,
+    @Inject(PLAYER) private readonly player: Player,
     private readonly messaging: AllUserMessaging,
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
@@ -81,7 +81,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     if (process.env.NODE_ENV === 'production') {
       this.registerCronJob('catalog-sync-job', '*/5 * * * *', () => this.runSync());
       this.registerCronJob('planner-job', '0 * * * *', () => this.planner.runAll());
-      this.registerCronJob('jellyfin-sync-job', '*/15 * * * *', () => this.jellyfinSync.sync());
+      this.registerCronJob('player-sync-job', '*/15 * * * *', () => this.playerSync.sync());
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
       this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
     }
@@ -330,7 +330,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   private async onJobCompleted(job: DownloadJobEntity): Promise<void> {
     AppService.logger.log(`Download job ${job.id} completed`);
-    await this.jellyfin.refreshLibrary();
+    await this.player.refreshLibrary();
     await this.requestsRepository.fulfillByJobId(job.id);
     this.downloader.remove(job.sourceId);
 

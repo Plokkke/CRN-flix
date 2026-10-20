@@ -1,8 +1,7 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AxiosError } from 'axios';
 
-import { Downloader, LiveDownload } from '@crn-flix/contracts';
-import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+import { AccountNameTakenError, Downloader, LiveDownload, Player } from '@crn-flix/contracts';
 
 import { Listener } from '@/helpers/events';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
@@ -55,7 +54,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly ticketService: TicketService,
     private readonly ticketsRepository: TicketsRepository,
-    private readonly jellyfin: JellyfinMediaService,
+    private readonly player: Player,
     private readonly messaging: AllUserMessaging,
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
@@ -113,28 +112,23 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
 
     const password = Math.random().toString(36).substring(2, 15);
     try {
-      if (user.jellyfinId) {
-        await this.jellyfin.resetUserPassword(user.jellyfinId, password);
-      } else {
-        const existing = await this.jellyfin.findUserByName(user.name);
-        user.jellyfinId = existing ? existing.Id : await this.jellyfin.registerUser(user.name, password);
-        if (existing) {
-          await this.jellyfin.resetUserPassword(user.jellyfinId, password);
-        }
-        await this.usersRepository.setJellyfinId(user.id, user.jellyfinId);
+      const accountId = await this.player.upsertAccount(user.name, password, user.jellyfinId);
+      if (accountId !== user.jellyfinId) {
+        user.jellyfinId = accountId;
+        await this.usersRepository.setJellyfinId(user.id, accountId);
       }
       await this.usersRepository.setStatus(user.id, UserStatus.Active);
       this.messaging.registered(messagingContext, user, password);
       return { status: 'resolved', message: `Inscription de ${user.name} validée` };
     } catch (error) {
-      if (error instanceof Error && error.message === 'User already exists') {
+      if (error instanceof AccountNameTakenError) {
         this.messaging.error(messagingContext, "Ce nom d'utilisateur existe déjà merci d'en choisir un autre");
-        return failed(`Le nom "${user.name}" existe déjà sur Jellyfin`);
+        return failed(`Le nom "${user.name}" existe déjà sur ${this.player.name}`);
       }
       const message = error instanceof AxiosError ? JSON.stringify(error.response?.data) : String(error);
       TicketHandlersService.logger.error(`Error registering user ${user.name}: ${message}`);
       this.messaging.error(messagingContext, "Erreur lors de l'inscription");
-      return failed(`Erreur Jellyfin : ${message}`.slice(0, 500));
+      return failed(`Erreur ${this.player.name} : ${message}`.slice(0, 500));
     }
   }
 

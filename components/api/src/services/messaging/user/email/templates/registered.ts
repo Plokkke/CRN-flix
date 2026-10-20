@@ -1,11 +1,8 @@
+import { ShowcaseItem } from '@crn-flix/contracts';
+
 import { getEmailTemplate, getInfoBox, getMediaGrid, TYPOGRAPHY, BUTTONS, COLORS } from './email-styles';
 
-export interface MediaItem {
-  title: string;
-  posterUrl: string;
-  imdbId: string;
-  type: 'movie' | 'show' | 'episode';
-}
+type MediaItem = ShowcaseItem;
 
 const getCredentialsSection = (userName: string, password: string, mediaServerUrl: string) =>
   getInfoBox(

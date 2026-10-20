@@ -34,20 +34,20 @@ import { PlannerFindingsRepository } from '@/services/database/planner-findings'
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
-import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { DiscordChannelCleanup } from '@/services/messaging/admin/channel-cleanup';
 import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
 import { adminLoginTemplate } from '@/services/messaging/user/email/templates/admin-login';
 import { adminNamingAuditTemplate } from '@/services/messaging/user/email/templates/admin-naming-audit';
 import { NamingAuditService } from '@/services/naming-audit';
 import { PlannerService } from '@/services/planner/planner';
+import { PlayerSyncService } from '@/services/player-sync';
 import { TicketReconcilerService } from '@/services/tickets/reconciler';
 import { truthy } from '@/utils';
 
 const JOBS = [
   { name: 'catalog-sync', schedule: 'Every 5 minutes' },
   { name: 'planner', schedule: 'Every hour' },
-  { name: 'jellyfin-sync', schedule: 'Every 15 minutes' },
+  { name: 'player-sync', schedule: 'Every 15 minutes' },
   { name: 'ticket-sync', schedule: 'Every 5 minutes' },
   { name: 'naming-audit', schedule: 'Manual only' },
   { name: 'discord-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
@@ -76,7 +76,7 @@ export class AdminController {
     private readonly adminAuth: AdminAuthService,
     private readonly contextService: ContextService,
     private readonly catalogSync: CatalogSyncService,
-    private readonly jellyfinSync: JellyfinSyncService,
+    private readonly playerSync: PlayerSyncService,
     private readonly planner: PlannerService,
     private readonly ticketReconciler: TicketReconcilerService,
     private readonly requestsRepository: RequestsRepository,
@@ -94,7 +94,7 @@ export class AdminController {
     this.jobHandlers = {
       'catalog-sync': () => this.catalogSync.sync(),
       planner: () => this.planner.runAll(),
-      'jellyfin-sync': () => this.jellyfinSync.sync(),
+      'player-sync': () => this.playerSync.sync(),
       'ticket-sync': () => this.ticketReconciler.sync(),
       'naming-audit': async () => {
         await this.namingAudit.run();
