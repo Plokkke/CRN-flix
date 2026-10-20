@@ -32,9 +32,9 @@ export const catalogProviders: Provider[] = [
   },
   {
     provide: CatalogAccountsService,
-    inject: [UsersRepository, CATALOG_ACCOUNT_SOURCE],
-    useFactory: (users: UsersRepository, source: CatalogAccountSource): CatalogAccountsService =>
-      new CatalogAccountsService(users, source),
+    inject: [UsersRepository, CATALOG_ACCOUNT_SOURCE, CATALOG],
+    useFactory: (users: UsersRepository, source: CatalogAccountSource, catalog: Catalog): CatalogAccountsService =>
+      new CatalogAccountsService(users, source, catalog),
   },
   {
     provide: CatalogPlayheadService,
