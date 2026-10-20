@@ -1,4 +1,4 @@
-import { escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { COLORS, escapeHtml, getWebTemplate, RADIUS, TONES } from '@crn-flix/design-system';
 
 export type LoginStep = 'request' | 'code';
 
@@ -21,35 +21,36 @@ export interface OtpLoginParams {
 
 const ADDITIONAL_CSS = `
   form + form, form + p.restart {
-    margin-top: 12px;
+    margin-top: 10px;
   }
   button.secondary, a.secondary {
     display: block;
-    text-align: center;
-    box-sizing: border-box;
     width: 100%;
-    padding: 12px 24px;
-    border-radius: 4px;
-    font-weight: bold;
-    font-size: 16px;
+    padding: 11px 20px;
+    border-radius: ${RADIUS.md};
+    font-weight: 600;
+    font-size: 15px;
+    text-align: center;
     text-decoration: none;
-    background-color: transparent;
-    color: #1e90ff;
-    border: 1px solid #1e90ff;
+    background-color: ${COLORS.white};
+    color: ${COLORS.primary};
+    border: 1px solid ${COLORS.border};
   }
   button.secondary:hover, a.secondary:hover {
-    background-color: #f0f7ff;
+    background-color: ${COLORS.surfaceMuted};
   }
   #code {
-    letter-spacing: 8px;
+    letter-spacing: 10px;
     text-align: center;
-    font-size: 24px;
+    font-size: 26px;
+    font-weight: 600;
   }
   .flash {
-    background-color: #fff8e1;
-    border-left: 4px solid #f5a623;
+    background-color: ${TONES.warning.bg};
+    color: ${TONES.warning.text};
+    border: 1px solid ${TONES.warning.border};
     padding: 12px 16px;
-    border-radius: 5px;
+    border-radius: ${RADIUS.md};
     margin-bottom: 20px;
   }
 `;

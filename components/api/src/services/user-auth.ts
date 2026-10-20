@@ -15,7 +15,7 @@ import { SessionAuthService } from '@/services/auth/session-auth';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { UserSessionsRepository } from '@/services/database/user-sessions';
 import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
-import { AllUserMessaging } from '@/services/messaging/user/all';
+import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/all';
 
 export type UserAuthConfig = {
   serviceName: string;
@@ -113,10 +113,12 @@ export class UserAuthService extends SessionAuthService {
     const link = `${this.config.serverUrl}${USER_LOGIN_LINK_PATH}?u=${user.id}&t=${linkToken}`;
 
     try {
-      await this.messaging.loginChallenge(
-        { key: user.messagingKey, id: user.messagingId },
-        { code, link, serviceName: this.config.serviceName, expiresInMinutes: CHALLENGE_TTL_MINUTES },
-      );
+      await this.messaging.loginChallenge(messagingContextOf(user), {
+        code,
+        link,
+        serviceName: this.config.serviceName,
+        expiresInMinutes: CHALLENGE_TTL_MINUTES,
+      });
     } catch (error) {
       this.logger.error(`Failed to deliver a login challenge to user ${user.id}`, error);
       return null;

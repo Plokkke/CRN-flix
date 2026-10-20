@@ -13,6 +13,7 @@ import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
+import { UserMessagesRepository } from '@/services/database/user-messages';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UserSessionsRepository } from '@/services/database/user-sessions';
 import { UsersRepository } from '@/services/database/users';
@@ -25,6 +26,7 @@ const REPOSITORIES = [
   DownloadJobsRepository,
   NamingAuditRepository,
   UserNotificationsRepository,
+  UserMessagesRepository,
   AdminSessionsRepository,
   UserSessionsRepository,
   PlannedDownloadsRepository,

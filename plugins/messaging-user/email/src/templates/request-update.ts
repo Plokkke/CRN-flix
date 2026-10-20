@@ -1,5 +1,5 @@
 import { RequestNotice, RequestOutcome, ServiceIdentity } from '@crn-flix/contracts';
-import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from '@crn-flix/design-system';
+import { BUTTONS, getEmailTemplate, getInfoBox, getMediaCard, TYPOGRAPHY } from '@crn-flix/design-system';
 
 const DESCRIPTION_BY_OUTCOME: Record<RequestOutcome, string> = {
   fulfilled: 'Votre demande est disponible.',
@@ -33,6 +33,16 @@ ${DESCRIPTION_BY_OUTCOME[notice.outcome]}
 ${notice.outcome === 'fulfilled' ? `Regarder sur ${serviceName}: ${playerUrl}` : ''}
 ---`;
 
+const userSpaceBox = (userSpaceUrl: string): string =>
+  getInfoBox(
+    `<h2 style="${TYPOGRAPHY.h2}">Et vos autres demandes ?</h2>
+     <p style="${TYPOGRAPHY.body}">Retrouvez toutes vos demandes en cours, ce qui est déjà disponible et la progression des téléchargements dans votre espace personnel.</p>
+     <div style="margin-top: 20px;">
+       <a href="${userSpaceUrl}" style="${BUTTONS.primary}" target="_blank" rel="noopener noreferrer">Suivre mes demandes</a>
+     </div>`,
+    'info',
+  );
+
 export const requestUpdateTemplate = (
   identity: ServiceIdentity,
   notices: RequestNotice[],
@@ -43,12 +53,15 @@ export const requestUpdateTemplate = (
   const content = `
     <h1 style="${TYPOGRAPHY.h1}">Mise à jour de vos demandes</h1>
     ${sorted.map((notice) => card(notice, identity)).join('')}
+    ${userSpaceBox(identity.userSpaceUrl)}
   `;
 
   const text = `
 📺 Mise à jour de vos demandes (${notices.length})
 
 ${sorted.map((notice) => textBlock(notice, identity)).join('\n')}
+
+Suivez toutes vos demandes en cours sur votre espace: ${identity.userSpaceUrl}
 
 --
 L'équipe ${identity.serviceName}`;

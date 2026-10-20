@@ -4,7 +4,7 @@ import { RequestsRepository } from '@/services/database/requests';
 import { NotificationKey, UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UsersRepository } from '@/services/database/users';
 
-import { AllUserMessaging } from './all';
+import { AllUserMessaging, messagingContextOf } from './all';
 
 /** Younger notices may still sit in a debounced batch (60s): leave them to it. */
 const SETTLE_MS = 2 * 60 * 1000;
@@ -50,6 +50,6 @@ export class NotificationRedeliveryService {
       await this.notifications.discard(key);
       return;
     }
-    await this.messaging.requestUpdated({ key: user.messagingKey, id: user.messagingId }, request, user.id);
+    await this.messaging.requestUpdated(messagingContextOf(user), request);
   }
 }

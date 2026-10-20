@@ -10,6 +10,7 @@ const USER: UserEntity = {
   name: 'Alice',
   jellyfinId: 'jf-1',
   maxStreams: 1,
+  catalogRelinkRequestedAt: null,
   messagingKey: 'email',
   messagingId: 'alice@example.com',
   status: UserStatus.Active,
@@ -65,7 +66,7 @@ describe('UserAuthService', () => {
       await expect(service.requestCode('alice')).resolves.toEqual({ outcome: 'sent', userId: 'user-1' });
 
       const { ctxt, challenge } = lastChallenge();
-      expect(ctxt).toEqual({ key: 'email', id: 'alice@example.com' });
+      expect(ctxt).toEqual({ key: 'email', id: 'alice@example.com', userId: 'user-1' });
       expect(challenge.code).toMatch(/^\d{6}$/);
       expect(challenge.link).toMatch(/^https:\/\/flix\.example\/me\/login\/link\?u=user-1&t=/);
     });

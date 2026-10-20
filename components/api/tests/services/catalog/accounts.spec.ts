@@ -4,6 +4,7 @@ import { CatalogAccountsService } from '@/services/catalog/accounts';
 import { UsersRepository } from '@/services/database/users';
 
 function build(renewCredentials: jest.Mock = jest.fn().mockResolvedValue(null)) {
+  const watcher = { revoked: jest.fn(), usable: jest.fn() };
   const users = {
     list: jest.fn().mockResolvedValue([
       { id: 'u1', name: 'one', jellyfinId: 'jf1' },
@@ -22,8 +23,9 @@ function build(renewCredentials: jest.Mock = jest.fn().mockResolvedValue(null)) 
     users as unknown as UsersRepository,
     source as CatalogAccountSource,
     { renewCredentials } as unknown as Catalog,
+    watcher,
   );
-  return { source, renewCredentials, service };
+  return { source, renewCredentials, watcher, service };
 }
 
 describe('CatalogAccountsService', () => {
@@ -59,5 +61,17 @@ describe('CatalogAccountsService', () => {
 
     expect(await revoked.service.list()).toEqual([]);
     expect((await failed.service.list())[0].account.credentials).toEqual({ token: 'a' });
+  });
+
+  it('tells the watcher which accounts work and which were revoked', async () => {
+    const healthy = build();
+    const revoked = build(jest.fn().mockRejectedValue(new CatalogAccountRevokedError('refused')));
+
+    await healthy.service.list();
+    await revoked.service.list();
+
+    expect(healthy.watcher.usable).toHaveBeenCalledWith(expect.objectContaining({ id: 'u1' }));
+    expect(revoked.watcher.revoked).toHaveBeenCalledWith(expect.objectContaining({ id: 'u1' }));
+    expect(revoked.watcher.usable).not.toHaveBeenCalled();
   });
 });

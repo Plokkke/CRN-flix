@@ -12,7 +12,7 @@ import { TicketNotifyEvents, TicketsRepository } from '@/services/database/ticke
 import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
 import { buildDownloadMetadata } from '@/services/downloads/metadata';
 import { MediaIdentifierService } from '@/services/media-identifier';
-import { AllUserMessaging, UserMessagingCtxt } from '@/services/messaging/user/all';
+import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/all';
 import { buildActionDownloadMetadata, PlannerService } from '@/services/planner/planner';
 import { PlayerAccountsService } from '@/services/player-accounts';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
@@ -40,8 +40,6 @@ function labelOf(identification: Identification): string {
 }
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-const messagingContextOf = (user: UserEntity): UserMessagingCtxt => ({ key: user.messagingKey, id: user.messagingId });
 
 function failed(message: string, payloadPatch?: Record<string, unknown>): OperationOutcome {
   return { status: 'failed', message, payloadPatch };

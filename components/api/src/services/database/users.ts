@@ -12,6 +12,8 @@ export type UserEntity = {
   jellyfinId: string | null;
   /** Concurrent streams allowed on the player, 0 = unlimited; null until adopted from the player. */
   maxStreams: number | null;
+  /** When the user was asked to link their catalog account again; null when it works. */
+  catalogRelinkRequestedAt: Date | null;
   messagingKey: string;
   messagingId: string;
   status: UserStatus;
@@ -24,6 +26,7 @@ type UserRecord = {
   name: string;
   jellyfin_id: string | null;
   max_streams: number | null;
+  catalog_relink_requested_at: Date | null;
   messaging_key: string;
   messaging_id: string;
   status: UserStatus;
@@ -37,6 +40,7 @@ function fromUserRecord(record: UserRecord): UserEntity {
     name: record.name,
     jellyfinId: record.jellyfin_id,
     maxStreams: record.max_streams,
+    catalogRelinkRequestedAt: record.catalog_relink_requested_at,
     messagingKey: record.messaging_key,
     messagingId: record.messaging_id,
     status: record.status,
@@ -116,6 +120,10 @@ export class UsersRepository {
 
   async setMaxStreams(userId: string, maxStreams: number): Promise<void> {
     await this.pool.query(`UPDATE users SET max_streams = $2 WHERE id = $1`, [userId, maxStreams]);
+  }
+
+  async setCatalogRelinkRequestedAt(userId: string, requestedAt: Date | null): Promise<void> {
+    await this.pool.query(`UPDATE users SET catalog_relink_requested_at = $2 WHERE id = $1`, [userId, requestedAt]);
   }
 
   async setStatus(userId: string, status: UserStatus): Promise<void> {

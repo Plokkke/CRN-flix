@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 
-import { EnginePreferences, Player, ShowcaseItem, ShowcaseKind } from '@crn-flix/contracts';
+import { EnginePreferences, Player, ServiceIdentity, ShowcaseItem, ShowcaseKind } from '@crn-flix/contracts';
 
 import { Config } from '@/app.module';
 
@@ -25,6 +25,14 @@ export class ContextService {
   get userGuideUrl(): string {
     const serverConfig = this.configService.get('server');
     return `${serverConfig.url}/user-guide`;
+  }
+
+  get userSpaceUrl(): string {
+    return `${this.configService.get('server').url}/me`;
+  }
+
+  get identity(): ServiceIdentity {
+    return { serviceName: this.name, playerUrl: this.mediaServerUrl, userSpaceUrl: this.userSpaceUrl };
   }
 
   getTraktLinkUrl(userId: string): string {

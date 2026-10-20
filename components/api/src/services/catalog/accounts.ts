@@ -15,6 +15,14 @@ export type UserCatalogAccount = {
   account: CatalogAccount;
 };
 
+/** Told what each listing learnt about an account's health; must not throw nor block. */
+export type CatalogAccountWatcher = {
+  revoked(user: UserEntity): void;
+  usable(user: UserEntity): void;
+};
+
+const NO_WATCHER: CatalogAccountWatcher = { revoked: () => undefined, usable: () => undefined };
+
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
@@ -32,6 +40,7 @@ export class CatalogAccountsService {
     private readonly usersRepository: UsersRepository,
     private readonly source: CatalogAccountSource,
     private readonly catalog: Catalog,
+    private readonly watcher: CatalogAccountWatcher = NO_WATCHER,
   ) {}
 
   async list(): Promise<UserCatalogAccount[]> {
@@ -45,6 +54,7 @@ export class CatalogAccountsService {
       }),
     );
     const usable = matched.filter((account): account is UserCatalogAccount => account !== null);
+    usable.forEach(({ user }) => this.watcher.usable(user));
     CatalogAccountsService.logger.debug(
       `${usable.length} users matched out of ${users.length} (${linked.length} linked catalog accounts)`,
     );
@@ -58,6 +68,7 @@ export class CatalogAccountsService {
     } catch (error) {
       if (error instanceof CatalogAccountRevokedError) {
         CatalogAccountsService.logger.warn(`User ${user.name}: ${error.message}`);
+        this.watcher.revoked(user);
         return null;
       }
       CatalogAccountsService.logger.warn(`User ${user.name}: credential renewal failed (${describeError(error)})`);

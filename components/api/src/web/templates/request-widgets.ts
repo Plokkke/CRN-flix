@@ -1,4 +1,4 @@
-import { escapeHtml } from '@crn-flix/design-system';
+import { escapeHtml, RADIUS, TONES } from '@crn-flix/design-system';
 
 import { RequestStatus } from '@/services/database/requests';
 
@@ -47,19 +47,24 @@ export const indexerLink = (link: IndexerLinkView): string => {
   return href ? externalLink(href, escapeHtml(link.indexerName)) : escapeHtml(link.indexerName);
 };
 
+const toneRule = (selector: string, tone: keyof typeof TONES): string =>
+  `${selector} { background-color: ${TONES[tone].bg}; color: ${TONES[tone].text}; border-color: ${TONES[tone].border}; }`;
+
 export const BADGE_CSS = `
   .status-badge {
     display: inline-block;
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-weight: bold;
+    padding: 2px 10px;
+    border: 1px solid transparent;
+    border-radius: ${RADIUS.pill};
+    font-weight: 600;
     font-size: 12px;
+    line-height: 1.6;
     white-space: nowrap;
   }
-  .status-pending { background-color: #ffd700; color: #000; }
-  .status-fulfilled { background-color: #32cd32; color: #fff; }
-  .status-missing { background-color: #ff8c00; color: #fff; }
-  .status-rejected { background-color: #ff4444; color: #fff; }
+  ${toneRule('.status-pending', 'warning')}
+  ${toneRule('.status-fulfilled', 'success')}
+  ${toneRule('.status-missing', 'warning')}
+  ${toneRule('.status-rejected', 'danger')}
   .imdb-link { text-decoration: none; }
   .imdb-link:hover code { text-decoration: underline; }
 `;
