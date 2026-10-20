@@ -35,6 +35,7 @@ import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { AdminTicketRelay } from '@/services/messaging/admin/relay';
+import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { NamingAuditService } from '@/services/naming-audit';
 import { PlannerService } from '@/services/planner/planner';
 import { PlayerSyncService } from '@/services/player-sync';
@@ -49,6 +50,7 @@ const JOBS = [
   { name: 'planner', schedule: 'Every hour' },
   { name: 'player-sync', schedule: 'Every 15 minutes' },
   { name: 'ticket-sync', schedule: 'Every 5 minutes' },
+  { name: 'notification-redelivery', schedule: 'Every 5 minutes' },
   { name: 'naming-audit', schedule: 'Manual only' },
   { name: 'admin-channel-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
 ] as const;
@@ -90,12 +92,14 @@ export class AdminController {
     private readonly namingAudit: NamingAuditService,
     private readonly namingAuditRepository: NamingAuditRepository,
     private readonly adminRelay: AdminTicketRelay,
+    private readonly redelivery: NotificationRedeliveryService,
   ) {
     this.jobHandlers = {
       'catalog-sync': () => this.catalogSync.sync(),
       planner: () => this.planner.runAll(),
       'player-sync': () => this.playerSync.sync(),
       'ticket-sync': () => this.ticketReconciler.sync(),
+      'notification-redelivery': () => this.redelivery.redeliver(),
       'naming-audit': async () => {
         await this.namingAudit.run();
       },

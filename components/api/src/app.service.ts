@@ -32,6 +32,7 @@ import { UsersRepository } from '@/services/database/users';
 import { MediaTitlesService } from '@/services/media-titles';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { AllUserMessaging } from '@/services/messaging/user/all';
+import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { PlannerService } from '@/services/planner/planner';
 import { PlayerSyncService } from '@/services/player-sync';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
@@ -69,6 +70,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly mediaTitles: MediaTitlesService,
+    private readonly redelivery: NotificationRedeliveryService,
   ) {}
 
   onModuleInit(): void {
@@ -84,6 +86,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('player-sync-job', '*/15 * * * *', () => this.playerSync.sync());
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
       this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
+      this.registerCronJob('notification-redelivery-job', '*/5 * * * *', () => this.redelivery.redeliver());
     }
   }
 
@@ -166,16 +169,14 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
               continue;
             }
 
-            if (!(await this.userNotifications.claim(userId, request.mediaId, request.status))) {
+            if (await this.userNotifications.wasSent({ userId, mediaId: request.mediaId, status: request.status })) {
               AppService.logger.debug(`User ${user.name} already notified for ${request.mediaId} (${request.status})`);
               continue;
             }
 
-            AppService.logger.debug(
-              `Sending notification to user ${user.name} (${user.messagingKey}:${user.messagingId})`,
-            );
+            AppService.logger.debug(`Notifying user ${user.name} (${user.messagingKey}:${user.messagingId})`);
             const userCtxt = { key: user.messagingKey, id: user.messagingId };
-            await this.messaging.requestUpdated(userCtxt, request);
+            await this.messaging.requestUpdated(userCtxt, request, userId);
           }
         }),
       userJoined: (event: UserJoinedRequestEvent) =>
@@ -197,12 +198,13 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          if (!(await this.userNotifications.claim(event.userId, request.mediaId, request.status))) {
+          const key = { userId: event.userId, mediaId: request.mediaId, status: request.status };
+          if (await this.userNotifications.wasSent(key)) {
             AppService.logger.debug(`User ${user.name} already notified for ${request.mediaId} (${request.status})`);
             return;
           }
 
-          await this.messaging.requestUpdated({ key: user.messagingKey, id: user.messagingId }, request);
+          await this.messaging.requestUpdated({ key: user.messagingKey, id: user.messagingId }, request, user.id);
         }),
       userLeft: (event: UserLeftRequestEvent) =>
         this.trackEvent(async () => {

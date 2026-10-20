@@ -32,7 +32,11 @@ import { downloaderProviders } from '@/providers/downloader';
 import { jellyfinProvider } from '@/providers/jellyfin';
 import { mediaTitlesProviders } from '@/providers/media-titles';
 import { adminMessagingProviders } from '@/providers/messaging/admin';
-import { allUserMessagingProvider, announcementProvider } from '@/providers/messaging/all';
+import {
+  allUserMessagingProvider,
+  announcementProvider,
+  notificationRedeliveryProvider,
+} from '@/providers/messaging/all';
 import { namingAuditProviders } from '@/providers/naming-audit';
 import { indexersRegistryProvider, plannerProvider } from '@/providers/planner';
 import { playerProviders } from '@/providers/player';
@@ -61,6 +65,7 @@ export const configSchema = z.object({
   datasource: syncDataSourceConfigSchema,
   jellyfin: jellyfinConfigSchema,
   mailing: emailConfigSchema,
+  userMessaging: z.object({ mode: z.enum(['send', 'dry-run']) }),
   discord: discordConfigSchema,
   indexer: z.object({
     loadix: loadixConfigSchema.nullable(),
@@ -114,6 +119,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
       discordChannelId: env.discord.channelId,
     },
     mailing: env.mailing,
+    userMessaging: env.userMessaging,
   });
 }
 
@@ -148,6 +154,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       discordProvider,
       DiscordConnectionLifecycle,
       allUserMessagingProvider,
+      notificationRedeliveryProvider,
       announcementProvider,
       ...adminMessagingProviders,
       ...ticketProviders,

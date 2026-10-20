@@ -9,10 +9,10 @@ import { MediaEntity, MediasRepository, MediaType } from '@/services/database/me
 import { PlannedDownloadsRepository, PlannedDownloadStatus } from '@/services/database/planned-downloads';
 import { RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { TicketNotifyEvents, TicketsRepository } from '@/services/database/tickets';
-import { UsersRepository, UserStatus } from '@/services/database/users';
+import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
 import { buildDownloadMetadata } from '@/services/downloads/metadata';
 import { MediaIdentifierService } from '@/services/media-identifier';
-import { AllUserMessaging } from '@/services/messaging/user/all';
+import { AllUserMessaging, UserMessagingCtxt } from '@/services/messaging/user/all';
 import { buildActionDownloadMetadata, PlannerService } from '@/services/planner/planner';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { identificationFailureResolved } from '@/services/tickets/auto-resolve';
@@ -37,6 +37,10 @@ type ManualDownloadPayload = TicketPayloadMap[TicketCategory.ManualDownload];
 function labelOf(identification: Identification): string {
   return `${identification.title}${identification.year ? ` (${identification.year})` : ''}`;
 }
+
+const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const messagingContextOf = (user: UserEntity): UserMessagingCtxt => ({ key: user.messagingKey, id: user.messagingId });
 
 function failed(message: string, payloadPatch?: Record<string, unknown>): OperationOutcome {
   return { status: 'failed', message, payloadPatch };
@@ -102,14 +106,25 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     if (!user) {
       return { status: 'resolved', message: 'Utilisateur déjà supprimé' };
     }
-    const messagingContext = { key: user.messagingKey, id: user.messagingId };
+    return operation.kind === 'reject' ? this.rejectUser(user) : this.approveUser(user);
+  }
 
-    if (operation.kind === 'reject') {
-      this.messaging.error(messagingContext, 'Votre inscription a été refusée');
-      await this.usersRepository.remove(user.id);
-      return { status: 'resolved', message: `Inscription de ${user.name} refusée` };
+  /** The user is only deleted once told: a refusal that could not be sent keeps the ticket open. */
+  private async rejectUser(user: UserEntity): Promise<OperationOutcome> {
+    try {
+      await this.messaging.error(messagingContextOf(user), 'Votre inscription a été refusée');
+    } catch (error) {
+      return failed(`Refus non notifié à ${user.name} : ${describeError(error)}`.slice(0, 500));
     }
+    await this.usersRepository.remove(user.id);
+    return { status: 'resolved', message: `Inscription de ${user.name} refusée` };
+  }
 
+  /**
+   * The user only becomes active once their credentials reached them; a retry resets the
+   * password again, so a failed welcome never leaves an account nobody can log into.
+   */
+  private async approveUser(user: UserEntity): Promise<OperationOutcome> {
     const password = Math.random().toString(36).substring(2, 15);
     try {
       const accountId = await this.player.upsertAccount(user.name, password, user.jellyfinId);
@@ -117,19 +132,29 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
         user.jellyfinId = accountId;
         await this.usersRepository.setJellyfinId(user.id, accountId);
       }
+      await this.messaging.registered(messagingContextOf(user), user, password);
       await this.usersRepository.setStatus(user.id, UserStatus.Active);
-      this.messaging.registered(messagingContext, user, password);
       return { status: 'resolved', message: `Inscription de ${user.name} validée` };
     } catch (error) {
-      if (error instanceof AccountNameTakenError) {
-        this.messaging.error(messagingContext, "Ce nom d'utilisateur existe déjà merci d'en choisir un autre");
-        return failed(`Le nom "${user.name}" existe déjà sur ${this.player.name}`);
-      }
-      const message = error instanceof AxiosError ? JSON.stringify(error.response?.data) : String(error);
-      TicketHandlersService.logger.error(`Error registering user ${user.name}: ${message}`);
-      this.messaging.error(messagingContext, "Erreur lors de l'inscription");
-      return failed(`Erreur ${this.player.name} : ${message}`.slice(0, 500));
+      return this.approvalFailed(user, error);
     }
+  }
+
+  private async approvalFailed(user: UserEntity, error: unknown): Promise<OperationOutcome> {
+    if (error instanceof AccountNameTakenError) {
+      await this.tellUser(user, "Ce nom d'utilisateur existe déjà merci d'en choisir un autre");
+      return failed(`Le nom "${user.name}" existe déjà sur ${this.player.name}`);
+    }
+    const message = error instanceof AxiosError ? JSON.stringify(error.response?.data) : describeError(error);
+    TicketHandlersService.logger.error(`Error registering user ${user.name}: ${message}`);
+    return failed(`Inscription de ${user.name} non finalisée : ${message}`.slice(0, 500));
+  }
+
+  /** Best effort: the ticket already reports the failure to the admin. */
+  private async tellUser(user: UserEntity, message: string): Promise<void> {
+    await this.messaging.error(messagingContextOf(user), message).catch((error: unknown) => {
+      TicketHandlersService.logger.warn(`Could not tell ${user.name} "${message}": ${describeError(error)}`);
+    });
   }
 
   // --- download-action ---

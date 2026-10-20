@@ -40,7 +40,7 @@ function buildStubs() {
       name: 'jellyfin',
       upsertAccount: jest.fn().mockResolvedValue('jf-1'),
     },
-    messaging: { registered: jest.fn(), error: jest.fn() },
+    messaging: { registered: jest.fn().mockResolvedValue(undefined), error: jest.fn().mockResolvedValue(undefined) },
     usersRepository: {
       get: jest.fn().mockResolvedValue({
         id: 'u1',
@@ -171,6 +171,28 @@ describe('TicketHandlersService', () => {
       expect(outcome.status).toBe('resolved');
       expect(stubs.messaging.error).toHaveBeenCalled();
       expect(stubs.usersRepository.remove).toHaveBeenCalledWith('u1');
+    });
+    it('keeps the user pending while their credentials could not be sent', async () => {
+      const stubs = buildStubs();
+      stubs.messaging.registered.mockRejectedValue(new Error('smtp down'));
+      const handle = handlerFor(stubs, TicketCategory.UserApproval);
+
+      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), { kind: 'approve' });
+
+      expect(outcome.status).toBe('failed');
+      expect(outcome.message).toContain('smtp down');
+      expect(stubs.usersRepository.setStatus).not.toHaveBeenCalled();
+    });
+
+    it('keeps a rejected user until they could be told', async () => {
+      const stubs = buildStubs();
+      stubs.messaging.error.mockRejectedValue(new Error('smtp down'));
+      const handle = handlerFor(stubs, TicketCategory.UserApproval);
+
+      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), { kind: 'reject' });
+
+      expect(outcome.status).toBe('failed');
+      expect(stubs.usersRepository.remove).not.toHaveBeenCalled();
     });
   });
 
