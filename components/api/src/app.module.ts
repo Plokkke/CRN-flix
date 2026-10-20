@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { traktConfigSchema } from '@crn-flix/catalog-trakt';
 import { Host, Language, Quality } from '@crn-flix/contracts';
+import { fetchrConfigSchema } from '@crn-flix/downloader-fetchr';
 import { loadixConfigSchema } from '@crn-flix/indexer-loadix';
 import { tmdbConfigSchema } from '@crn-flix/metadata-tmdb';
 import { jellyfinConfigSchema } from '@crn-flix/player-jellyfin';
@@ -26,7 +27,7 @@ import { catalogProviders } from '@/providers/catalog';
 import { contextProvider } from '@/providers/context';
 import { repositoryProviders } from '@/providers/database';
 import { discordProvider } from '@/providers/discord';
-import { fetchrSyncProvider } from '@/providers/fetchr-sync';
+import { downloaderProviders } from '@/providers/downloader';
 import { jellyfinProvider } from '@/providers/jellyfin';
 import { jellyfinSyncProvider } from '@/providers/jellyfin-sync';
 import { mediaTitlesProviders } from '@/providers/media-titles';
@@ -74,11 +75,7 @@ export const configSchema = z.object({
       }),
     }),
   }),
-  fetchr: z.object({
-    url: z.string(),
-    apiKey: z.string().optional(),
-    downloadsPrefix: z.string(),
-  }),
+  fetchr: fetchrConfigSchema,
   tmdb: tmdbConfigSchema,
   mediaPaths: mediaPathsConfigSchema,
   namingAudit: namingAuditConfigSchema,
@@ -155,7 +152,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       announcementProvider,
       ...adminMessagingProviders,
       ...ticketProviders,
-      fetchrSyncProvider,
+      ...downloaderProviders,
       DownloadProgressService,
       tmdbProvider,
       ...mediaTitlesProviders,

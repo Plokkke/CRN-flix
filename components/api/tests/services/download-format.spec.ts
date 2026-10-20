@@ -1,3 +1,5 @@
+import { LiveDownload } from '@crn-flix/contracts';
+
 import {
   countActive,
   downloadLabel,
@@ -8,7 +10,6 @@ import {
   progressBar,
   sortForDisplay,
 } from '@/services/download-format';
-import { LiveDownload } from '@/services/download-live-state';
 
 function buildDownload(overrides: Partial<LiveDownload> = {}): LiveDownload {
   return {

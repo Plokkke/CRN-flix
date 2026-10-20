@@ -1,4 +1,4 @@
-import { LiveDownload } from '@/services/download-live-state';
+import { LiveDownload } from '@crn-flix/contracts';
 
 const BAR_SLOTS = 12;
 const BYTE_UNITS = ['o', 'Ko', 'Mo', 'Go', 'To'];

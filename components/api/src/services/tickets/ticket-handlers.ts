@@ -1,6 +1,7 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AxiosError } from 'axios';
 
+import { Downloader, LiveDownload } from '@crn-flix/contracts';
 import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
 
 import { Listener } from '@/helpers/events';
@@ -10,8 +11,7 @@ import { PlannedDownloadsRepository, PlannedDownloadStatus } from '@/services/da
 import { RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { TicketNotifyEvents, TicketsRepository } from '@/services/database/tickets';
 import { UsersRepository, UserStatus } from '@/services/database/users';
-import { LiveDownload } from '@/services/download-live-state';
-import { buildDownloadMetadata, FetchrSyncService } from '@/services/fetchr-sync';
+import { buildDownloadMetadata } from '@/services/downloads/metadata';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { buildActionDownloadMetadata, PlannerService } from '@/services/planner/planner';
@@ -62,7 +62,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     private readonly mediasRepository: MediasRepository,
     private readonly plannedDownloads: PlannedDownloadsRepository,
     private readonly postDownloadPipeline: PostDownloadPipeline,
-    private readonly fetchrSync: FetchrSyncService,
+    private readonly downloader: Downloader,
     private readonly mediaIdentifier: MediaIdentifierService,
     private readonly planner: PlannerService,
     private readonly downloadJobs: DownloadJobsRepository,
@@ -149,10 +149,10 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
 
     switch (operation.kind) {
       case 'submitLink': {
-        if (!(await this.fetchrSync.canHandle(operation.url))) {
-          return failed('Aucun plugin Fetchr ne gère ce lien');
+        if (!(await this.downloader.canHandle(operation.url))) {
+          return failed('Le downloader ne gère pas ce lien');
         }
-        this.fetchrSync.download(operation.url, buildActionDownloadMetadata(action));
+        this.downloader.download(operation.url, buildActionDownloadMetadata(action));
         await this.plannedDownloads.updateStatus(action.id, PlannedDownloadStatus.Downloading);
         return { status: 'progress', message: 'Téléchargement lancé sur le lien soumis' };
       }
@@ -220,7 +220,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     const url = operation.url;
     let fileName: string;
     try {
-      const resolved = await this.fetchrSync.resolve(url);
+      const resolved = await this.downloader.resolve(url);
       fileName = resolved.fileName;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -261,7 +261,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
   }
 
   private findInFlightDownload(ticketId: string): LiveDownload | undefined {
-    return this.fetchrSync
+    return this.downloader
       .liveDownloads()
       .find((d) => d.metadata?.[TICKET_ID_METADATA_KEY] === ticketId && !SETTLED_DOWNLOAD_STATUSES.has(d.status));
   }
@@ -290,7 +290,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
   ): Promise<OperationOutcome> {
     const media = await this.ensurePendingRequest(identification);
 
-    this.fetchrSync.download(url, this.downloadMetadata(ticket, media));
+    this.downloader.download(url, this.downloadMetadata(ticket, media));
 
     TicketHandlersService.logger.log(`Download launched for "${identification.title}" (ticket ${ticket.id})`);
     return {
@@ -301,9 +301,9 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The download is still running in Fetchr: keep it, swap its metadata for the corrected
+   * The download is still running in the downloader: keep it, swap its metadata for the corrected
    * identity, re-point the ticket at the right request (the post-download pipeline also reads it,
-   * covering a Fetchr that did not apply the update) and drop the misidentified request when
+   * covering a downloader that did not apply the update) and drop the misidentified request when
    * nobody else asked for it.
    */
   private async reidentifyInFlightDownload(
@@ -313,7 +313,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     identification: Identification,
   ): Promise<OperationOutcome> {
     const media = await this.ensurePendingRequest(identification);
-    this.fetchrSync.updateMetadata(inFlight.id, this.downloadMetadata(ticket, media));
+    this.downloader.updateMetadata(inFlight.id, this.downloadMetadata(ticket, media));
 
     if (payload.requestId && payload.requestId !== media.id) {
       await this.dropOrphanRequest(payload.requestId);

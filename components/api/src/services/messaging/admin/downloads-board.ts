@@ -1,8 +1,9 @@
 import { Logger } from '@nestjs/common';
 import { EmbedBuilder, Message, MessageFlags } from 'discord.js';
 
+import { LiveDownload } from '@crn-flix/contracts';
+
 import { countActive, downloadLabel, downloadStatusLine, sortForDisplay } from '@/services/download-format';
-import { LiveDownload } from '@/services/download-live-state';
 
 import { DiscordAdminChannel } from './channel';
 

@@ -22,6 +22,18 @@ export type LiveDownload = {
   completedAt: string | null;
 };
 
+/** A finished download; `filePaths` are already paths the engine can open. */
+export type CompletedDownload = {
+  id: string;
+  fileName: string;
+  filePaths: string[];
+  size: number | null;
+  source: string;
+  metadata?: DownloadMetadata;
+  downloadedAt: string;
+  completedAt: string;
+};
+
 export type ResolvedSource = {
   fileName: string;
   size: number | null;
@@ -30,18 +42,25 @@ export type ResolvedSource = {
 export type Unsubscribe = () => void;
 
 /**
- * DRAFT — not wired yet. Fetches a source url into files on disk.
- * The downloader keeps no engine state: it reports completions, the engine persists them.
+ * Fetches a source url into files on disk. The downloader keeps no engine state:
+ * it reports completions and the engine persists them. A completion may be reported
+ * again (e.g. replayed after a reconnection), so the engine must handle it idempotently.
  */
 export interface Downloader {
   readonly name: string;
+  /** Connects and keeps connected; the engine boots without the downloader being reachable. */
+  start(): void;
+  stop(): void;
+  isConnected(): boolean;
   canHandle(url: string): Promise<boolean>;
   resolve(url: string): Promise<ResolvedSource>;
   /** Fire-and-forget: progress and completion arrive through the listeners. */
   download(url: string, metadata?: DownloadMetadata): void;
+  /** Replaces the metadata echoed on completion; ignored once the download completed. */
+  updateMetadata(downloadId: string, metadata: DownloadMetadata): void;
   cancel(downloadId: string): void;
   remove(downloadId: string): void;
   liveDownloads(): LiveDownload[];
   onLiveChanged(listener: () => void): Unsubscribe;
-  onCompleted(listener: (download: LiveDownload) => void): Unsubscribe;
+  onCompleted(listener: (download: CompletedDownload) => void | Promise<void>): Unsubscribe;
 }

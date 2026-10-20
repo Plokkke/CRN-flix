@@ -2,8 +2,10 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { HealthRegistryService } from '@plokkke/nest-health-registry';
 import { Pool } from 'pg';
 
+import { Downloader } from '@crn-flix/contracts';
+
+import { DOWNLOADER } from '@/providers/downloader';
 import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
-import { FetchrSyncService } from '@/services/fetchr-sync';
 
 const POOL_PROBE_TIMEOUT_MS = 2000;
 
@@ -13,20 +15,22 @@ export class HealthChecksService implements OnModuleInit {
 
   constructor(
     @Inject(SYNC_DATASOURCE) private readonly pool: Pool,
-    private readonly fetchrSync: FetchrSyncService,
+    @Inject(DOWNLOADER) private readonly downloader: Downloader,
     private readonly registry: HealthRegistryService,
   ) {}
 
   onModuleInit(): void {
-    // Fetchr is optional at runtime (auto-reconnect): its absence must not mark the engine unready.
+    // The downloader is optional at runtime (auto-reconnect): its absence must not mark the engine unready.
     this.registry.addReadinessCheck('postgres', () => this.checkPostgres());
     this.registry.addLivenessCheck('process', () => true);
-    this.registry.addLivenessCheck('fetchr-ws', () => this.reportFetchr());
+    this.registry.addLivenessCheck('downloader', () => this.reportDownloader());
   }
 
-  private reportFetchr(): boolean {
-    if (!this.fetchrSync.isConnected()) {
-      HealthChecksService.logger.debug('Fetchr WS not connected (engine keeps running, reconnect pending)');
+  private reportDownloader(): boolean {
+    if (!this.downloader.isConnected()) {
+      HealthChecksService.logger.debug(
+        `${this.downloader.name} downloader not connected (engine keeps running, reconnect pending)`,
+      );
     }
     return true;
   }

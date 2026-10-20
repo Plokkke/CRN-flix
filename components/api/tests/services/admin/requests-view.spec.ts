@@ -1,4 +1,4 @@
-import { Host, IndexerCandidate, Language, Quality, RejectReason } from '@crn-flix/contracts';
+import { Host, IndexerCandidate, Language, LiveDownload, Quality, RejectReason } from '@crn-flix/contracts';
 import { PlanLabel, Sourcing } from '@crn-flix/planner';
 
 import { buildDashboard, DashboardInput } from '@/services/admin/requests-view';
@@ -7,7 +7,6 @@ import { MediaType } from '@/services/database/medias';
 import { PlannedDownloadEntity, PlannedDownloadStatus } from '@/services/database/planned-downloads';
 import { RequestStateEntity } from '@/services/database/request-states';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
-import { LiveDownload } from '@/services/download-live-state';
 import { CANDIDATE_ID_PARAM, candidateId } from '@/services/indexer-link';
 import { PLANNED_DOWNLOAD_ID_METADATA_KEY } from '@/services/planner/planner';
 import { TicketCategory, TicketEntity, TicketStatus } from '@/services/tickets/model';

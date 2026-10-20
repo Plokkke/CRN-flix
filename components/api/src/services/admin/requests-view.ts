@@ -1,4 +1,4 @@
-import { EnginePreferences, IndexerCandidate, RejectReason } from '@crn-flix/contracts';
+import { EnginePreferences, IndexerCandidate, LiveDownload, RejectReason } from '@crn-flix/contracts';
 import { AssessedCandidate, PlanLabel, PlannerEpisode, resolvePlan, Sourcing, urgencyOf } from '@crn-flix/planner';
 
 import {
@@ -20,7 +20,6 @@ import { PlannedDownloadEntity } from '@/services/database/planned-downloads';
 import { PlannerFindingEntity } from '@/services/database/planner-findings';
 import { RequestStateEntity } from '@/services/database/request-states';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
-import { LiveDownload } from '@/services/download-live-state';
 import { candidateDisplayLink, candidateId } from '@/services/indexer-link';
 import { IndexerLinkView } from '@/services/messaging/user/email/templates/request-widgets';
 import { episodeRangesBySeason, formatSeasonRanges, groupRequests, RequestGroup } from '@/services/request-groups';

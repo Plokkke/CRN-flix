@@ -1,6 +1,7 @@
+import { LiveDownload } from '@crn-flix/contracts';
+
 import { DownloadJobEntity, DownloadJobStatus } from '@/services/database/download-jobs';
 import { PlannedDownloadEntity, PlannedDownloadStatus } from '@/services/database/planned-downloads';
-import { LiveDownload } from '@/services/download-live-state';
 import { CANDIDATE_ID_PARAM, IMDB_ID_PARAM } from '@/services/indexer-link';
 import { PLANNED_DOWNLOAD_ID_METADATA_KEY, REQUEST_ID_METADATA_KEY } from '@/services/planner/planner';
 

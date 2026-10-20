@@ -1,7 +1,8 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 
-import { Listener } from '@/helpers/events';
-import { FetchrSyncEvents, FetchrSyncService } from '@/services/fetchr-sync';
+import { Downloader, Unsubscribe } from '@crn-flix/contracts';
+
+import { DOWNLOADER } from '@/providers/downloader';
 import { DownloadsBoard } from '@/services/messaging/admin/downloads-board';
 
 /**
@@ -14,27 +15,25 @@ const REFRESH_INTERVAL_MS = 30_000;
 export class DownloadProgressService implements OnModuleInit, OnModuleDestroy {
   private static readonly logger = new Logger(DownloadProgressService.name);
 
-  private listener: Listener<FetchrSyncEvents> | null = null;
+  private unsubscribe: Unsubscribe | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private dirty = false;
 
   constructor(
-    private readonly fetchrSync: FetchrSyncService,
+    @Inject(DOWNLOADER) private readonly downloader: Downloader,
     private readonly downloadsBoard: DownloadsBoard,
   ) {}
 
   onModuleInit(): void {
-    this.listener = this.fetchrSync.listen({
-      liveChanged: () => {
-        this.dirty = true;
-      },
+    this.unsubscribe = this.downloader.onLiveChanged(() => {
+      this.dirty = true;
     });
     this.timer = setInterval(() => void this.flush(), REFRESH_INTERVAL_MS);
   }
 
   onModuleDestroy(): void {
-    this.listener?.cleanup();
-    this.listener = null;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -48,7 +47,7 @@ export class DownloadProgressService implements OnModuleInit, OnModuleDestroy {
     this.dirty = false;
 
     try {
-      await this.downloadsBoard.refresh(this.fetchrSync.liveDownloads());
+      await this.downloadsBoard.refresh(this.downloader.liveDownloads());
     } catch (error) {
       DownloadProgressService.logger.error(
         `Failed to publish download progress: ${error instanceof Error ? error.message : error}`,

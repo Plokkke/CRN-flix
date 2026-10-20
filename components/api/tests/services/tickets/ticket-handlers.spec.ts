@@ -1,3 +1,4 @@
+import { Downloader } from '@crn-flix/contracts';
 import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
 
 import { DownloadJobsRepository, DownloadJobStatus } from '@/services/database/download-jobs';
@@ -6,7 +7,6 @@ import { PlannedDownloadsRepository, PlannedDownloadStatus } from '@/services/da
 import { RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { UsersRepository, UserStatus } from '@/services/database/users';
-import { FetchrSyncService } from '@/services/fetchr-sync';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { PlannerService } from '@/services/planner/planner';
@@ -79,7 +79,7 @@ function buildStubs() {
       updateStatus: jest.fn().mockResolvedValue(undefined),
     },
     postDownloadPipeline: { retryWithImdbId: jest.fn().mockResolvedValue(undefined) },
-    fetchrSync: {
+    downloader: {
       canHandle: jest.fn().mockResolvedValue(true),
       download: jest.fn(),
       liveDownloads: jest.fn().mockReturnValue([]),
@@ -111,7 +111,7 @@ function buildService(stubs: Stubs): TicketHandlersService {
     stubs.mediasRepository as unknown as MediasRepository,
     stubs.plannedDownloads as unknown as PlannedDownloadsRepository,
     stubs.postDownloadPipeline as unknown as PostDownloadPipeline,
-    stubs.fetchrSync as unknown as FetchrSyncService,
+    stubs.downloader as unknown as Downloader,
     stubs.mediaIdentifier as unknown as MediaIdentifierService,
     stubs.planner as unknown as PlannerService,
     stubs.downloadJobs as unknown as DownloadJobsRepository,
@@ -167,7 +167,7 @@ describe('TicketHandlersService', () => {
   describe('download-action', () => {
     it('fails a submitted link no fetchr plugin can handle', async () => {
       const stubs = buildStubs();
-      stubs.fetchrSync.canHandle.mockResolvedValue(false);
+      stubs.downloader.canHandle.mockResolvedValue(false);
       const handle = handlerFor(stubs, TicketCategory.DownloadAction);
 
       const outcome = await handle(buildTicket(TicketCategory.DownloadAction, { actionId: 'a1' }), {
@@ -176,7 +176,7 @@ describe('TicketHandlersService', () => {
       });
 
       expect(outcome.status).toBe('failed');
-      expect(stubs.fetchrSync.download).not.toHaveBeenCalled();
+      expect(stubs.downloader.download).not.toHaveBeenCalled();
     });
 
     it('launches the submitted link and flips the action to downloading', async () => {
@@ -189,7 +189,7 @@ describe('TicketHandlersService', () => {
       });
 
       expect(outcome.status).toBe('progress');
-      expect(stubs.fetchrSync.download).toHaveBeenCalledWith('https://dl.test/file', expect.any(Object));
+      expect(stubs.downloader.download).toHaveBeenCalledWith('https://dl.test/file', expect.any(Object));
       expect(stubs.plannedDownloads.updateStatus).toHaveBeenCalledWith('a1', PlannedDownloadStatus.Downloading);
     });
 
@@ -264,7 +264,7 @@ describe('TicketHandlersService', () => {
       });
 
       expect(outcome.status).toBe('progress');
-      expect(stubs.fetchrSync.download).toHaveBeenCalledWith(
+      expect(stubs.downloader.download).toHaveBeenCalledWith(
         'https://x',
         expect.objectContaining({ [TICKET_ID_METADATA_KEY]: 't1' }),
       );
@@ -282,7 +282,7 @@ describe('TicketHandlersService', () => {
       });
 
       expect(outcome).toMatchObject({ status: 'failed' });
-      expect(stubs.fetchrSync.download).not.toHaveBeenCalled();
+      expect(stubs.downloader.download).not.toHaveBeenCalled();
     });
 
     it('recovers via a forced IMDb id', async () => {
@@ -299,7 +299,7 @@ describe('TicketHandlersService', () => {
       });
 
       expect(outcome.status).toBe('progress');
-      expect(stubs.fetchrSync.download).toHaveBeenCalled();
+      expect(stubs.downloader.download).toHaveBeenCalled();
     });
 
     describe('with the download still running in Fetchr', () => {
@@ -308,7 +308,7 @@ describe('TicketHandlersService', () => {
 
       it('re-points the ticket at the corrected request instead of relaunching', async () => {
         const stubs = buildStubs();
-        stubs.fetchrSync.liveDownloads.mockReturnValue([inFlight('downloading')]);
+        stubs.downloader.liveDownloads.mockReturnValue([inFlight('downloading')]);
         stubs.mediaIdentifier.tmdbFindByImdbId.mockResolvedValue(tmdbMovie);
         stubs.mediasRepository.upsert.mockResolvedValue({ id: 'm2', imdbId: 'tt7654321', title: 'Right Movie' });
         const handle = handlerFor(stubs, TicketCategory.ManualDownload);
@@ -319,8 +319,8 @@ describe('TicketHandlersService', () => {
         );
 
         expect(outcome.status).toBe('progress');
-        expect(stubs.fetchrSync.download).not.toHaveBeenCalled();
-        expect(stubs.fetchrSync.updateMetadata).toHaveBeenCalledWith(
+        expect(stubs.downloader.download).not.toHaveBeenCalled();
+        expect(stubs.downloader.updateMetadata).toHaveBeenCalledWith(
           'd1',
           expect.objectContaining({ 'crn-flix-request-id': 'm2', imdbid: 'tt7654321', [TICKET_ID_METADATA_KEY]: 't1' }),
         );
@@ -331,7 +331,7 @@ describe('TicketHandlersService', () => {
 
       it('drops the misidentified request only when nobody asked for it', async () => {
         const stubs = buildStubs();
-        stubs.fetchrSync.liveDownloads.mockReturnValue([inFlight('queued')]);
+        stubs.downloader.liveDownloads.mockReturnValue([inFlight('queued')]);
         stubs.mediaIdentifier.tmdbFindByImdbId.mockResolvedValue(tmdbMovie);
         stubs.mediasRepository.upsert.mockResolvedValue({ id: 'm2', imdbId: 'tt7654321', title: 'Right Movie' });
         stubs.requestsRepository.listUsers.mockResolvedValue([{ userId: 'u1' }]);
@@ -348,7 +348,7 @@ describe('TicketHandlersService', () => {
 
       it('relaunches when the previous download already failed', async () => {
         const stubs = buildStubs();
-        stubs.fetchrSync.liveDownloads.mockReturnValue([inFlight('failed')]);
+        stubs.downloader.liveDownloads.mockReturnValue([inFlight('failed')]);
         stubs.mediaIdentifier.tmdbFindByImdbId.mockResolvedValue(tmdbMovie);
         const handle = handlerFor(stubs, TicketCategory.ManualDownload);
 
@@ -357,7 +357,7 @@ describe('TicketHandlersService', () => {
           imdbId: 'tt7654321',
         });
 
-        expect(stubs.fetchrSync.download).toHaveBeenCalled();
+        expect(stubs.downloader.download).toHaveBeenCalled();
       });
     });
   });

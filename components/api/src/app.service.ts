@@ -1,12 +1,14 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 
+import { Downloader } from '@crn-flix/contracts';
 import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
 
 import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
+import { DOWNLOADER } from '@/providers/downloader';
 import { CatalogSyncService } from '@/services/catalog/sync';
 import {
   DownloadJobEntity,
@@ -27,7 +29,6 @@ import {
 } from '@/services/database/requests';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UsersRepository } from '@/services/database/users';
-import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { MediaTitlesService } from '@/services/media-titles';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
@@ -64,7 +65,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly requestsRepository: RequestsRepository,
     private readonly plannedDownloads: PlannedDownloadsRepository,
     private readonly userNotifications: UserNotificationsRepository,
-    private readonly fetchrSync: FetchrSyncService,
+    @Inject(DOWNLOADER) private readonly downloader: Downloader,
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly mediaTitles: MediaTitlesService,
@@ -331,7 +332,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     AppService.logger.log(`Download job ${job.id} completed`);
     await this.jellyfin.refreshLibrary();
     await this.requestsRepository.fulfillByJobId(job.id);
-    this.fetchrSync.remove(job.sourceId);
+    this.downloader.remove(job.sourceId);
 
     await this.ticketService.resolveBySubject(
       TicketCategory.IdentificationFailure,

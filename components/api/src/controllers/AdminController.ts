@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  Inject,
   Logger,
   Param,
   Post,
@@ -14,9 +15,12 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
+import { Downloader } from '@crn-flix/contracts';
+
 import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
 import { AdminSessionGuard, SkipAdminAuth } from '@/guards/admin-session.guard';
 import { readCookie } from '@/helpers/cookies';
+import { DOWNLOADER } from '@/providers/downloader';
 import { executionByTrack, ExecutionView } from '@/services/admin/execution';
 import { buildDashboard, DashboardTab, TABS } from '@/services/admin/requests-view';
 import { ADMIN_SESSION_COOKIE, AdminAuthService, CodeRequestOutcome } from '@/services/admin-auth';
@@ -30,7 +34,6 @@ import { PlannerFindingsRepository } from '@/services/database/planner-findings'
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
-import { FetchrSyncService } from '@/services/fetchr-sync';
 import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { DiscordChannelCleanup } from '@/services/messaging/admin/channel-cleanup';
 import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
@@ -83,7 +86,7 @@ export class AdminController {
     private readonly plannedDownloads: PlannedDownloadsRepository,
     private readonly tickets: TicketsRepository,
     private readonly downloadJobs: DownloadJobsRepository,
-    private readonly fetchr: FetchrSyncService,
+    @Inject(DOWNLOADER) private readonly downloader: Downloader,
     private readonly namingAudit: NamingAuditService,
     private readonly namingAuditRepository: NamingAuditRepository,
     private readonly channelCleanup: DiscordChannelCleanup,
@@ -186,7 +189,7 @@ export class AdminController {
       prefs: this.contextService.indexerPreferences,
       lastPassAt,
       jobs,
-      downloads: this.fetchr.liveDownloads(),
+      downloads: this.downloader.liveDownloads(),
     });
 
     return adminDashboardTemplate({
@@ -203,7 +206,7 @@ export class AdminController {
   async getProgress(): Promise<Record<string, ExecutionView>> {
     return executionByTrack(
       await this.plannedDownloads.listLive(),
-      this.fetchr.liveDownloads(),
+      this.downloader.liveDownloads(),
       await this.downloadJobs.listInProgress(),
     );
   }

@@ -1,4 +1,6 @@
-import { applyFetchrEvent, LiveDownload } from '@/services/download-live-state';
+import { LiveDownload } from '@crn-flix/contracts';
+
+import { applyFetchrEvent } from '../src/live-state';
 
 function buildDownload(overrides: Partial<LiveDownload> = {}): LiveDownload {
   return {

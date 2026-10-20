@@ -2,8 +2,7 @@ import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Pool } from 'pg';
 import { z } from 'zod';
 
-import { MediaTitles } from '@crn-flix/contracts';
-import { RequestReason } from '@crn-flix/contracts';
+import { MediaTitles, RequestReason } from '@crn-flix/contracts';
 
 import { withDbRetry } from '@/helpers/db-retry';
 import { Emitter } from '@/helpers/events';

@@ -1,14 +1,15 @@
 import { Provider } from '@nestjs/common';
 
+import { Downloader } from '@crn-flix/contracts';
 import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
 
+import { DOWNLOADER } from '@/providers/downloader';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
 import { PlannedDownloadsRepository } from '@/services/database/planned-downloads';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { UsersRepository } from '@/services/database/users';
-import { FetchrSyncService } from '@/services/fetchr-sync';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { DiscordTicketAdapter } from '@/services/messaging/admin/ticket-adapter';
 import { AllUserMessaging } from '@/services/messaging/user/all';
@@ -43,7 +44,7 @@ export const ticketProviders: Provider[] = [
       MediasRepository,
       PlannedDownloadsRepository,
       PostDownloadPipeline,
-      FetchrSyncService,
+      DOWNLOADER,
       MediaIdentifierService,
       PlannerService,
       DownloadJobsRepository,
@@ -58,7 +59,7 @@ export const ticketProviders: Provider[] = [
       mediasRepository: MediasRepository,
       plannedDownloads: PlannedDownloadsRepository,
       postDownloadPipeline: PostDownloadPipeline,
-      fetchrSync: FetchrSyncService,
+      downloader: Downloader,
       mediaIdentifier: MediaIdentifierService,
       planner: PlannerService,
       downloadJobs: DownloadJobsRepository,
@@ -73,7 +74,7 @@ export const ticketProviders: Provider[] = [
         mediasRepository,
         plannedDownloads,
         postDownloadPipeline,
-        fetchrSync,
+        downloader,
         mediaIdentifier,
         planner,
         downloadJobs,

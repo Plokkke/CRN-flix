@@ -1,7 +1,5 @@
 import { LiveDownload } from '@crn-flix/contracts';
 
-export { LiveDownload };
-
 export type FetchrEvent = { topic: string; payload: unknown };
 
 /**

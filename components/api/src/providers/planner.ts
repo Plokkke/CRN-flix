@@ -1,9 +1,10 @@
 import { ConfigService } from '@nestjs/config';
 
-import { Indexer } from '@crn-flix/contracts';
+import { Downloader, Indexer } from '@crn-flix/contracts';
 
 import { Config } from '@/app.module';
 import { createIndexers, INDEXERS } from '@/modules/indexer/registry';
+import { DOWNLOADER } from '@/providers/downloader';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { CatalogPlayheadService } from '@/services/catalog/playheads';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
@@ -11,7 +12,6 @@ import { PlannedDownloadsRepository } from '@/services/database/planned-download
 import { PlannerFindingsRepository } from '@/services/database/planner-findings';
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
-import { FetchrSyncService } from '@/services/fetchr-sync';
 import { MediaTitlesService } from '@/services/media-titles';
 import { PlannerService } from '@/services/planner/planner';
 
@@ -32,7 +32,7 @@ export const plannerProvider = {
     RequestsRepository,
     PlannedDownloadsRepository,
     CatalogPlayheadService,
-    FetchrSyncService,
+    DOWNLOADER,
     MemoryCacheService,
     IndexerBookmarksRepository,
     RequestStatesRepository,
@@ -45,7 +45,7 @@ export const plannerProvider = {
     requests: RequestsRepository,
     plannedDownloads: PlannedDownloadsRepository,
     playheads: CatalogPlayheadService,
-    fetchr: FetchrSyncService,
+    downloader: Downloader,
     cache: MemoryCacheService,
     bookmarks: IndexerBookmarksRepository,
     states: RequestStatesRepository,
@@ -61,7 +61,7 @@ export const plannerProvider = {
       requests,
       plannedDownloads,
       playheads,
-      fetchr,
+      downloader,
       cache,
       bookmarks,
       states,
