@@ -88,13 +88,17 @@ export interface AdminChannel {
   readonly adminIds: readonly string[];
   start(inbox: AdminInbox): void;
   stop(): void;
+  /** Whether tickets can be shown and admins reached right now. */
+  isConnected(): boolean;
+  /** Called once connected, then after every reconnection (what happened meanwhile was missed); returns an unsubscribe. */
+  onConnected(callback: () => void): () => void;
   /** Shows a ticket and opens its conversation; returns its root ref. */
   postTicket(view: TicketView): Promise<string>;
   /** Opens the conversation on a message an admin posted on their own (e.g. a manual link). */
   adoptMessage(ref: string, title: string): Promise<void>;
   updateTicket(rootRef: string, view: TicketView): Promise<void>;
   appendToTicket(rootRef: string, entry: TicketTimelineEntry): Promise<void>;
-  /** Removes the conversation, and the root too unless it is an admin's own message. */
+  /** Removes the conversation, and the root too unless it is an admin's own message; a root already gone counts as closed. */
   closeTicket(rootRef: string): Promise<void>;
   acknowledge(ref: string, outcome: Exclude<AdminAcknowledgement, null>): Promise<void>;
   showDownloads(board: DownloadsBoardView): Promise<void>;

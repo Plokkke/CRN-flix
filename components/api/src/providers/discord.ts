@@ -9,7 +9,7 @@ import { Config } from '@/app.module';
 export const discordProvider: FactoryProvider<DiscordService> = {
   provide: DiscordService,
   inject: [ConfigService],
-  useFactory: (configService: ConfigService<Config, true>): Promise<DiscordService> =>
+  useFactory: (configService: ConfigService<Config, true>): DiscordService =>
     DiscordService.create(configService.get<Config['discord']>('discord')),
 };
 
