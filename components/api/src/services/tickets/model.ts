@@ -13,6 +13,8 @@ export enum TicketCategory {
   PipelineFailure = 'pipeline-failure',
   ManualDownload = 'manual-download',
   MissingImdb = 'missing-imdb',
+  /** An integration (catalog, indexer) stopped matching its API; resolves itself once calls work again. */
+  IntegrationFailure = 'integration-failure',
 }
 
 export enum TicketStatus {
@@ -22,7 +24,7 @@ export enum TicketStatus {
 }
 
 export type TicketSubject = {
-  type: 'user' | 'planned_download' | 'download_job' | 'show' | 'media';
+  type: 'user' | 'planned_download' | 'download_job' | 'show' | 'media' | 'integration';
   id: string;
 } | null;
 
@@ -45,6 +47,12 @@ export type TicketPayloadMap = {
     lastError?: string;
   };
   [TicketCategory.MissingImdb]: { title: string; year: number | null; kind: 'movie' | 'show'; mediaIds: string[] };
+  [TicketCategory.IntegrationFailure]: {
+    integration: string;
+    operation: string;
+    errorMessage: string;
+    firstSeenAt: string;
+  };
 };
 
 export type TicketEntity<C extends TicketCategory = TicketCategory> = {
@@ -81,6 +89,7 @@ export const OPERATIONS_BY_CATEGORY: Record<TicketCategory, TicketOperationKind[
   [TicketCategory.PipelineFailure]: ['resolveManually'],
   [TicketCategory.ManualDownload]: ['submitImdb', 'submitLink', 'resolveManually'],
   [TicketCategory.MissingImdb]: ['submitImdb', 'resolveManually'],
+  [TicketCategory.IntegrationFailure]: ['resolveManually'],
 };
 
 export type OperationOutcome =

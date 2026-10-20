@@ -71,6 +71,21 @@ describe('AllUserMessaging', () => {
     await messaging.onModuleDestroy();
   });
 
+  it('stays reachable through isolated failed checks, not through a lasting outage', async () => {
+    const { channel, messaging } = build();
+    messaging.onModuleInit();
+    await jest.advanceTimersByTimeAsync(0);
+    channel.verify.mockRejectedValue(new Error('Connection timeout'));
+
+    await jest.advanceTimersByTimeAsync(15 * 60_000 + 60_000);
+    expect(channel.verify).toHaveBeenCalledTimes(3);
+    expect(messaging.canReachUsers).toBe(true);
+
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(messaging.canReachUsers).toBe(false);
+    await messaging.onModuleDestroy();
+  });
+
   it('batches the notices of one user into one message and marks them sent once delivered', async () => {
     const { channel, notifications, messaging } = build();
 

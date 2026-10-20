@@ -2,6 +2,8 @@ import { Logger } from '@nestjs/common';
 
 import { Catalog, Playhead, START_OF_SHOW } from '@crn-flix/contracts';
 
+import { IntegrationTracker } from '@/services/integrations/monitor';
+
 import { CatalogAccountsService } from './accounts';
 
 /**
@@ -14,6 +16,7 @@ export class CatalogPlayheadService {
   constructor(
     private readonly accounts: CatalogAccountsService,
     private readonly catalog: Catalog,
+    private readonly integrations: IntegrationTracker,
   ) {}
 
   async getPlayheads(showImdbId: string, userIds: string[]): Promise<Playhead[]> {
@@ -27,7 +30,9 @@ export class CatalogPlayheadService {
           return START_OF_SHOW;
         }
         try {
-          return await this.catalog.playhead(account, showImdbId);
+          return await this.integrations.track(this.catalog.name, 'playhead', () =>
+            this.catalog.playhead(account, showImdbId),
+          );
         } catch (error) {
           CatalogPlayheadService.logger.warn(
             `Failed to fetch playhead of ${showImdbId} for user ${userId}: ${error instanceof Error ? error.message : error}`,

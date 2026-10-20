@@ -3,13 +3,19 @@ import { Catalog, START_OF_SHOW } from '@crn-flix/contracts';
 import { CatalogAccountsService } from '@/services/catalog/accounts';
 import { CatalogPlayheadService } from '@/services/catalog/playheads';
 
+import { UNTRACKED } from '../../helpers/integrations';
+
 const SHOW_IMDB = 'tt14688458';
 const account = { userRef: 'user-1', credentials: { token: 't' } };
 
 function buildService(playhead: jest.Mock) {
   const accounts = { list: jest.fn().mockResolvedValue([{ user: { id: 'user-1' }, account }]) };
   const catalog = { playhead };
-  return new CatalogPlayheadService(accounts as unknown as CatalogAccountsService, catalog as unknown as Catalog);
+  return new CatalogPlayheadService(
+    accounts as unknown as CatalogAccountsService,
+    catalog as unknown as Catalog,
+    UNTRACKED,
+  );
 }
 
 describe('CatalogPlayheadService', () => {

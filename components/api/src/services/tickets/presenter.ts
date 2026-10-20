@@ -231,6 +231,22 @@ function missingImdbView(ticket: TicketEntity): TicketView {
   };
 }
 
+function integrationFailureView(ticket: TicketEntity): TicketView {
+  const payload = ticket.payload as TicketPayloadMap[TicketCategory.IntegrationFailure];
+  return {
+    title: ticket.title,
+    tone: 'danger',
+    fields: [
+      { name: 'Intégration', value: payload.integration },
+      { name: 'Appel', value: payload.operation },
+      { name: 'Erreur', value: payload.errorMessage.slice(0, 1024) },
+      { name: 'Depuis', value: payload.firstSeenAt },
+    ],
+    footer: "L'API a changé : adapter le plugin. Se résout seul après une heure d'appels réussis",
+    operations: OPERATIONS_BY_CATEGORY[TicketCategory.IntegrationFailure],
+  };
+}
+
 export function buildTicketView(ticket: TicketEntity, context: TicketContext = {}): TicketView {
   if (ticket.status !== TicketStatus.Open) {
     return closedView(ticket);
@@ -249,6 +265,8 @@ export function buildTicketView(ticket: TicketEntity, context: TicketContext = {
       return manualDownloadView(ticket);
     case TicketCategory.MissingImdb:
       return missingImdbView(ticket);
+    case TicketCategory.IntegrationFailure:
+      return integrationFailureView(ticket);
   }
 }
 
