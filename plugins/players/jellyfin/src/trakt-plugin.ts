@@ -31,6 +31,12 @@ export const traktPluginUserConfigSchema = z.object({
 
 export type TraktPluginUserConfig = z.infer<typeof traktPluginUserConfigSchema>;
 
+const traktTokensSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+  accessTokenExpiration: z.string(),
+});
+
 export const traktPluginConfigSchema = z.object({
   TraktUsers: z.array(traktPluginUserConfigSchema),
 });
@@ -113,10 +119,7 @@ export class TraktPlugin implements CatalogAccountSource {
     return userConfig;
   }
 
-  async setConfig(
-    userId: string,
-    tokens: { accessToken: string; refreshToken: string; accessTokenExpiration: string },
-  ): Promise<void> {
+  async setConfig(userId: string, tokens: z.infer<typeof traktTokensSchema>): Promise<void> {
     const userConfig: TraktPluginUserConfig = {
       ...DEFAULT_TRAKT_PLUGIN_CONFIG,
       LocationsExcluded: DEFAULT_TRAKT_PLUGIN_CONFIG.LocationsExcluded.slice(),
@@ -142,12 +145,20 @@ export class TraktPlugin implements CatalogAccountSource {
     await this.jellyfin.setPluginConfiguration(await this.resolvePluginId(), pluginConfig);
   }
 
-  /** Trakt tokens of every Jellyfin user who linked their account. */
+  /** Trakt tokens of every Jellyfin user who linked their account (a refresh token alone can be renewed). */
   async listAccounts(): Promise<LinkedCatalogAccount[]> {
     const pluginConfig = await this.getFullConfig();
-    return pluginConfig.TraktUsers.filter((c) => c.AccessToken).map((c) => ({
+    return pluginConfig.TraktUsers.filter((c) => c.AccessToken || c.RefreshToken).map((c) => ({
       playerAccountId: c.LinkedMbUserId,
-      credentials: { accessToken: c.AccessToken! },
+      credentials: {
+        accessToken: c.AccessToken,
+        refreshToken: c.RefreshToken,
+        accessTokenExpiration: c.AccessTokenExpiration,
+      },
     }));
+  }
+
+  saveCredentials(playerAccountId: string, credentials: unknown): Promise<void> {
+    return this.setConfig(playerAccountId, traktTokensSchema.parse(credentials));
   }
 }
