@@ -417,15 +417,12 @@ export class TraktApi {
       `[progress] user ${user.id}: ${allWatchedShows.length} watched shows (${watchedShows.length} after hidden/dropped filter)`,
     );
 
-    const progress = await watchedShows.reduce(
-      async (acc, show) => {
-        const prog = {
-          show: show.show,
-          ...(await this.requestShowProgress(user, show.show.ids.trakt)),
-        };
-        return [...(await acc), prog];
-      },
-      Promise.resolve([] as ProgressShow[]),
+    // Promise.all: a failed lookup rejects the whole call instead of escaping as an unhandled rejection.
+    const progress: ProgressShow[] = await Promise.all(
+      watchedShows.map(async (show) => ({
+        show: show.show,
+        ...(await this.requestShowProgress(user, show.show.ids.trakt)),
+      })),
     );
 
     const eligible = progress.filter((show: ProgressShow) => show.next_episode !== null && show.aired > show.completed);
