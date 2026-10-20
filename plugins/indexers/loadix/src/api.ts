@@ -1,7 +1,7 @@
-import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { z } from 'zod';
 
+import { createLogger } from '@crn-flix/contracts';
 import { applyAxiosRetry, logAxiosError, logAxiosRequest, logAxiosResponse, RateLimiter } from '@crn-flix/http';
 
 import {
@@ -42,7 +42,7 @@ export class LoadixUnparseableResponseError extends Error {
 }
 
 export class LoadixApi {
-  private static readonly logger = new Logger(LoadixApi.name);
+  private static readonly logger = createLogger(LoadixApi.name);
 
   private readonly client: AxiosInstance;
   private readonly limiter = new RateLimiter(MIN_REQUEST_INTERVAL_MS);

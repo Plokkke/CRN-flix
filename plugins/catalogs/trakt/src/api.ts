@@ -1,11 +1,10 @@
-import { Logger } from '@nestjs/common';
 import axios, { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { range } from 'lodash';
 import * as _ from 'lodash';
 import { DateTime } from 'luxon';
 import { z } from 'zod';
 
-import { PluginCache } from '@crn-flix/contracts';
+import { createLogger, PluginCache } from '@crn-flix/contracts';
 import { logAxiosError, logAxiosRequest, logAxiosResponse, wait } from '@crn-flix/http';
 
 import { ActivityType, TraktMediaType } from './constants';
@@ -113,7 +112,7 @@ export type TraktDeviceAuthResult = {
 
 export class TraktApi {
   private readonly api: AxiosInstance;
-  private static readonly logger = new Logger(TraktApi.name);
+  private static readonly logger = createLogger(TraktApi.name);
 
   constructor(
     private readonly config: Config,

@@ -1,6 +1,4 @@
-import { Logger } from '@nestjs/common';
-
-import { MediaTitles } from '@crn-flix/contracts';
+import { createLogger, MediaTitles } from '@crn-flix/contracts';
 
 import { TmdbApiService, TmdbMovie, TmdbTvShow } from './api';
 
@@ -60,7 +58,7 @@ function fromTvShow(show: TmdbTvShow): Localized {
  * on) and the original one. Two TMDB calls per id, memoised for the process lifetime.
  */
 export class MediaTitlesResolver {
-  private static readonly logger = new Logger(MediaTitlesResolver.name);
+  private static readonly logger = createLogger(MediaTitlesResolver.name);
 
   private readonly cache = new Map<string, Promise<MediaTitlesResolution>>();
 

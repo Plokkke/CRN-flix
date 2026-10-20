@@ -1,7 +1,7 @@
-import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { z } from 'zod';
 
+import { createLogger } from '@crn-flix/contracts';
 import { applyAxiosRetry, logAxiosError, logAxiosRequest, logAxiosResponse } from '@crn-flix/http';
 
 export const tmdbConfigSchema = z.object({
@@ -55,7 +55,7 @@ export type TmdbIdentification = {
 };
 
 export class TmdbApiService {
-  private static readonly logger = new Logger(TmdbApiService.name);
+  private static readonly logger = createLogger(TmdbApiService.name);
 
   private readonly client: AxiosInstance;
 

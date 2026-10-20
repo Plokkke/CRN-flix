@@ -1,10 +1,10 @@
-import { Logger } from '@nestjs/common';
 import axios from 'axios';
 import { z } from 'zod';
 
 import {
   buildSearchQueries,
   CandidateScope,
+  createLogger,
   EnginePreferences,
   Indexer,
   IndexerBookmark,
@@ -48,7 +48,7 @@ type BookmarkState = z.infer<typeof bookmarkStateSchema>;
 type ShowTarget = Extract<IndexerTarget, { kind: 'show' }>;
 
 export class LoadixIndexer implements Indexer {
-  private static readonly logger = new Logger(LoadixIndexer.name);
+  private static readonly logger = createLogger(LoadixIndexer.name);
 
   readonly name = 'loadix';
 

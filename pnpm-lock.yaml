@@ -413,9 +413,9 @@ importers:
 
   libs/http:
     dependencies:
-      '@nestjs/common':
-        specifier: 'catalog:'
-        version: 11.1.17(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
+      '@crn-flix/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       axios:
         specifier: 'catalog:'
         version: 1.13.6(debug@4.4.3(supports-color@8.1.1))
@@ -502,9 +502,6 @@ importers:
       '@crn-flix/http':
         specifier: workspace:*
         version: link:../../../libs/http
-      '@nestjs/common':
-        specifier: 'catalog:'
-        version: 11.1.17(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
       axios:
         specifier: 'catalog:'
         version: 1.13.6(debug@4.4.3(supports-color@8.1.1))
@@ -554,9 +551,6 @@ importers:
       '@crn-flix/http':
         specifier: workspace:*
         version: link:../../../libs/http
-      '@nestjs/common':
-        specifier: 'catalog:'
-        version: 11.1.17(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
       axios:
         specifier: 'catalog:'
         version: 1.13.6(debug@4.4.3(supports-color@8.1.1))
@@ -594,9 +588,6 @@ importers:
       '@crn-flix/http':
         specifier: workspace:*
         version: link:../../../libs/http
-      '@nestjs/common':
-        specifier: 'catalog:'
-        version: 11.1.17(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
       axios:
         specifier: 'catalog:'
         version: 1.13.6(debug@4.4.3(supports-color@8.1.1))
@@ -628,12 +619,12 @@ importers:
 
   plugins/players/jellyfin:
     dependencies:
+      '@crn-flix/contracts':
+        specifier: workspace:*
+        version: link:../../../libs/contracts
       '@crn-flix/http':
         specifier: workspace:*
         version: link:../../../libs/http
-      '@nestjs/common':
-        specifier: 'catalog:'
-        version: 11.1.17(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
       axios:
         specifier: 'catalog:'
         version: 1.13.6(debug@4.4.3(supports-color@8.1.1))

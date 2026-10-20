@@ -17,7 +17,7 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "@nestjs/common": "catalog:",
+    "@crn-flix/contracts": "workspace:*",
     "axios": "catalog:"
   },
   "devDependencies": {

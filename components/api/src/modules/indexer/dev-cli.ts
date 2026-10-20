@@ -19,6 +19,8 @@ import {
   MediaType,
 } from '@crn-flix/contracts';
 
+import { routePluginLogsToNest } from '@/services/logger/plugins';
+
 import { preferencesFromEnv } from './preferences-env';
 import { createIndexers, IndexersConfig } from './registry';
 
@@ -159,6 +161,7 @@ function configFromEnv(): IndexersConfig {
 
 async function main(): Promise<void> {
   const values = parseCliArgs();
+  routePluginLogsToNest();
   Logger.overrideLogger(values.verbose ? ['verbose', 'debug', 'log', 'warn', 'error'] : ['log', 'warn', 'error']);
 
   const target = buildTarget(values);

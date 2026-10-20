@@ -19,7 +19,6 @@
   "dependencies": {
     "@crn-flix/contracts": "workspace:*",
     "@crn-flix/http": "workspace:*",
-    "@nestjs/common": "catalog:",
     "axios": "catalog:",
     "lodash": "4.17.23",
     "luxon": "3.7.2",

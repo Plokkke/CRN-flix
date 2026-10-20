@@ -25,7 +25,7 @@ Seul `Indexer` est implémenté et branché. Les autres contrats sont marqués *
 - **DÉCIDÉ** — Un plugin dépend de `@crn-flix/contracts` (et au besoin de `@crn-flix/http`), **jamais de l'engine** (pas d'alias `@/`) ni de la base. Ce qu'il veut retenir passe par l'engine : il reçoit des données en entrée et rend ce qu'il faut sauvegarder (voir les mémos d'indexer, `IndexerBookmark`).
 - **DÉCIDÉ** — TMDB n'est pas un catalog : il ne permet pas à un utilisateur de référencer ses demandes. C'est une brique **metadata**.
 - **DÉCIDÉ** — La policy est une brique à part entière, définie mais pas encore développée.
-- Les services que l'engine fournit aux plugins sont des contrats eux aussi (`runtime.ts` : `PluginCache`). Un plugin ne reçoit jamais une classe de l'engine.
+- Les services que l'engine fournit aux plugins sont des contrats eux aussi (`runtime.ts` : `PluginCache`, `PluginLogger`). Un plugin ne reçoit jamais une classe de l'engine et ne dépend pas de Nest : il crée ses loggers avec `createLogger(contexte)`, et l'engine branche leur sortie au boot (`setPluginLoggerFactory`, voir `services/logger/plugins.ts`).
 - Chaque plugin expose son point d'entrée dans `src/index.ts` (schéma de config zod + fabrique, par exemple `createLoadixIndexer`). La composition reste **statique** dans l'engine (`modules/indexer/registry.ts`, providers Nest) tant que l'engine n'est pas publié seul.
 - Le cœur pur du planner (`libs/planner`) n'a aucune I/O : il dépend uniquement des contrats.
 
@@ -44,7 +44,7 @@ Build : chaque lib et plugin compile vers `dist/` (`tsc`). Turborepo construit l
 
 ## Couplages restants, dans l'ordre prévu
 
-1. **Logger** — les plugins importent `Logger` de `@nestjs/common`. Il faut un contrat de logger dans `runtime.ts` pour qu'un plugin ne dépende plus de Nest.
+1. ~~**Logger**~~ — fait (2026-10-20) : `createLogger` / `setPluginLoggerFactory`, plus aucun plugin ne dépend de Nest.
 2. **Catalog** — l'expansion Trakt → requêtes par épisode et les playheads (`trakt-sync.ts`, `trakt-playhead.ts`) doivent passer dans le plugin, qui implémentera `Catalog`. Les tokens Trakt viennent du plugin Trakt de Jellyfin : `player-jellyfin` implémentera `CatalogAccountSource`, et l'engine fera le lien sans que le catalog connaisse le player.
 3. **Downloader** — `fetchr-sync.ts` écrit lui-même dans `download_jobs`. Il faut l'inverser (`onCompleted` → l'engine crée le job), puis extraire `plugins/downloaders/fetchr`. Le vocabulaire d'événements Fetchr (`applyFetchrEvent`) part avec lui.
 4. **Player** — Jellyfin implémentera `Player` (`listAvailable`, `refreshLibrary`, `upsertAccount`). `services/context.ts` contient une URL d'affiche Jellyfin en dur.

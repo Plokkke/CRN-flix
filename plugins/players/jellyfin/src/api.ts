@@ -1,7 +1,7 @@
-import { Logger } from '@nestjs/common';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { z } from 'zod';
 
+import { createLogger, PluginLogger } from '@crn-flix/contracts';
 import { applyAxiosRetry, logAxiosError, logAxiosRequest, logAxiosResponse } from '@crn-flix/http';
 
 export type JellyfinUser = {
@@ -60,7 +60,7 @@ export type JellyfinPlugin = {
 };
 
 export class JellyfinMediaService {
-  private static readonly logger: Logger = new Logger(JellyfinMediaService.name);
+  private static readonly logger: PluginLogger = createLogger(JellyfinMediaService.name);
 
   private static async authenticate(config: JellyfinConfig): Promise<string> {
     this.logger.log(`Authenticate user ${config.username} on ${config.url}`);

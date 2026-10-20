@@ -1,5 +1,6 @@
-import { Logger } from '@nestjs/common';
 import { z } from 'zod';
+
+import { createLogger } from '@crn-flix/contracts';
 
 import { JellyfinMediaService } from './api';
 
@@ -66,7 +67,7 @@ export type UserAuthContext = {
  * and nothing else needs it until the first Trakt sync or user registration.
  */
 export class TraktPlugin {
-  private static readonly logger = new Logger(TraktPlugin.name);
+  private static readonly logger = createLogger(TraktPlugin.name);
 
   private pluginId: Promise<string> | null = null;
 

@@ -1,5 +1,6 @@
-import { Logger } from '@nestjs/common';
 import { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
+
+import { createLogger } from '@crn-flix/contracts';
 
 const DEFAULT_RETRIES = 3;
 const DEFAULT_BASE_MS = 500;
@@ -53,7 +54,7 @@ function shouldRetry(error: AxiosError, retryNonIdempotent: boolean): boolean {
 }
 
 export function applyAxiosRetry(instance: AxiosInstance, label: string, opts: AxiosRetryOptions = {}): void {
-  const log = new Logger(`AxiosRetry:${label}`);
+  const log = createLogger(`AxiosRetry:${label}`);
   const retries = opts.retries ?? DEFAULT_RETRIES;
   const baseMs = opts.baseMs ?? DEFAULT_BASE_MS;
   const maxMs = opts.maxMs ?? DEFAULT_MAX_MS;
