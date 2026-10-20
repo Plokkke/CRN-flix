@@ -52,6 +52,16 @@ export type JellyfinMedia = {
   Path?: string;
 };
 
+/** Only the fields the engine reads; the rest of the policy is carried through untouched. */
+export const jellyfinUserPolicySchema = z
+  .object({
+    IsAdministrator: z.boolean(),
+    MaxActiveSessions: z.number().int(),
+  })
+  .passthrough();
+
+export type JellyfinUserPolicy = z.infer<typeof jellyfinUserPolicySchema>;
+
 export type JellyfinPlugin = {
   Id: string;
   Name: string;
@@ -218,6 +228,16 @@ export class JellyfinMediaService {
 
   async setPluginConfiguration(pluginId: string, configuration: unknown): Promise<void> {
     await this.api.post(`/Plugins/${pluginId}/Configuration`, configuration);
+  }
+
+  async getUserPolicy(userId: string): Promise<JellyfinUserPolicy> {
+    const response = await this.api.get<{ Policy: unknown }>(`/Users/${userId}`);
+    return jellyfinUserPolicySchema.parse(response.data.Policy);
+  }
+
+  /** Jellyfin replaces the whole policy: always send a complete one. */
+  async setUserPolicy(userId: string, policy: JellyfinUserPolicy): Promise<void> {
+    await this.api.post(`/Users/${userId}/Policy`, policy);
   }
 
   async getUser(userId: string): Promise<JellyfinUser> {

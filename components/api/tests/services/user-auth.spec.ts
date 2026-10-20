@@ -9,6 +9,7 @@ const USER: UserEntity = {
   id: 'user-1',
   name: 'Alice',
   jellyfinId: 'jf-1',
+  maxStreams: 1,
   messagingKey: 'email',
   messagingId: 'alice@example.com',
   status: UserStatus.Active,

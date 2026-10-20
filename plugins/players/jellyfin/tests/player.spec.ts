@@ -27,6 +27,8 @@ function buildPlayer() {
     findUserByName: jest.fn().mockResolvedValue(null),
     registerUser: jest.fn().mockResolvedValue('new-id'),
     resetUserPassword: jest.fn().mockResolvedValue(undefined),
+    getUserPolicy: jest.fn().mockResolvedValue({}),
+    setUserPolicy: jest.fn().mockResolvedValue(undefined),
   };
   return { jellyfin, player: new JellyfinPlayer(jellyfin as unknown as JellyfinMediaService) };
 }
@@ -101,6 +103,52 @@ describe('JellyfinPlayer', () => {
       imdbId: 'tt-episode',
       type: 'episode',
       posterUrl: 'https://jellyfin.example.com/Items/series-1/Images/Primary?fillWidth=100',
+    });
+  });
+
+  describe('account policy', () => {
+    const viewer = {
+      IsAdministrator: false,
+      EnableRemoteAccess: true,
+      EnableLiveTvAccess: true,
+      EnableLiveTvManagement: false,
+      EnableAudioPlaybackTranscoding: true,
+      EnablePlaybackRemuxing: true,
+      EnableVideoPlaybackTranscoding: false,
+      EnableMediaConversion: false,
+      MaxActiveSessions: 1,
+      AuthenticationProviderId: 'auth-provider',
+      PasswordResetProviderId: 'reset-provider',
+    };
+
+    it('applies the viewer rules on top of the full current policy', async () => {
+      const { jellyfin, player } = buildPlayer();
+      jellyfin.getUserPolicy.mockResolvedValue({
+        ...viewer,
+        EnableLiveTvAccess: false,
+        EnableVideoPlaybackTranscoding: true,
+        MaxActiveSessions: 0,
+      });
+
+      await expect(player.applyAccountPolicy('jf-1', { maxStreams: 3 })).resolves.toBe(true);
+      expect(jellyfin.setUserPolicy).toHaveBeenCalledWith('jf-1', { ...viewer, MaxActiveSessions: 3 });
+    });
+
+    it('writes nothing when the account already complies', async () => {
+      const { jellyfin, player } = buildPlayer();
+      jellyfin.getUserPolicy.mockResolvedValue(viewer);
+
+      await expect(player.applyAccountPolicy('jf-1', { maxStreams: 1 })).resolves.toBe(false);
+      expect(jellyfin.setUserPolicy).not.toHaveBeenCalled();
+    });
+
+    it('never touches an administrator, whose stream limit is not the engine’s', async () => {
+      const { jellyfin, player } = buildPlayer();
+      jellyfin.getUserPolicy.mockResolvedValue({ ...viewer, IsAdministrator: true, MaxActiveSessions: 0 });
+
+      await expect(player.applyAccountPolicy('jf-1', { maxStreams: 1 })).resolves.toBe(false);
+      await expect(player.accountMaxStreams('jf-1')).resolves.toBeNull();
+      expect(jellyfin.setUserPolicy).not.toHaveBeenCalled();
     });
   });
 });

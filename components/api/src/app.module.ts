@@ -22,6 +22,7 @@ import { MailingController } from '@/controllers/MailingController';
 import { MeController } from '@/controllers/MeController';
 import { TicketsAdminController } from '@/controllers/TicketsAdminController';
 import { UserGuideController } from '@/controllers/UserGuideController';
+import { UsersAdminController } from '@/controllers/UsersAdminController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
 import { adminAuthProvider } from '@/providers/admin-auth';
@@ -136,6 +137,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       AdminController,
       TicketsAdminController,
       AnnounceAdminController,
+      UsersAdminController,
       MeController,
     ],
     providers: [

@@ -44,6 +44,7 @@ export const traktPluginConfigSchema = z.object({
 export type TraktPluginConfig = z.infer<typeof traktPluginConfigSchema>;
 
 export const TRAKT_PLUGIN_NAME = 'Trakt';
+/** Scrobbling only: watches go out to Trakt, nothing is imported back nor pushed beyond that. */
 export const DEFAULT_TRAKT_PLUGIN_CONFIG = {
   LocationsExcluded: [],
   Scrobble: true,
@@ -52,7 +53,7 @@ export const DEFAULT_TRAKT_PLUGIN_CONFIG = {
   SkipWatchedImportFromTrakt: false,
   SkipPlaybackProgressImportFromTrakt: true,
 
-  PostWatchedHistory: true,
+  PostWatchedHistory: false,
   PostUnwatchedHistory: false,
   PostSetWatched: false,
   PostSetUnwatched: false,

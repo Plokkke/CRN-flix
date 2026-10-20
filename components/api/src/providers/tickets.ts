@@ -14,6 +14,7 @@ import { MediaIdentifierService } from '@/services/media-identifier';
 import { AdminTicketRelay } from '@/services/messaging/admin/relay';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { PlannerService } from '@/services/planner/planner';
+import { PlayerAccountsService } from '@/services/player-accounts';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { TicketContextLoader } from '@/services/tickets/context';
 import { TicketReconcilerService } from '@/services/tickets/reconciler';
@@ -48,6 +49,7 @@ export const ticketProviders: Provider[] = [
       MediaIdentifierService,
       PlannerService,
       DownloadJobsRepository,
+      PlayerAccountsService,
     ],
     useFactory: (
       ticketService: TicketService,
@@ -63,6 +65,7 @@ export const ticketProviders: Provider[] = [
       mediaIdentifier: MediaIdentifierService,
       planner: PlannerService,
       downloadJobs: DownloadJobsRepository,
+      playerAccounts: PlayerAccountsService,
     ): TicketHandlersService =>
       new TicketHandlersService(
         ticketService,
@@ -78,6 +81,7 @@ export const ticketProviders: Provider[] = [
         mediaIdentifier,
         planner,
         downloadJobs,
+        playerAccounts,
       ),
   },
   {

@@ -1,4 +1,4 @@
-import { JellyfinMediaService, TraktPlugin } from '../src';
+import { DEFAULT_TRAKT_PLUGIN_CONFIG, JellyfinMediaService, TraktPlugin } from '../src';
 
 const config = { TraktUsers: [] };
 
@@ -64,5 +64,15 @@ describe('TraktPlugin', () => {
     await Promise.all(['jf1', 'jf2', 'jf3'].map((id) => plugin.saveCredentials(id, tokens(`new-${id}`))));
 
     expect(stored.TraktUsers.map((user) => user.RefreshToken)).toEqual(['new-jf1', 'new-jf2', 'new-jf3']);
+  });
+
+  it('only scrobbles: every setting off but scrobbling and skipping the playback progress import', () => {
+    const { LocationsExcluded, ...settings } = DEFAULT_TRAKT_PLUGIN_CONFIG;
+
+    expect(LocationsExcluded).toEqual([]);
+    expect(Object.entries(settings).filter(([, enabled]) => enabled)).toEqual([
+      ['Scrobble', true],
+      ['SkipPlaybackProgressImportFromTrakt', true],
+    ]);
   });
 });

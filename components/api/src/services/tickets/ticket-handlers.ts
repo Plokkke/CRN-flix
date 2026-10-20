@@ -14,6 +14,7 @@ import { buildDownloadMetadata } from '@/services/downloads/metadata';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { AllUserMessaging, UserMessagingCtxt } from '@/services/messaging/user/all';
 import { buildActionDownloadMetadata, PlannerService } from '@/services/planner/planner';
+import { PlayerAccountsService } from '@/services/player-accounts';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { identificationFailureResolved } from '@/services/tickets/auto-resolve';
 import {
@@ -69,6 +70,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     private readonly mediaIdentifier: MediaIdentifierService,
     private readonly planner: PlannerService,
     private readonly downloadJobs: DownloadJobsRepository,
+    private readonly playerAccounts: PlayerAccountsService,
   ) {}
 
   onModuleInit(): void {
@@ -132,6 +134,10 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
         user.jellyfinId = accountId;
         await this.usersRepository.setJellyfinId(user.id, accountId);
       }
+      // Best effort: the hourly account-policy pass catches up if the player refuses now.
+      await this.playerAccounts.apply(user).catch((error: unknown) => {
+        TicketHandlersService.logger.warn(`Account policy not applied to ${user.name}: ${describeError(error)}`);
+      });
       await this.messaging.registered(messagingContextOf(user), user, password);
       await this.usersRepository.setStatus(user.id, UserStatus.Active);
       return { status: 'resolved', message: `Inscription de ${user.name} validée` };

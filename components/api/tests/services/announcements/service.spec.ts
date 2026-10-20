@@ -7,6 +7,7 @@ const user = (id: string, name: string, status = UserStatus.Active, messagingKey
   id,
   name,
   jellyfinId: null,
+  maxStreams: 1,
   messagingKey,
   messagingId: `${name}@test`,
   status,
