@@ -1,21 +1,19 @@
 import { ConfigService } from '@nestjs/config';
 
+import { Downloader, Indexer } from '@crn-flix/contracts';
+
 import { Config } from '@/app.module';
-import { Indexer, INDEXERS } from '@/modules/indexer/contract';
-import { createIndexers } from '@/modules/indexer/registry';
-import { TraktPlugin } from '@/modules/jellyfin/plugins/trakt';
-import { TraktApi } from '@/modules/trakt/api';
+import { createIndexers, INDEXERS } from '@/modules/indexer/registry';
+import { DOWNLOADER } from '@/providers/downloader';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
+import { CatalogPlayheadService } from '@/services/catalog/playheads';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
 import { PlannedDownloadsRepository } from '@/services/database/planned-downloads';
 import { PlannerFindingsRepository } from '@/services/database/planner-findings';
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
-import { UsersRepository } from '@/services/database/users';
-import { FetchrSyncService } from '@/services/fetchr-sync';
 import { MediaTitlesService } from '@/services/media-titles';
 import { PlannerService } from '@/services/planner/planner';
-import { TraktPlayheadService } from '@/services/trakt-playhead';
 
 export const indexersRegistryProvider = {
   provide: INDEXERS,
@@ -26,13 +24,6 @@ export const indexersRegistryProvider = {
   },
 };
 
-export const traktPlayheadProvider = {
-  provide: TraktPlayheadService,
-  inject: [UsersRepository, TraktPlugin, TraktApi],
-  useFactory: (users: UsersRepository, traktPlugin: TraktPlugin, traktClient: TraktApi): TraktPlayheadService =>
-    new TraktPlayheadService(users, traktPlugin, traktClient),
-};
-
 export const plannerProvider = {
   provide: PlannerService,
   inject: [
@@ -40,8 +31,8 @@ export const plannerProvider = {
     INDEXERS,
     RequestsRepository,
     PlannedDownloadsRepository,
-    TraktPlayheadService,
-    FetchrSyncService,
+    CatalogPlayheadService,
+    DOWNLOADER,
     MemoryCacheService,
     IndexerBookmarksRepository,
     RequestStatesRepository,
@@ -53,8 +44,8 @@ export const plannerProvider = {
     indexers: Indexer[],
     requests: RequestsRepository,
     plannedDownloads: PlannedDownloadsRepository,
-    playheads: TraktPlayheadService,
-    fetchr: FetchrSyncService,
+    playheads: CatalogPlayheadService,
+    downloader: Downloader,
     cache: MemoryCacheService,
     bookmarks: IndexerBookmarksRepository,
     states: RequestStatesRepository,
@@ -70,7 +61,7 @@ export const plannerProvider = {
       requests,
       plannedDownloads,
       playheads,
-      fetchr,
+      downloader,
       cache,
       bookmarks,
       states,

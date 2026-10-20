@@ -1,6 +1,5 @@
-import { Indexer } from './contract';
-import { LoadixApi, LoadixConfig } from './loadix/api';
-import { LoadixIndexer } from './loadix/indexer';
+import { Indexer } from '@crn-flix/contracts';
+import { createLoadixIndexer, LoadixConfig } from '@crn-flix/indexer-loadix';
 
 export type IndexersConfig = {
   loadix: LoadixConfig | null;
@@ -10,8 +9,10 @@ export function createIndexers(config: IndexersConfig, serviceName: string): Ind
   const indexers: Indexer[] = [];
 
   if (config.loadix) {
-    indexers.push(new LoadixIndexer(new LoadixApi(config.loadix, serviceName), config.loadix.siteHost));
+    indexers.push(createLoadixIndexer(config.loadix, serviceName));
   }
 
   return indexers;
 }
+
+export const INDEXERS = Symbol('Indexers');

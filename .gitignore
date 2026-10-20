@@ -3,6 +3,7 @@
 
 dist/
 node_modules/
+.turbo/
 *.tsbuildinfo
 reports/
 generated/
@@ -27,7 +28,6 @@ lerna-debug.log*
 
 # Terraform
 .terraform/
-.terraform.lock.hcl
 terraform.tfstate
 terraform.tfstate.backup
 *.tfplan

@@ -2,14 +2,13 @@ import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Pool } from 'pg';
 import { z } from 'zod';
 
+import { MediaTitles, RequestReason } from '@crn-flix/contracts';
+
 import { withDbRetry } from '@/helpers/db-retry';
 import { Emitter } from '@/helpers/events';
 import { ListenChannel, ListenHandle, listenWithReconnect } from '@/helpers/sql';
-import { MediaTitles } from '@/modules/indexer/contract';
 import { MediaEntity } from '@/services/database/medias';
 import { UserEntity } from '@/services/database/users';
-
-import { RequestKind } from '../trakt-sync';
 
 export enum RequestStatus {
   Pending = 'pending',
@@ -240,7 +239,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                         'originalTitle', media.original_title,
                         'frenchTitle', media.french_title,
                         'originalLanguage', media.original_language,
-                        'posterPath', media.poster_path,
+                        'posterUrl', media.poster_url,
                         'year', media.year,
                         'seasonNumber', media.season_number,
                         'episodeNumber', media.episode_number,
@@ -322,7 +321,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return rows.length > 0 ? fromRequestRecord(rows[0]) : null;
   }
 
-  async setUserRequestReason(mediaId: string, userId: string, reason: RequestKind): Promise<RequestUserEntity> {
+  async setUserRequestReason(mediaId: string, userId: string, reason: RequestReason): Promise<RequestUserEntity> {
     const query = `
       INSERT INTO request_users (request_media_id, user_id, reasons)
       VALUES ($1, $2, ARRAY[$3]::VARCHAR(64)[]) -- Initialize reasons with the new reason as a single-element array
@@ -336,7 +335,11 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
     return fromRequestUserRecord(rows[0]);
   }
 
-  async setUserRequestReasons(mediaId: string, userId: string, reasons: Set<RequestKind>): Promise<RequestUserEntity> {
+  async setUserRequestReasons(
+    mediaId: string,
+    userId: string,
+    reasons: Set<RequestReason>,
+  ): Promise<RequestUserEntity> {
     const query = `
       INSERT INTO request_users (request_media_id, user_id, reasons)
       VALUES ($1, $2, $3::VARCHAR(64)[])
@@ -398,7 +401,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'originalTitle', media.original_title,
             'frenchTitle', media.french_title,
             'originalLanguage', media.original_language,
-            'posterPath', media.poster_path,
+            'posterUrl', media.poster_url,
             'year', media.year,
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,
@@ -587,7 +590,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
             'originalTitle', media.original_title,
             'frenchTitle', media.french_title,
             'originalLanguage', media.original_language,
-            'posterPath', media.poster_path,
+            'posterUrl', media.poster_url,
             'year', media.year,
             'seasonNumber', media.season_number,
             'episodeNumber', media.episode_number,

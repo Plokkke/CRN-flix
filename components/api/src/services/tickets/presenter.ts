@@ -1,16 +1,16 @@
 import * as _ from 'lodash';
 
+import { PlanLabel } from '@crn-flix/planner';
+
 import { formatBytes } from '@/helpers/format';
 import { displayTitle, MediaEntity } from '@/services/database/medias';
 import { PlannedDownloadEntity } from '@/services/database/planned-downloads';
 import { UserEntity } from '@/services/database/users';
 import { actionDisplayLink } from '@/services/indexer-link';
-import { PlanLabel } from '@/services/planner/model';
 import {
   OPERATIONS_BY_CATEGORY,
   TicketCategory,
   TicketEntity,
-  TicketOperationKind,
   TicketPayloadMap,
   TicketStatus,
   TicketTone,
@@ -253,11 +253,4 @@ export function buildTicketView(ticket: TicketEntity, context: TicketContext = {
 }
 
 /** Human labels used by both adapters when rendering operation controls. */
-export const OPERATION_LABELS: Record<TicketOperationKind, string> = {
-  approve: 'Accepter',
-  reject: 'Rejeter',
-  restore: 'Restaurer',
-  submitImdb: 'Soumettre un IMDb ID',
-  submitLink: 'Soumettre un lien',
-  resolveManually: 'Marquer résolu',
-};
+export { OPERATION_LABELS } from '@crn-flix/contracts';

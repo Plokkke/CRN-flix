@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
 echo "==> Building Docker images..."
-docker build -t antoinecaron/crn-flix:latest components/api/
+docker build -f components/api/Dockerfile -t antoinecaron/crn-flix:latest .
 docker build -f components/database/migration/Dockerfile -t antoinecaron/crn-flix-migration:latest .
 
 echo "==> Pushing images to registry..."

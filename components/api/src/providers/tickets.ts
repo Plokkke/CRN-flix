@@ -1,15 +1,17 @@
 import { Provider } from '@nestjs/common';
 
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
+import { Downloader, Player } from '@crn-flix/contracts';
+
+import { DOWNLOADER } from '@/providers/downloader';
+import { PLAYER } from '@/providers/player';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
 import { PlannedDownloadsRepository } from '@/services/database/planned-downloads';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { UsersRepository } from '@/services/database/users';
-import { FetchrSyncService } from '@/services/fetchr-sync';
 import { MediaIdentifierService } from '@/services/media-identifier';
-import { DiscordTicketAdapter } from '@/services/messaging/admin/ticket-adapter';
+import { AdminTicketRelay } from '@/services/messaging/admin/relay';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { PlannerService } from '@/services/planner/planner';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
@@ -35,14 +37,14 @@ export const ticketProviders: Provider[] = [
     inject: [
       TicketService,
       TicketsRepository,
-      JellyfinMediaService,
+      PLAYER,
       AllUserMessaging,
       UsersRepository,
       RequestsRepository,
       MediasRepository,
       PlannedDownloadsRepository,
       PostDownloadPipeline,
-      FetchrSyncService,
+      DOWNLOADER,
       MediaIdentifierService,
       PlannerService,
       DownloadJobsRepository,
@@ -50,14 +52,14 @@ export const ticketProviders: Provider[] = [
     useFactory: (
       ticketService: TicketService,
       ticketsRepository: TicketsRepository,
-      jellyfin: JellyfinMediaService,
+      player: Player,
       messaging: AllUserMessaging,
       usersRepository: UsersRepository,
       requestsRepository: RequestsRepository,
       mediasRepository: MediasRepository,
       plannedDownloads: PlannedDownloadsRepository,
       postDownloadPipeline: PostDownloadPipeline,
-      fetchrSync: FetchrSyncService,
+      downloader: Downloader,
       mediaIdentifier: MediaIdentifierService,
       planner: PlannerService,
       downloadJobs: DownloadJobsRepository,
@@ -65,14 +67,14 @@ export const ticketProviders: Provider[] = [
       new TicketHandlersService(
         ticketService,
         ticketsRepository,
-        jellyfin,
+        player,
         messaging,
         usersRepository,
         requestsRepository,
         mediasRepository,
         plannedDownloads,
         postDownloadPipeline,
-        fetchrSync,
+        downloader,
         mediaIdentifier,
         planner,
         downloadJobs,
@@ -80,8 +82,8 @@ export const ticketProviders: Provider[] = [
   },
   {
     provide: TicketReconcilerService,
-    inject: [TicketsRepository, DiscordTicketAdapter],
-    useFactory: (tickets: TicketsRepository, adapter: DiscordTicketAdapter): TicketReconcilerService =>
-      new TicketReconcilerService(tickets, adapter),
+    inject: [TicketsRepository, AdminTicketRelay],
+    useFactory: (tickets: TicketsRepository, relay: AdminTicketRelay): TicketReconcilerService =>
+      new TicketReconcilerService(tickets, relay),
   },
 ];

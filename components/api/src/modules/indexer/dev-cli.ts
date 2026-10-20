@@ -3,8 +3,8 @@
  * Standalone indexer harness: runs any registered indexer against a media
  * description, without booting Nest, the database or Discord.
  *
- *   npm run indexer:find -- --imdb tt0133093 --title "The Matrix" --year 1999
- *   npm run indexer:find -- --imdb tt14688458 --title "Silo" --type show --episodes "1:1-10,2:1-6" --runtime 50
+ *   pnpm indexer:find --imdb tt0133093 --title "The Matrix" --year 1999
+ *   pnpm indexer:find --imdb tt14688458 --title "Silo" --type show --episodes "1:1-10,2:1-6" --runtime 50
  */
 import { parseArgs } from 'node:util';
 
@@ -17,13 +17,14 @@ import {
   IndexerTarget,
   MediaTitles,
   MediaType,
-} from './contract';
-import { preferencesFromEnv } from './preferences';
+} from '@crn-flix/contracts';
+
+import { routePluginLogsToNest } from '@/services/logger/plugins';
+
+import { preferencesFromEnv } from './preferences-env';
 import { createIndexers, IndexersConfig } from './registry';
 
-const USAGE = `Usage: npm run indexer:find -- [indexer] --imdb <tt...> --title <title> [options]
-
-Note: the "--" after indexer:find is required, otherwise npm swallows the arguments.
+const USAGE = `Usage: pnpm indexer:find [indexer] --imdb <tt...> --title <title> [options]
 
 Arguments:
   [indexer]                Only run this indexer, e.g. "loadix" (default: all configured)
@@ -160,6 +161,7 @@ function configFromEnv(): IndexersConfig {
 
 async function main(): Promise<void> {
   const values = parseCliArgs();
+  routePluginLogsToNest();
   Logger.overrideLogger(values.verbose ? ['verbose', 'debug', 'log', 'warn', 'error'] : ['log', 'warn', 'error']);
 
   const target = buildTarget(values);

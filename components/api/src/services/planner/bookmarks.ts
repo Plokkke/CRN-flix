@@ -1,8 +1,14 @@
 import { Logger } from '@nestjs/common';
 import * as _ from 'lodash';
 
-import { Indexer, IndexerBookmark, IndexerCandidate, IndexerTarget, targetImdbId } from '@/modules/indexer/contract';
-import { EnginePreferences } from '@/modules/indexer/preferences';
+import {
+  EnginePreferences,
+  Indexer,
+  IndexerBookmark,
+  IndexerCandidate,
+  IndexerTarget,
+  targetImdbId,
+} from '@crn-flix/contracts';
 
 export type BookmarkStore = {
   listByImdbId(imdbId: string): Promise<Map<string, IndexerBookmark>>;

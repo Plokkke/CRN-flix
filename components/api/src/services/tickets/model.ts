@@ -1,3 +1,7 @@
+import { TicketEventKind, TicketOperation, TicketOperationKind, TicketTone, TicketView } from '@crn-flix/contracts';
+
+export { TicketEventKind, TicketOperation, TicketOperationKind, TicketTone, TicketView };
+
 /** Download metadata key carrying the ticket that launched the download. */
 export const TICKET_ID_METADATA_KEY = 'crn-flix-ticket-id';
 
@@ -15,16 +19,6 @@ export enum TicketStatus {
   Open = 'open',
   Resolved = 'resolved',
   Abandoned = 'abandoned',
-}
-
-export enum TicketEventKind {
-  Created = 'created',
-  AdminMessage = 'admin-message',
-  Operation = 'operation',
-  AttemptFailed = 'attempt-failed',
-  Resolved = 'resolved',
-  Abandoned = 'abandoned',
-  Note = 'note',
 }
 
 export type TicketSubject = {
@@ -79,16 +73,6 @@ export type TicketEventEntity = {
   createdAt: Date;
 };
 
-export type TicketOperation =
-  | { kind: 'submitImdb'; imdbId: string }
-  | { kind: 'submitLink'; url: string }
-  | { kind: 'approve' }
-  | { kind: 'reject' }
-  | { kind: 'restore' }
-  | { kind: 'resolveManually'; note: string };
-
-export type TicketOperationKind = TicketOperation['kind'];
-
 /** Which operations each category accepts — single source for every adapter. */
 export const OPERATIONS_BY_CATEGORY: Record<TicketCategory, TicketOperationKind[]> = {
   [TicketCategory.UserApproval]: ['approve', 'reject'],
@@ -110,16 +94,6 @@ export type TicketCategoryHandler<C extends TicketCategory = TicketCategory> = (
   operation: TicketOperation,
   actor: string,
 ) => Promise<OperationOutcome>;
-
-export type TicketTone = 'danger' | 'warning' | 'info' | 'muted' | 'success';
-
-export type TicketView = {
-  title: string;
-  tone: TicketTone;
-  fields: { name: string; value: string }[];
-  footer: string | null;
-  operations: TicketOperationKind[];
-};
 
 const DEAD_LETTER_ATTEMPTS = 3;
 

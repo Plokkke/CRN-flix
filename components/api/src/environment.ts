@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import { z } from 'zod';
 
-import { preferencesFromEnv } from '@/modules/indexer/preferences';
+import { preferencesFromEnv } from '@/modules/indexer/preferences-env';
 import { logger } from '@/services/logger';
 
 export const environmentVariablesSchema = z
@@ -20,6 +20,8 @@ export const environmentVariablesSchema = z
     DISCORD_ADMIN_IDS: z.string(),
     GMAIL_USER: z.string(),
     GMAIL_PASSWORD: z.string(),
+    /** `dry-run` logs what would reach users without sending nor recording anything. */
+    USER_MESSAGING: z.enum(['send', 'dry-run']),
     DATABASE_HOST: z.string(),
     DATABASE_PORT: z.coerce.number(),
     DATABASE_NAME: z.string(),
@@ -74,6 +76,9 @@ export const environmentVariablesSchema = z
       bot: {
         token: env.DISCORD_BOT_TOKEN,
       },
+    },
+    userMessaging: {
+      mode: env.USER_MESSAGING,
     },
     mailing: {
       serviceName: env.SERVICE_NAME,

@@ -1,10 +1,13 @@
-import { Body, Controller, Get, Header, Post, Query, Req, Res, UseFilters, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Inject, Post, Query, Req, Res, UseFilters, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
+
+import { Downloader } from '@crn-flix/contracts';
 
 import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
 import { SkipSessionAuth } from '@/guards/session.guard';
 import { USER_REQUEST_KEY, UserSessionGuard } from '@/guards/user-session.guard';
 import { readCookie } from '@/helpers/cookies';
+import { DOWNLOADER } from '@/providers/downloader';
 import { executionByTrack, ExecutionView } from '@/services/admin/execution';
 import { buildDashboard, Dashboard } from '@/services/admin/requests-view';
 import { ContextService } from '@/services/context';
@@ -14,9 +17,6 @@ import { PlannerFindingsRepository } from '@/services/database/planner-findings'
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestEntity, RequestsRepository } from '@/services/database/requests';
 import { UsersRepository } from '@/services/database/users';
-import { FetchrSyncService } from '@/services/fetchr-sync';
-import { userLoginTemplate } from '@/services/messaging/user/email/templates/user-login';
-import { parseUserSpaceTab, userSpaceTemplate } from '@/services/messaging/user/email/templates/user-space';
 import {
   CHALLENGE_TTL_MINUTES,
   USER_LOGIN_COOKIE,
@@ -25,6 +25,8 @@ import {
   UserAuthService,
   UserCodeRequestOutcome,
 } from '@/services/user-auth';
+import { userLoginTemplate } from '@/web/templates/user-login';
+import { parseUserSpaceTab, userSpaceTemplate } from '@/web/templates/user-space';
 
 const LOGIN_PATH = `${USER_SPACE_PATH}/login`;
 
@@ -58,7 +60,7 @@ export class MeController {
     private readonly plannedDownloads: PlannedDownloadsRepository,
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly findings: PlannerFindingsRepository,
-    private readonly fetchr: FetchrSyncService,
+    @Inject(DOWNLOADER) private readonly downloader: Downloader,
   ) {}
 
   @Get('login')
@@ -161,7 +163,7 @@ export class MeController {
     const userId = (req as Request & Record<string, string>)[USER_REQUEST_KEY];
     const requests = await this.requestsRepository.listByUserWithDetails(userId);
     const actions = await this.actionsOf(requests);
-    return executionByTrack(actions, this.fetchr.liveDownloads(), await this.downloadJobs.listInProgress());
+    return executionByTrack(actions, this.downloader.liveDownloads(), await this.downloadJobs.listInProgress());
   }
 
   /** The admin read model, restricted to what this subscriber requested. */
@@ -184,7 +186,7 @@ export class MeController {
       lastPassAt,
       bookmarks: [],
       tickets: [],
-      downloads: this.fetchr.liveDownloads(),
+      downloads: this.downloader.liveDownloads(),
     });
   }
 

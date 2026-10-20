@@ -1,0 +1,38 @@
+{
+  "name": "@crn-flix/catalog-trakt",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Catalog plugin backed by Trakt: watchlists, progress, ratings as media requests",
+  "license": "ISC",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist reports",
+    "lint": "eslint \"{src,tests}/**/*.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "@crn-flix/contracts": "workspace:*",
+    "@crn-flix/http": "workspace:*",
+    "axios": "catalog:",
+    "lodash": "4.17.23",
+    "luxon": "3.7.2",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@crn-flix/tooling": "workspace:*",
+    "@types/jest": "catalog:",
+    "@types/lodash": "4.17.24",
+    "@types/luxon": "3.7.1",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "jest": "catalog:",
+    "ts-jest": "catalog:",
+    "typescript": "catalog:"
+  }
+}

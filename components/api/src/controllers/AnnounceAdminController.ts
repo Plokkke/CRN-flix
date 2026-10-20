@@ -1,17 +1,15 @@
 import { Body, Controller, Get, Header, Post, Query, UseFilters, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 
+import { serviceNoticeTemplate } from '@crn-flix/messaging-user-email';
+
 import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
 import { AdminSessionGuard } from '@/guards/admin-session.guard';
 import { buildPresetNotice, isNoticePreset, NoticePreset } from '@/services/announcements/presets';
 import { AnnouncementService } from '@/services/announcements/service';
 import { ContextService } from '@/services/context';
 import { NOTICE_TONES, ServiceNotice } from '@/services/messaging/user';
-import {
-  adminAnnounceFormTemplate,
-  adminAnnounceResultTemplate,
-} from '@/services/messaging/user/email/templates/admin-announce';
-import { serviceNoticeTemplate } from '@/services/messaging/user/email/templates/service-notice';
+import { adminAnnounceFormTemplate, adminAnnounceResultTemplate } from '@/web/templates/admin-announce';
 
 const optionalText = z.string().trim().optional().default('');
 

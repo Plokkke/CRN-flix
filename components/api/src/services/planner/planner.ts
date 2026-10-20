@@ -2,8 +2,30 @@ import { createHash } from 'node:crypto';
 
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 
-import { assessCandidate, Indexer, IndexerTarget, MediaTitles } from '@/modules/indexer/contract';
-import { EnginePreferences } from '@/modules/indexer/preferences';
+import {
+  assessCandidate,
+  Downloader,
+  EnginePreferences,
+  Indexer,
+  IndexerTarget,
+  MediaTitles,
+} from '@crn-flix/contracts';
+import {
+  AssessedCandidate,
+  assessSourcing,
+  ChosenAction,
+  diffPlan,
+  isMissing,
+  labelEpisodes,
+  LiveAction,
+  maxLabel,
+  PlanLabel,
+  PlannerEpisode,
+  Playhead,
+  resolvePlan,
+  urgencyOf,
+} from '@crn-flix/planner';
+
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
 import { displayTitle, MediaType } from '@/services/database/medias';
@@ -16,23 +38,17 @@ import {
 import { PlannerFindingsRepository } from '@/services/database/planner-findings';
 import { NewRequestState, RequestStatesRepository } from '@/services/database/request-states';
 import { PlannerStateRow, RequestsRepository, RequestStatus } from '@/services/database/requests';
-import { FetchrSyncService } from '@/services/fetchr-sync';
 import { MediaTitlesService } from '@/services/media-titles';
 import { truthy } from '@/utils';
 
 import { findAcrossIndexers } from './bookmarks';
-import { diffPlan, LiveAction } from './diff';
-import { labelEpisodes } from './labels';
-import { isMissing, maxLabel, Playhead, PlanLabel, PlannerEpisode, urgencyOf } from './model';
-import { ChosenAction, resolvePlan } from './resolve';
 import { staleProposals } from './revalidate';
-import { AssessedCandidate, assessSourcing } from './sourcing';
 
 export const PLANNED_DOWNLOAD_ID_METADATA_KEY = 'crn-flix-planned-download-id';
 export const REQUEST_ID_METADATA_KEY = 'crn-flix-request-id';
 
 /**
- * Fetchr correlation metadata for an action. Packs deliberately omit the request-id
+ * Download correlation metadata for an action. Packs deliberately omit the request-id
  * fast path so the post-download pipeline identifies every file via imdb + filename;
  * single-media actions keep it (extended with the planned-download id).
  */
@@ -111,14 +127,14 @@ export class PlannerService implements OnModuleDestroy {
     private readonly requests: RequestsRepository,
     private readonly plannedDownloads: PlannedDownloadsRepository,
     private readonly playheads: PlayheadsProvider,
-    private readonly fetchr: FetchrSyncService,
+    private readonly downloader: Downloader,
     private readonly cache: MemoryCacheService,
     private readonly bookmarks: IndexerBookmarksRepository,
     private readonly states: RequestStatesRepository,
     private readonly findings: PlannerFindingsRepository,
     private readonly mediaTitles: MediaTitlesService,
   ) {
-    this.fetchr.on('liveChanged', () => void this.onFetchrLiveChanged());
+    this.downloader.onLiveChanged(() => void this.onDownloadsChanged());
   }
 
   onModuleDestroy(): void {
@@ -406,11 +422,11 @@ export class PlannerService implements OnModuleDestroy {
       if (action.status !== PlannedDownloadStatus.Proposed || action.label === PlanLabel.Deferred) {
         continue;
       }
-      if (!(await this.fetchr.canHandle(action.url))) {
+      if (!(await this.downloader.canHandle(action.url))) {
         continue;
       }
       PlannerService.logger.log(`Auto-triggering download for action ${action.id} (${action.url})`);
-      this.fetchr.download(action.url, buildActionDownloadMetadata(action));
+      this.downloader.download(action.url, buildActionDownloadMetadata(action));
       await this.plannedDownloads.updateStatus(action.id, PlannedDownloadStatus.Downloading);
     }
   }
@@ -464,12 +480,12 @@ export class PlannerService implements OnModuleDestroy {
     return action.showImdbId === null && action.coveredMediaIds.includes(target.mediaId);
   }
 
-  // --- Fetchr reconciliation ---
+  // --- Downloader reconciliation ---
 
   /** Live downloads correlated to an action, by either the auto-trigger or the grab handshake key. */
   private liveDownloadActionIds(): Set<string> {
     const ids = new Set<string>();
-    for (const download of this.fetchr.liveDownloads()) {
+    for (const download of this.downloader.liveDownloads()) {
       const actionId =
         download.metadata?.[PLANNED_DOWNLOAD_ID_METADATA_KEY] ?? download.metadata?.[REQUEST_ID_METADATA_KEY];
       if (actionId) {
@@ -480,25 +496,25 @@ export class PlannerService implements OnModuleDestroy {
   }
 
   private cancelInFlight(actionId: string): void {
-    for (const download of this.fetchr.liveDownloads()) {
+    for (const download of this.downloader.liveDownloads()) {
       const downloadActionId =
         download.metadata?.[PLANNED_DOWNLOAD_ID_METADATA_KEY] ?? download.metadata?.[REQUEST_ID_METADATA_KEY];
       if (downloadActionId === actionId) {
-        PlannerService.logger.log(`Cancelling superseded Fetchr download ${download.id} (action ${actionId})`);
-        this.fetchr.cancel(download.id);
+        PlannerService.logger.log(`Cancelling superseded download ${download.id} (action ${actionId})`);
+        this.downloader.cancel(download.id);
       }
     }
   }
 
-  private async onFetchrLiveChanged(): Promise<void> {
+  private async onDownloadsChanged(): Promise<void> {
     try {
       const actionIds = this.liveDownloadActionIds();
       const live = await this.plannedDownloads.listLive();
 
-      // A grabbed link landed in Fetchr: the admin acted on the proposal.
+      // A grabbed link landed in the downloader: the admin acted on the proposal.
       for (const action of live) {
         if (action.status === PlannedDownloadStatus.Proposed && actionIds.has(action.id)) {
-          PlannerService.logger.log(`Action ${action.id} observed downloading in Fetchr`);
+          PlannerService.logger.log(`Action ${action.id} observed downloading`);
           await this.plannedDownloads.updateStatus(action.id, PlannedDownloadStatus.Downloading);
         }
       }
@@ -508,13 +524,15 @@ export class PlannerService implements OnModuleDestroy {
         this.startupReconciled = true;
         for (const action of live) {
           if (action.status === PlannedDownloadStatus.Downloading && !actionIds.has(action.id)) {
-            PlannerService.logger.warn(`Action ${action.id} downloading but absent from Fetchr, back to proposed`);
+            PlannerService.logger.warn(
+              `Action ${action.id} downloading but absent from the downloader, back to proposed`,
+            );
             await this.plannedDownloads.updateStatus(action.id, PlannedDownloadStatus.Proposed);
           }
         }
       }
     } catch (err) {
-      PlannerService.logger.error(`Fetchr reconciliation failed: ${(err as Error).message}`);
+      PlannerService.logger.error(`Downloader reconciliation failed: ${(err as Error).message}`);
     }
   }
 }

@@ -2,8 +2,11 @@ import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool } from 'pg';
 
+import { MetadataSource } from '@crn-flix/contracts';
+import { JellyfinLayout } from '@crn-flix/layout-jellyfin';
+
 import { Config } from '@/app.module';
-import { TmdbApiService } from '@/modules/tmdb/tmdb';
+import { METADATA } from '@/providers/media-titles';
 import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediasRepository } from '@/services/database/medias';
@@ -11,28 +14,24 @@ import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { MediaLabelizerService } from '@/services/media-labelizer';
-import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 
 export const identificationProvider: Provider = {
   provide: MediaIdentifierService,
-  inject: [TmdbApiService, SYNC_DATASOURCE, MediasRepository, RequestsRepository, MediaTitlesResolver],
+  inject: [METADATA, SYNC_DATASOURCE, MediasRepository, RequestsRepository],
   useFactory: (
-    tmdb: TmdbApiService,
+    metadata: MetadataSource,
     pool: Pool,
     medias: MediasRepository,
     requests: RequestsRepository,
-    titles: MediaTitlesResolver,
-  ): MediaIdentifierService => new MediaIdentifierService(tmdb, pool, medias, requests, titles),
+  ): MediaIdentifierService => new MediaIdentifierService(metadata, pool, medias, requests),
 };
 
 export const placementProvider: Provider = {
   provide: MediaLabelizerService,
-  inject: [ConfigService, MediaTitlesResolver],
-  useFactory: (configService: ConfigService<Config, true>, titles: MediaTitlesResolver): MediaLabelizerService => {
-    const config = configService.get('mediaPaths');
-    return new MediaLabelizerService(config, titles);
-  },
+  inject: [ConfigService, METADATA],
+  useFactory: (configService: ConfigService<Config, true>, titles: MetadataSource): MediaLabelizerService =>
+    new MediaLabelizerService(configService.get('mediaPaths'), titles, new JellyfinLayout()),
 };
 
 export const postDownloadPipelineProvider: Provider = {

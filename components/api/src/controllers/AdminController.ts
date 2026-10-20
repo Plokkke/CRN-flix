@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  Inject,
   Logger,
   Param,
   Post,
@@ -14,12 +15,16 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
+import { Downloader } from '@crn-flix/contracts';
+
 import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
 import { AdminSessionGuard, SkipAdminAuth } from '@/guards/admin-session.guard';
 import { readCookie } from '@/helpers/cookies';
+import { DOWNLOADER } from '@/providers/downloader';
 import { executionByTrack, ExecutionView } from '@/services/admin/execution';
 import { buildDashboard, DashboardTab, TABS } from '@/services/admin/requests-view';
 import { ADMIN_SESSION_COOKIE, AdminAuthService, CodeRequestOutcome } from '@/services/admin-auth';
+import { CatalogSyncService } from '@/services/catalog/sync';
 import { ContextService } from '@/services/context';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
@@ -29,25 +34,25 @@ import { PlannerFindingsRepository } from '@/services/database/planner-findings'
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
-import { FetchrSyncService } from '@/services/fetchr-sync';
-import { JellyfinSyncService } from '@/services/jellyfin-sync';
-import { DiscordChannelCleanup } from '@/services/messaging/admin/channel-cleanup';
-import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
-import { adminLoginTemplate } from '@/services/messaging/user/email/templates/admin-login';
-import { adminNamingAuditTemplate } from '@/services/messaging/user/email/templates/admin-naming-audit';
+import { AdminTicketRelay } from '@/services/messaging/admin/relay';
+import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { NamingAuditService } from '@/services/naming-audit';
 import { PlannerService } from '@/services/planner/planner';
+import { PlayerSyncService } from '@/services/player-sync';
 import { TicketReconcilerService } from '@/services/tickets/reconciler';
-import { TraktSyncService } from '@/services/trakt-sync';
 import { truthy } from '@/utils';
+import { adminDashboardTemplate } from '@/web/templates/admin-dashboard';
+import { adminLoginTemplate } from '@/web/templates/admin-login';
+import { adminNamingAuditTemplate } from '@/web/templates/admin-naming-audit';
 
 const JOBS = [
-  { name: 'trakt-sync', schedule: 'Every 5 minutes' },
+  { name: 'catalog-sync', schedule: 'Every 5 minutes' },
   { name: 'planner', schedule: 'Every hour' },
-  { name: 'jellyfin-sync', schedule: 'Every 15 minutes' },
+  { name: 'player-sync', schedule: 'Every 15 minutes' },
   { name: 'ticket-sync', schedule: 'Every 5 minutes' },
+  { name: 'notification-redelivery', schedule: 'Every 5 minutes' },
   { name: 'naming-audit', schedule: 'Manual only' },
-  { name: 'discord-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
+  { name: 'admin-channel-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
 ] as const;
 
 type JobName = (typeof JOBS)[number]['name'];
@@ -72,8 +77,8 @@ export class AdminController {
   constructor(
     private readonly adminAuth: AdminAuthService,
     private readonly contextService: ContextService,
-    private readonly traktSync: TraktSyncService,
-    private readonly jellyfinSync: JellyfinSyncService,
+    private readonly catalogSync: CatalogSyncService,
+    private readonly playerSync: PlayerSyncService,
     private readonly planner: PlannerService,
     private readonly ticketReconciler: TicketReconcilerService,
     private readonly requestsRepository: RequestsRepository,
@@ -83,21 +88,23 @@ export class AdminController {
     private readonly plannedDownloads: PlannedDownloadsRepository,
     private readonly tickets: TicketsRepository,
     private readonly downloadJobs: DownloadJobsRepository,
-    private readonly fetchr: FetchrSyncService,
+    @Inject(DOWNLOADER) private readonly downloader: Downloader,
     private readonly namingAudit: NamingAuditService,
     private readonly namingAuditRepository: NamingAuditRepository,
-    private readonly channelCleanup: DiscordChannelCleanup,
+    private readonly adminRelay: AdminTicketRelay,
+    private readonly redelivery: NotificationRedeliveryService,
   ) {
     this.jobHandlers = {
-      'trakt-sync': () => this.traktSync.sync(),
+      'catalog-sync': () => this.catalogSync.sync(),
       planner: () => this.planner.runAll(),
-      'jellyfin-sync': () => this.jellyfinSync.sync(),
+      'player-sync': () => this.playerSync.sync(),
       'ticket-sync': () => this.ticketReconciler.sync(),
+      'notification-redelivery': () => this.redelivery.redeliver(),
       'naming-audit': async () => {
         await this.namingAudit.run();
       },
-      'discord-cleanup': async () => {
-        await this.channelCleanup.run();
+      'admin-channel-cleanup': async () => {
+        await this.adminRelay.purge();
         await this.ticketReconciler.sync();
       },
     };
@@ -186,7 +193,7 @@ export class AdminController {
       prefs: this.contextService.indexerPreferences,
       lastPassAt,
       jobs,
-      downloads: this.fetchr.liveDownloads(),
+      downloads: this.downloader.liveDownloads(),
     });
 
     return adminDashboardTemplate({
@@ -203,7 +210,7 @@ export class AdminController {
   async getProgress(): Promise<Record<string, ExecutionView>> {
     return executionByTrack(
       await this.plannedDownloads.listLive(),
-      this.fetchr.liveDownloads(),
+      this.downloader.liveDownloads(),
       await this.downloadJobs.listInProgress(),
     );
   }

@@ -1,10 +1,10 @@
 import { Pool } from 'pg';
 
+import { IndexerCandidate } from '@crn-flix/contracts';
+import { AssessedCandidate, PlanLabel, Sourcing } from '@crn-flix/planner';
+
 import { withDbRetry } from '@/helpers/db-retry';
 import { transaction } from '@/helpers/sql';
-import { IndexerCandidate } from '@/modules/indexer/contract';
-import { PlanLabel } from '@/services/planner/model';
-import { AssessedCandidate, Sourcing } from '@/services/planner/sourcing';
 
 export type RequestStateEntity = {
   mediaId: string;

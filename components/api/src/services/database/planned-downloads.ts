@@ -2,13 +2,13 @@ import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Pool } from 'pg';
 import { z } from 'zod';
 
+import { CandidateScope, Host, IndexerCandidate, Language, Quality } from '@crn-flix/contracts';
+import { PlanLabel } from '@crn-flix/planner';
+
 import { withDbRetry } from '@/helpers/db-retry';
 import { Emitter } from '@/helpers/events';
 import { ListenChannel, ListenHandle, listenWithReconnect, transaction } from '@/helpers/sql';
-import { CandidateScope, IndexerCandidate } from '@/modules/indexer/contract';
-import { Host, Language, Quality } from '@/modules/indexer/preferences';
 import { MediaEntity } from '@/services/database/medias';
-import { PlanLabel } from '@/services/planner/model';
 
 export enum PlannedDownloadStatus {
   Proposed = 'proposed',
@@ -179,7 +179,7 @@ const DETAILS_SELECT = `
         'originalTitle', m.original_title,
         'frenchTitle', m.french_title,
         'originalLanguage', m.original_language,
-        'posterPath', m.poster_path,
+        'posterUrl', m.poster_url,
         'year', m.year,
         'seasonNumber', m.season_number,
         'episodeNumber', m.episode_number,

@@ -1,0 +1,35 @@
+{
+  "name": "@crn-flix/downloader-fetchr",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Downloader plugin backed by Fetchr: WebSocket live state, completions, host support",
+  "license": "ISC",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist reports",
+    "lint": "eslint \"{src,tests}/**/*.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "@crn-flix/contracts": "workspace:*",
+    "axios": "catalog:",
+    "ws": "8.20.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@crn-flix/tooling": "workspace:*",
+    "@types/jest": "catalog:",
+    "@types/node": "catalog:",
+    "@types/ws": "8.18.1",
+    "eslint": "catalog:",
+    "jest": "catalog:",
+    "ts-jest": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -1,7 +1,7 @@
 import { Controller, Get, Header } from '@nestjs/common';
 
 import { ContextService } from '@/services/context';
-import { userGuideTemplate } from '@/services/messaging/user/email/templates/user-guide-template';
+import { userGuideTemplate } from '@/web/templates/user-guide-template';
 
 @Controller('user-guide')
 export class UserGuideController {

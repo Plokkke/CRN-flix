@@ -1,8 +1,8 @@
-# CRN-Flix Engine
+# CRN-Flix
 
-The brain of CRN-Flix. It turns what subscribers watch and want into media available in their library: it reads their intent from a **catalog**, plans what to download and when, searches **indexers** for releases, hands them to a **downloader**, files the result into the **media server** library and tells users when their media is ready. Everything that needs a human becomes a ticket, handled on an **admin channel** or the web dashboard.
+The brain of CRN-Flix. It turns what subscribers watch and want into media available in their library: it reads their intent from a **catalog**, plans what to download and when, searches **indexers** for releases, hands them to a **downloader**, files the result into the **storage** watched by the **player** and tells users when their media is ready. Everything that needs a human becomes a ticket, handled on an **admin channel** or the web dashboard.
 
-The engine owns the logic; every external service sits behind a role. Some roles already have a formal contract, others are still coupled to their only implementation — the goal is for every implementation to become a plugin living outside the engine (see [Implementations](#implementations)).
+The engine owns the logic; every external service sits behind a role whose contract lives in `libs/contracts`. Implementations are plugins under `plugins/<role>/<name>`, packages the engine composes at boot — the goal is to publish the engine on its own and let anyone pick their plugins (see [Implementations](#implementations) and [`knowledge/plugins.md`](knowledge/plugins.md)).
 
 ## How it fits
 
@@ -11,20 +11,21 @@ Catalog ──► catalog sync ──► requests (intent) ──► planner ─
                                                       │
                                      auto-trigger, or admin launches a link
                                                       ▼
-Media server ◄── library refresh ◄── post-download pipeline ◄── Downloader
+Player ◄── library refresh ◄── post-download pipeline (Layout) ◄── Downloader
      │
      └──► library sync ──► request fulfilled ──► user notified (user channels)
 ```
 
 | Role | Responsibility |
 |---|---|
-| **Catalog** | Where users express intent: watchlist, shows in progress, ratings, playheads |
-| **Metadata provider** | Localized titles (French shown to users), original language, posters |
+| **Catalog** | Where users reference what they want: watchlist, shows in progress, ratings, playheads |
+| **Metadata** | Informs without holding requests: localized titles (French shown to users), original language, posters, file identification |
+| **Policy** | Filters requests coming out of the catalogs before planning: accept, reject (user notified) or send to review — *defined, not implemented* |
 | **Indexer** | Searches releases for a movie or show and returns scoped candidates (episode, season, series) |
 | **Downloader** | Downloads a link, reports progress, echoes the metadata attached to it |
-| **Media server** | Hosts the library and the user accounts, tells what is available, gets refreshed after a placement |
-| **Admin channel** | Surfaces tickets and receives admin replies/actions |
-| **User channels** | Notifications, announcements and login codes, one channel per user |
+| **Layout** | The library's naming and organisation rules (usually the player's conventions); the engine moves the files on the volume it shares with the downloader |
+| **Player** | Hosts the library and the user accounts, tells what is available, gets refreshed after a placement |
+| **Messaging** | Admin channel (tickets, admin replies) and user channels (notifications, announcements, login codes, one per user) |
 
 ## Features
 
@@ -32,11 +33,11 @@ Media server ◄── library refresh ◄── post-download pipeline ◄─�
 - **Download planner** — labels each missing episode `starved` / `needed` / `deferred`, picks the cheapest set of releases (episode, season or full-series bundles) and triggers the downloader automatically when it can handle the link.
 - **Indexer search** — every indexer receives all known titles and picks its own query order. Candidates are filtered by quality, language, host and a runtime-based size cap; rejections are kept to explain why nothing was chosen. Each indexer can store an opaque bookmark per media, handed back on the next search.
 - **Titles** — English in database and on disk, French shown to users.
-- **Post-download pipeline** — identifies the file (action id → imdb id → filename), renames it to library conventions, refreshes the media server, marks the request fulfilled. Downloads flagged `private=true` go to a separate private tree.
+- **Post-download pipeline** — identifies the file (action id → imdb id → filename), renames it to library conventions, refreshes the player, marks the request fulfilled. Downloads flagged `private=true` go to a separate private tree.
 - **Tickets** — user approvals, download actions, identification failures, dead letters, manual downloads. One core, two adapters: the admin channel and `/admin/tickets`.
 - **Dashboards** — `/admin` (requests grouped per show, tabs by expected action, release-level forcing, live progress), `/me` (the subscriber's own requests, OTP + magic-link login), `/admin/announce` (outage / restoration notices, each user reached on their own channel).
 - **Notifications** — only `fulfilled` / `rejected` reach users, batched per user.
-- **Resilient boot** — only PostgreSQL is required to start; the media server and the downloader are reached lazily and their syncs fail per run.
+- **Resilient boot** — only PostgreSQL is required to start; the player and the downloader are reached lazily and their syncs fail per run.
 
 ### Download correlation
 
@@ -46,60 +47,72 @@ Links the engine shows to admins carry query params — `crn-flix-request-id` (p
 
 | Role | Implementation | Code | Contract | Status |
 |---|---|---|---|---|
-| Catalog | Trakt | `src/modules/trakt/`, `services/trakt-sync.ts`, `trakt-playhead.ts` | none yet | Active, coupled |
-| Metadata provider | TMDB | `src/modules/tmdb/`, `services/media-titles*.ts` | none yet | Active, coupled |
-| Indexer | Loadix | `src/modules/indexer/loadix/` | `Indexer` (`modules/indexer/contract.ts`) | Active |
-| Indexer | Hydracker | removed | `Indexer` | **Obsolete** — the service shut down |
-| Downloader | Fetchr | `services/fetchr-sync.ts` | none yet | Active, coupled |
-| Media server | Jellyfin | `src/modules/jellyfin/`, `services/jellyfin-sync.ts` | none yet | Active, coupled |
-| Admin channel | Discord | `src/modules/discord/`, `services/messaging/admin/` | ticket adapter (`services/tickets/`) | Active |
-| User channel | Email (Gmail SMTP) | `services/messaging/user/email/` | `UserMessaging` (`services/messaging/user/index.ts`) | Active |
-| User channel | Discord DM | `services/messaging/user/discord.ts` | `UserMessaging` | Active |
+| Catalog | Trakt | `plugins/catalogs/trakt` (`TraktCatalog`) | `Catalog`, `CatalogAccountSource` (Jellyfin's Trakt plugin) | Plugin; account linking (`UsersController`) still uses the concrete classes |
+| Metadata | TMDB | `plugins/metadata/tmdb` (`TmdbMetadataSource`) | `MetadataSource` | Plugin (titles, artwork, file identification) |
+| Indexer | Loadix | `plugins/indexers/loadix` | `Indexer` | Plugin |
+| Downloader | Fetchr | `plugins/downloaders/fetchr` (`FetchrDownloader`) | `Downloader` | Plugin; completions become download jobs in the engine (`services/downloads/intake.ts`) |
+| Layout | Jellyfin conventions | `plugins/layouts/jellyfin` (`JellyfinLayout`) | `LibraryLayout` | Plugin; file identification and moves stay in the engine |
+| Player | Jellyfin | `plugins/players/jellyfin` (`JellyfinPlayer`, Trakt plugin tokens) | `Player`, `CatalogAccountSource` | Plugin; the naming audit still reads library paths from the client directly |
+| Messaging (admin) | Discord | `plugins/messaging-admin/discord` (`DiscordAdminChannel`) on `libs/discord` | `AdminChannel` | Plugin; tickets, bindings and text parsing stay in the engine (`services/messaging/admin/relay.ts`) |
+| Messaging (users) | Email | `plugins/messaging-user/email` (`EmailChannel`) | `UserChannel` | Plugin; batching and dispatch stay in the engine (`services/messaging/user/all.ts`) |
+| Policy | — | — | `Policy` | Defined only |
 
-Known cross-implementation couplings to remove on the way to plugins:
-
-- Catalog credentials (Trakt tokens) are read from the media server's Trakt plugin configuration, not stored by the engine.
-- Indexers are instantiated in `modules/indexer/registry.ts` from engine config, not discovered.
-- The downloader's link support (`canHandle`) and its event vocabulary are used directly by the planner and the pipeline.
-- Media placement paths are computed from the downloader's download path (`FETCHR_DOWNLOADS_PREFIX`) and the media server's library root.
+*Draft* contracts are typed in `libs/contracts` but not implemented by any plugin yet. Couplings left on the way, in order, are listed in [`knowledge/plugins.md`](knowledge/plugins.md).
 
 ## Repository layout
 
-npm workspace — there is no top-level `src/`.
+pnpm workspace + Turborepo.
 
 ```
 components/
-├── api/          @crn-flix/api — the NestJS engine (all application code)
+├── api/          @crn-flix/api — the NestJS engine
 │   ├── src/controllers/   HTTP surface: /admin, /admin/tickets, /admin/announce, /me, /users, /mailing
-│   ├── src/services/      syncs, planner/, tickets/, messaging/, database/ (raw pg repositories)
-│   ├── src/modules/       implementations of external services (see Implementations)
-│   └── test/              Jest unit tests + Stryker
+│   ├── src/services/      syncs, planner orchestration, tickets/, messaging/, database/ (raw pg repositories)
+│   ├── src/modules/       indexer registry + harness
+│   ├── src/web/templates/ every web page (dashboards, tickets, /me, login, guide)
+│   └── tests/             Jest unit tests + Stryker
 └── database/     SQL migrations (src/scripts/NNNNN_*.sql) + migration runner image
-knowledge/        design briefs (download planner)
-terraform/        legacy local stack, not used by the production deploy
+libs/
+├── contracts/    @crn-flix/contracts — every role's contract + shared media types
+├── planner/      @crn-flix/planner — pure planner core (runway, labels, set cover, diff, sourcing)
+├── http/         @crn-flix/http — axios logging, retries, rate limiting for plugins
+├── design-system/ @crn-flix/design-system — tokens, components, page and email layouts
+├── discord/      @crn-flix/discord — the shared Discord bot connection
+└── tooling/      @crn-flix/tooling — eslint, tsconfig and jest presets
+plugins/
+├── catalogs/trakt        @crn-flix/catalog-trakt
+├── indexers/loadix       @crn-flix/indexer-loadix
+├── metadata/tmdb         @crn-flix/metadata-tmdb
+├── layouts/jellyfin      @crn-flix/layout-jellyfin
+├── downloaders/fetchr    @crn-flix/downloader-fetchr
+├── messaging-user/email  @crn-flix/messaging-user-email
+├── messaging-admin/discord @crn-flix/messaging-admin-discord
+└── players/jellyfin      @crn-flix/player-jellyfin
+infrastructure/terraform/ the deployment stack · secrets/ (sops) · scripts/ (cutover) · compose/ (legacy, Jellyfin until it moves)
+knowledge/        design docs (plugins, policy, download planner)
 ```
 
-The SQL migrations and the TypeScript code are the source of truth for the schema. The Prisma schema in `components/database` has drifted and is not used by the API.
+The SQL migrations and the TypeScript code are the source of truth for the schema.
 
 ## Getting started
 
-Requirements: Node ≥ 18 and a PostgreSQL database with the migrations applied, plus credentials for the implementations you enable.
+Requirements: Node 26 (`.nvmrc`), pnpm 12 and a PostgreSQL database with the migrations applied, plus credentials for the implementations you enable.
 
 ```bash
-npm install                     # from the repo root (workspaces)
-cd components/api
-# write .env, see Configuration below
-npm run start:dev
+pnpm install
+# write components/api/.env, see Configuration below
+pnpm dev
 ```
 
-### Commands (from `components/api/`)
+### Commands
 
 | Command | What it does |
 |---|---|
-| `npm run start:dev` | Watch mode |
-| `npm run validate` | Lint + build + unit tests |
-| `npm run test:unit` / `test:mut` | Jest / Stryker mutation tests |
-| `npm run indexer:find -- <indexer> --imdb tt… --title "…" [--type show --episodes "1:1-10"] [--verbose]` | Query an indexer standalone (no Nest, database or admin channel), handy to debug a search |
+| `pnpm build` / `lint` / `typecheck` / `test` | Turborepo tasks over every package |
+| `pnpm validate` | All of the above |
+| `pnpm dev` | Engine in watch mode (libs and plugins are built first) |
+| `pnpm -F @crn-flix/api test:mut` | Stryker mutation tests |
+| `pnpm -F @crn-flix/api indexer:find <indexer> --imdb tt… --title "…" [--type show --episodes "1:1-10"] [--verbose]` | Query an indexer standalone (no Nest, database or admin channel), handy to debug a search; run `pnpm build` first |
 
 ### Configuration
 
@@ -129,12 +142,14 @@ Validated at boot by `components/api/src/environment.ts`.
 
 ## Deployment
 
-Production runs as Docker containers next to PostgreSQL and the services behind each role. `infrastructure/compose/deploy.sh` builds and pushes `antoinecaron/crn-flix` (API) and `antoinecaron/crn-flix-migration`, syncs `infrastructure/compose/docker-compose.yaml` to the server and restarts the stack; the server's `.env` keys are listed in `infrastructure/compose/.env.example`. The compose file in this repository is the source of truth: never edit it on the server. The migration container runs first; the engine only waits on it and on PostgreSQL.
+Production runs on the home server, deployed by its deployer from `infrastructure/terraform` (engine + one-shot migration; the database lives on the shared Postgres). A squash-merged PR on `main` releases (semantic-release), publishes `ghcr.io/plokkke/crn-flix/{api,migration}:<version>` and requests the deployment; a push touching `infrastructure/**` redeploys the current version. Secrets: `infrastructure/secrets/production.sops.yaml`. The cutover from the old compose stack and the rollback procedure: [`knowledge/deploiement.md`](knowledge/deploiement.md).
 
-Migrations are applied in filename order and hashed: **never edit an applied migration, add a new one.**
+Migrations are applied in filename order and hashed: **never edit an applied migration, add a new one**, and keep it compatible with the previous version (rollback).
 
 ## Further reading
 
 - [`CLAUDE.md`](CLAUDE.md) — detailed architecture: syncs, planner, indexer contract, tickets, read model, schema, NOTIFY channels.
+- [`knowledge/deploiement.md`](knowledge/deploiement.md) — deployment, cutover and rollback.
+- [`knowledge/plugins.md`](knowledge/plugins.md) — plugin architecture, roles, extraction status.
+- [`knowledge/policy.md`](knowledge/policy.md) — the policy role.
 - [`knowledge/download-planner-brief.md`](knowledge/download-planner-brief.md) — planner design.
-- `docs/` and `ROADMAP.md` are historical and partly stale.

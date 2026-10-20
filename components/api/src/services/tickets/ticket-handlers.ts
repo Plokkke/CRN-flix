@@ -1,18 +1,18 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AxiosError } from 'axios';
 
+import { AccountNameTakenError, Downloader, IdentifiedMedia, LiveDownload, Player } from '@crn-flix/contracts';
+
 import { Listener } from '@/helpers/events';
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { MediaEntity, MediasRepository, MediaType } from '@/services/database/medias';
 import { PlannedDownloadsRepository, PlannedDownloadStatus } from '@/services/database/planned-downloads';
 import { RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { TicketNotifyEvents, TicketsRepository } from '@/services/database/tickets';
-import { UsersRepository, UserStatus } from '@/services/database/users';
-import { LiveDownload } from '@/services/download-live-state';
-import { buildDownloadMetadata, FetchrSyncService } from '@/services/fetchr-sync';
+import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
+import { buildDownloadMetadata } from '@/services/downloads/metadata';
 import { MediaIdentifierService } from '@/services/media-identifier';
-import { AllUserMessaging } from '@/services/messaging/user/all';
+import { AllUserMessaging, UserMessagingCtxt } from '@/services/messaging/user/all';
 import { buildActionDownloadMetadata, PlannerService } from '@/services/planner/planner';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { identificationFailureResolved } from '@/services/tickets/auto-resolve';
@@ -31,12 +31,16 @@ export { TICKET_ID_METADATA_KEY };
 const IMDB_ID_PATTERN = /^tt\d{7,}$/;
 const SETTLED_DOWNLOAD_STATUSES = new Set(['completed', 'failed']);
 
-type Identification = { imdbId: string | null; title: string; year: number | null; mediaType: 'movie' | 'episode' };
+type Identification = IdentifiedMedia;
 type ManualDownloadPayload = TicketPayloadMap[TicketCategory.ManualDownload];
 
 function labelOf(identification: Identification): string {
   return `${identification.title}${identification.year ? ` (${identification.year})` : ''}`;
 }
+
+const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const messagingContextOf = (user: UserEntity): UserMessagingCtxt => ({ key: user.messagingKey, id: user.messagingId });
 
 function failed(message: string, payloadPatch?: Record<string, unknown>): OperationOutcome {
   return { status: 'failed', message, payloadPatch };
@@ -54,14 +58,14 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly ticketService: TicketService,
     private readonly ticketsRepository: TicketsRepository,
-    private readonly jellyfin: JellyfinMediaService,
+    private readonly player: Player,
     private readonly messaging: AllUserMessaging,
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
     private readonly mediasRepository: MediasRepository,
     private readonly plannedDownloads: PlannedDownloadsRepository,
     private readonly postDownloadPipeline: PostDownloadPipeline,
-    private readonly fetchrSync: FetchrSyncService,
+    private readonly downloader: Downloader,
     private readonly mediaIdentifier: MediaIdentifierService,
     private readonly planner: PlannerService,
     private readonly downloadJobs: DownloadJobsRepository,
@@ -102,39 +106,55 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     if (!user) {
       return { status: 'resolved', message: 'Utilisateur déjà supprimé' };
     }
-    const messagingContext = { key: user.messagingKey, id: user.messagingId };
+    return operation.kind === 'reject' ? this.rejectUser(user) : this.approveUser(user);
+  }
 
-    if (operation.kind === 'reject') {
-      this.messaging.error(messagingContext, 'Votre inscription a été refusée');
-      await this.usersRepository.remove(user.id);
-      return { status: 'resolved', message: `Inscription de ${user.name} refusée` };
+  /** The user is only deleted once told: a refusal that could not be sent keeps the ticket open. */
+  private async rejectUser(user: UserEntity): Promise<OperationOutcome> {
+    try {
+      await this.messaging.error(messagingContextOf(user), 'Votre inscription a été refusée');
+    } catch (error) {
+      return failed(`Refus non notifié à ${user.name} : ${describeError(error)}`.slice(0, 500));
     }
+    await this.usersRepository.remove(user.id);
+    return { status: 'resolved', message: `Inscription de ${user.name} refusée` };
+  }
 
+  /**
+   * The user only becomes active once their credentials reached them; a retry resets the
+   * password again, so a failed welcome never leaves an account nobody can log into.
+   */
+  private async approveUser(user: UserEntity): Promise<OperationOutcome> {
     const password = Math.random().toString(36).substring(2, 15);
     try {
-      if (user.jellyfinId) {
-        await this.jellyfin.resetUserPassword(user.jellyfinId, password);
-      } else {
-        const existing = await this.jellyfin.findUserByName(user.name);
-        user.jellyfinId = existing ? existing.Id : await this.jellyfin.registerUser(user.name, password);
-        if (existing) {
-          await this.jellyfin.resetUserPassword(user.jellyfinId, password);
-        }
-        await this.usersRepository.setJellyfinId(user.id, user.jellyfinId);
+      const accountId = await this.player.upsertAccount(user.name, password, user.jellyfinId);
+      if (accountId !== user.jellyfinId) {
+        user.jellyfinId = accountId;
+        await this.usersRepository.setJellyfinId(user.id, accountId);
       }
+      await this.messaging.registered(messagingContextOf(user), user, password);
       await this.usersRepository.setStatus(user.id, UserStatus.Active);
-      this.messaging.registered(messagingContext, user, password);
       return { status: 'resolved', message: `Inscription de ${user.name} validée` };
     } catch (error) {
-      if (error instanceof Error && error.message === 'User already exists') {
-        this.messaging.error(messagingContext, "Ce nom d'utilisateur existe déjà merci d'en choisir un autre");
-        return failed(`Le nom "${user.name}" existe déjà sur Jellyfin`);
-      }
-      const message = error instanceof AxiosError ? JSON.stringify(error.response?.data) : String(error);
-      TicketHandlersService.logger.error(`Error registering user ${user.name}: ${message}`);
-      this.messaging.error(messagingContext, "Erreur lors de l'inscription");
-      return failed(`Erreur Jellyfin : ${message}`.slice(0, 500));
+      return this.approvalFailed(user, error);
     }
+  }
+
+  private async approvalFailed(user: UserEntity, error: unknown): Promise<OperationOutcome> {
+    if (error instanceof AccountNameTakenError) {
+      await this.tellUser(user, "Ce nom d'utilisateur existe déjà merci d'en choisir un autre");
+      return failed(`Le nom "${user.name}" existe déjà sur ${this.player.name}`);
+    }
+    const message = error instanceof AxiosError ? JSON.stringify(error.response?.data) : describeError(error);
+    TicketHandlersService.logger.error(`Error registering user ${user.name}: ${message}`);
+    return failed(`Inscription de ${user.name} non finalisée : ${message}`.slice(0, 500));
+  }
+
+  /** Best effort: the ticket already reports the failure to the admin. */
+  private async tellUser(user: UserEntity, message: string): Promise<void> {
+    await this.messaging.error(messagingContextOf(user), message).catch((error: unknown) => {
+      TicketHandlersService.logger.warn(`Could not tell ${user.name} "${message}": ${describeError(error)}`);
+    });
   }
 
   // --- download-action ---
@@ -148,10 +168,10 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
 
     switch (operation.kind) {
       case 'submitLink': {
-        if (!(await this.fetchrSync.canHandle(operation.url))) {
-          return failed('Aucun plugin Fetchr ne gère ce lien');
+        if (!(await this.downloader.canHandle(operation.url))) {
+          return failed('Le downloader ne gère pas ce lien');
         }
-        this.fetchrSync.download(operation.url, buildActionDownloadMetadata(action));
+        this.downloader.download(operation.url, buildActionDownloadMetadata(action));
         await this.plannedDownloads.updateStatus(action.id, PlannedDownloadStatus.Downloading);
         return { status: 'progress', message: 'Téléchargement lancé sur le lien soumis' };
       }
@@ -201,7 +221,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     const payload = ticket.payload as TicketPayloadMap[TicketCategory.ManualDownload];
 
     if (operation.kind === 'submitImdb') {
-      const identification = await this.identifyFromImdbId(operation.imdbId);
+      const identification = await this.mediaIdentifier.identifyImdbId(operation.imdbId);
       if (!identification) {
         return failed(`Aucun média TMDB pour ${operation.imdbId}`);
       }
@@ -219,7 +239,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     const url = operation.url;
     let fileName: string;
     try {
-      const resolved = await this.fetchrSync.resolve(url);
+      const resolved = await this.downloader.resolve(url);
       fileName = resolved.fileName;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -238,37 +258,16 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     return this.launchIdentifiedDownload(ticket, url, identification);
   }
 
-  private async identifyFromImdbId(imdbId: string): Promise<Identification | null> {
-    const { movies, tvShows } = await this.mediaIdentifier.tmdbFindByImdbId(imdbId);
-    if (movies[0]) {
-      return {
-        imdbId,
-        title: movies[0].title,
-        year: movies[0].release_date ? parseInt(movies[0].release_date.substring(0, 4), 10) : null,
-        mediaType: 'movie',
-      };
-    }
-    if (tvShows[0]) {
-      return {
-        imdbId,
-        title: tvShows[0].name,
-        year: tvShows[0].first_air_date ? parseInt(tvShows[0].first_air_date.substring(0, 4), 10) : null,
-        mediaType: 'episode',
-      };
-    }
-    return null;
-  }
-
   private findInFlightDownload(ticketId: string): LiveDownload | undefined {
-    return this.fetchrSync
+    return this.downloader
       .liveDownloads()
       .find((d) => d.metadata?.[TICKET_ID_METADATA_KEY] === ticketId && !SETTLED_DOWNLOAD_STATUSES.has(d.status));
   }
 
   private async ensurePendingRequest(identification: Identification): Promise<MediaEntity> {
     const media = await this.mediasRepository.upsert({
-      imdbId: identification.imdbId ?? '',
-      type: identification.mediaType === 'movie' ? MediaType.Movie : MediaType.Episode,
+      imdbId: identification.imdbId,
+      type: identification.kind === 'movie' ? MediaType.Movie : MediaType.Episode,
       title: identification.title,
       originalTitle: null,
       frenchTitle: null,
@@ -289,7 +288,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
   ): Promise<OperationOutcome> {
     const media = await this.ensurePendingRequest(identification);
 
-    this.fetchrSync.download(url, this.downloadMetadata(ticket, media));
+    this.downloader.download(url, this.downloadMetadata(ticket, media));
 
     TicketHandlersService.logger.log(`Download launched for "${identification.title}" (ticket ${ticket.id})`);
     return {
@@ -300,9 +299,9 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The download is still running in Fetchr: keep it, swap its metadata for the corrected
+   * The download is still running in the downloader: keep it, swap its metadata for the corrected
    * identity, re-point the ticket at the right request (the post-download pipeline also reads it,
-   * covering a Fetchr that did not apply the update) and drop the misidentified request when
+   * covering a downloader that did not apply the update) and drop the misidentified request when
    * nobody else asked for it.
    */
   private async reidentifyInFlightDownload(
@@ -312,7 +311,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     identification: Identification,
   ): Promise<OperationOutcome> {
     const media = await this.ensurePendingRequest(identification);
-    this.fetchrSync.updateMetadata(inFlight.id, this.downloadMetadata(ticket, media));
+    this.downloader.updateMetadata(inFlight.id, this.downloadMetadata(ticket, media));
 
     if (payload.requestId && payload.requestId !== media.id) {
       await this.dropOrphanRequest(payload.requestId);

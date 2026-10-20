@@ -1,21 +1,23 @@
 import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { MetadataSource } from '@crn-flix/contracts';
+import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import { Config } from '@/app.module';
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
+import { METADATA } from '@/providers/media-titles';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
 import { MediaLabelizerService } from '@/services/media-labelizer';
-import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 import { NamingAuditService } from '@/services/naming-audit';
 
 export const namingAuditProvider: Provider = {
   provide: NamingAuditService,
-  inject: [ConfigService, JellyfinMediaService, MediaLabelizerService, MediaTitlesResolver, NamingAuditRepository],
+  inject: [ConfigService, JellyfinMediaService, MediaLabelizerService, METADATA, NamingAuditRepository],
   useFactory: (
     configService: ConfigService<Config, true>,
     jellyfin: JellyfinMediaService,
     labelizer: MediaLabelizerService,
-    titles: MediaTitlesResolver,
+    titles: MetadataSource,
     auditRepo: NamingAuditRepository,
   ): NamingAuditService => {
     const config = configService.get('namingAudit');

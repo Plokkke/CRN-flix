@@ -1,8 +1,8 @@
 import { Logger } from '@nestjs/common';
 
-import { MediaTitles } from '@/modules/indexer/contract';
+import { MediaTitles, MediaMetadata, MetadataSource } from '@crn-flix/contracts';
+
 import { MediasRepository } from '@/services/database/medias';
-import { MediaTitlesResolution, MediaTitlesResolver } from '@/services/media-titles-resolver';
 
 /** One TMDB pair of calls per title, twice a second at most: an hour of backlog per run. */
 const BACKFILL_BATCH = 200;
@@ -16,7 +16,7 @@ export class MediaTitlesService {
   private static readonly logger = new Logger(MediaTitlesService.name);
 
   constructor(
-    private readonly resolver: MediaTitlesResolver,
+    private readonly resolver: MetadataSource,
     private readonly medias: MediasRepository,
   ) {}
 
@@ -49,8 +49,8 @@ export class MediaTitlesService {
   }
 
   /** Null when TMDB knows nothing about the id (the stored titles stay as they are). */
-  private async resolveAndPersist(imdbId: string): Promise<MediaTitlesResolution | null> {
-    const resolved = await this.resolver.resolve(imdbId);
+  private async resolveAndPersist(imdbId: string): Promise<MediaMetadata | null> {
+    const resolved = await this.resolver.describe(imdbId);
     if (!resolved.title && !resolved.frenchTitle) {
       return null;
     }

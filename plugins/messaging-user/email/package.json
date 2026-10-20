@@ -1,0 +1,35 @@
+{
+  "name": "@crn-flix/messaging-user-email",
+  "version": "0.0.0",
+  "private": true,
+  "description": "User messaging plugin sending emails (SMTP via nodemailer)",
+  "license": "ISC",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist reports",
+    "lint": "eslint \"{src,tests}/**/*.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "@crn-flix/contracts": "workspace:*",
+    "@crn-flix/design-system": "workspace:*",
+    "nodemailer": "8.0.4",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@crn-flix/tooling": "workspace:*",
+    "@types/jest": "catalog:",
+    "@types/node": "catalog:",
+    "@types/nodemailer": "7.0.11",
+    "eslint": "catalog:",
+    "jest": "catalog:",
+    "ts-jest": "catalog:",
+    "typescript": "catalog:"
+  }
+}

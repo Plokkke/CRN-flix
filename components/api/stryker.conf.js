@@ -1,5 +1,5 @@
 module.exports = {
-  packageManager: 'npm',
+  packageManager: 'pnpm',
   incrementalFile: 'reports/tests/stryker/incremental.json',
   reporters: ['html', 'progress','dashboard'],
   htmlReporter: { fileName: "reports/tests/stryker/index.html"},
@@ -7,7 +7,7 @@ module.exports = {
   coverageAnalysis: 'perTest',
   disableTypeChecks: '**/*.ts',
   jest: {
-    configFile: 'test/jest-unit.js',
+    configFile: 'jest.config.js',
   },
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',

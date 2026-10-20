@@ -1,7 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 
+import { JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import { Config } from '@/app.module';
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
 
 export const jellyfinProvider = {
   provide: JellyfinMediaService,

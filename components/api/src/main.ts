@@ -6,8 +6,10 @@ import { configureAppModule } from '@/app.module';
 import { loadEnv } from '@/environment';
 import { installShutdownHandlers } from '@/helpers/shutdown';
 import { logger } from '@/services/logger';
+import { routePluginLogsToNest } from '@/services/logger/plugins';
 
 (async () => {
+  routePluginLogsToNest();
   const env = loadEnv();
 
   const app = await NestFactory.create<NestExpressApplication>(configureAppModule(env), {

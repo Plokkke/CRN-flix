@@ -4,51 +4,57 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from '@plokkke/nest-health-registry';
 import { z } from 'zod';
 
+import { traktConfigSchema } from '@crn-flix/catalog-trakt';
+import { Host, Language, Quality } from '@crn-flix/contracts';
+import { discordConfigSchema } from '@crn-flix/discord';
+import { fetchrConfigSchema } from '@crn-flix/downloader-fetchr';
+import { loadixConfigSchema } from '@crn-flix/indexer-loadix';
+import { emailConfigSchema } from '@crn-flix/messaging-user-email';
+import { tmdbConfigSchema } from '@crn-flix/metadata-tmdb';
+import { jellyfinConfigSchema } from '@crn-flix/player-jellyfin';
+
 import { AppService } from '@/app.service';
 import { AdminController } from '@/controllers/AdminController';
 import { AnnounceAdminController } from '@/controllers/AnnounceAdminController';
 import { AssetsController } from '@/controllers/AssetsController';
+import { HealthVersionController } from '@/controllers/HealthController';
 import { MailingController } from '@/controllers/MailingController';
 import { MeController } from '@/controllers/MeController';
 import { TicketsAdminController } from '@/controllers/TicketsAdminController';
 import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersController } from '@/controllers/UsersController';
 import { EnvironmentVariables } from '@/environment';
-import { discordConfigSchema } from '@/modules/discord/discord';
-import { configSchema as loadixConfigSchema } from '@/modules/indexer/loadix/api';
-import { Host, Language, Quality } from '@/modules/indexer/preferences';
-import { jellyfinConfigSchema } from '@/modules/jellyfin/jellyfin';
-import { tmdbConfigSchema } from '@/modules/tmdb/tmdb';
-import { configSchema as traktConfigSchema } from '@/modules/trakt/api';
 import { adminAuthProvider } from '@/providers/admin-auth';
+import { catalogProviders } from '@/providers/catalog';
 import { contextProvider } from '@/providers/context';
 import { repositoryProviders } from '@/providers/database';
-import { discordProvider } from '@/providers/discord';
-import { fetchrSyncProvider } from '@/providers/fetchr-sync';
+import { DiscordConnectionLifecycle, discordProvider } from '@/providers/discord';
+import { downloaderProviders } from '@/providers/downloader';
 import { jellyfinProvider } from '@/providers/jellyfin';
-import { jellyfinSyncProvider } from '@/providers/jellyfin-sync';
 import { mediaTitlesProviders } from '@/providers/media-titles';
 import { adminMessagingProviders } from '@/providers/messaging/admin';
-import { allUserMessagingProvider, announcementProvider } from '@/providers/messaging/all';
-import { userMessagingProviders } from '@/providers/messaging/user';
+import {
+  allUserMessagingProvider,
+  announcementProvider,
+  notificationRedeliveryProvider,
+} from '@/providers/messaging/all';
 import { namingAuditProviders } from '@/providers/naming-audit';
-import { indexersRegistryProvider, plannerProvider, traktPlayheadProvider } from '@/providers/planner';
+import { indexersRegistryProvider, plannerProvider } from '@/providers/planner';
+import { playerProviders } from '@/providers/player';
 import { postDownloadProviders } from '@/providers/post-download';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
 import { ticketProviders } from '@/providers/tickets';
 import { tmdbProvider } from '@/providers/tmdb';
 import { traktProvider } from '@/providers/trakt';
-import { traktSyncProvider } from '@/providers/trakt-sync';
 import { traktPluginProvider } from '@/providers/traktPlugin';
 import { userAuthProvider } from '@/providers/user-auth';
 import { MemoryCacheService } from '@/services/cache/memory-cache.service';
+import { syncConfigSchema } from '@/services/catalog/sync';
 import { DownloadProgressService } from '@/services/download-progress';
 import { HealthChecksService } from '@/services/health-checks';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
-import { configSchema as mailingConfigSchema } from '@/services/messaging/user/email';
 import { namingAuditConfigSchema } from '@/services/naming-audit';
 import { StartupRecoveryService } from '@/services/startup-recovery';
-import { syncConfigSchema } from '@/services/trakt-sync';
 
 export const configSchema = z.object({
   name: z.string(),
@@ -59,7 +65,8 @@ export const configSchema = z.object({
   sync: syncConfigSchema,
   datasource: syncDataSourceConfigSchema,
   jellyfin: jellyfinConfigSchema,
-  mailing: mailingConfigSchema,
+  mailing: emailConfigSchema,
+  userMessaging: z.object({ mode: z.enum(['send', 'dry-run']) }),
   discord: discordConfigSchema,
   indexer: z.object({
     loadix: loadixConfigSchema.nullable(),
@@ -73,11 +80,7 @@ export const configSchema = z.object({
       }),
     }),
   }),
-  fetchr: z.object({
-    url: z.string(),
-    apiKey: z.string().optional(),
-    downloadsPrefix: z.string(),
-  }),
+  fetchr: fetchrConfigSchema,
   tmdb: tmdbConfigSchema,
   mediaPaths: mediaPathsConfigSchema,
   namingAudit: namingAuditConfigSchema,
@@ -117,6 +120,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
       discordChannelId: env.discord.channelId,
     },
     mailing: env.mailing,
+    userMessaging: env.userMessaging,
   });
 }
 
@@ -128,6 +132,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       MailingController,
       UserGuideController,
       AssetsController,
+      HealthVersionController,
       AdminController,
       TicketsAdminController,
       AnnounceAdminController,
@@ -142,20 +147,20 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       traktProvider,
       syncDataSourceProvider,
       ...repositoryProviders,
-      traktSyncProvider,
-      jellyfinSyncProvider,
+      ...catalogProviders,
+      ...playerProviders,
       indexersRegistryProvider,
-      traktPlayheadProvider,
       plannerProvider,
       jellyfinProvider,
       traktPluginProvider,
       discordProvider,
-      ...userMessagingProviders,
+      DiscordConnectionLifecycle,
       allUserMessagingProvider,
+      notificationRedeliveryProvider,
       announcementProvider,
       ...adminMessagingProviders,
       ...ticketProviders,
-      fetchrSyncProvider,
+      ...downloaderProviders,
       DownloadProgressService,
       tmdbProvider,
       ...mediaTitlesProviders,

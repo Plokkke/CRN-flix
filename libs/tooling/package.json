@@ -1,0 +1,21 @@
+{
+  "name": "@crn-flix/tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared eslint, tsconfig and jest presets",
+  "exports": {
+    "./eslint": "./eslint.mjs",
+    "./jest": "./jest.base.json",
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./tsconfig.lib.json": "./tsconfig.lib.json"
+  },
+  "dependencies": {
+    "@typescript-eslint/eslint-plugin": "8.57.2",
+    "@typescript-eslint/parser": "8.57.2",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-import-x": "4.16.2",
+    "eslint-plugin-prettier": "5.5.5",
+    "prettier": "3.8.1"
+  }
+}

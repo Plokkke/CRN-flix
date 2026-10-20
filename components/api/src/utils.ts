@@ -10,10 +10,6 @@ export function range(start: number, stop: number): number[] {
   return Array.from({ length }, (_, i) => start + i);
 }
 
-export function wait(ms: number): Promise<void> {
-  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
-}
-
 export async function request(instance: AxiosInstance, config: AxiosRequestConfig): Promise<unknown>;
 export async function request<I>(
   instance: AxiosInstance,

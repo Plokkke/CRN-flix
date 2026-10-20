@@ -4,7 +4,9 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
-import { JellyfinMedia, JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
+import { MetadataSource } from '@crn-flix/contracts';
+import { JellyfinMedia, JellyfinMediaService } from '@crn-flix/player-jellyfin';
+
 import {
   NamingAuditItemEntity,
   NamingAuditItemInput,
@@ -12,7 +14,6 @@ import {
   NamingAuditRepository,
 } from '@/services/database/naming-audit';
 import { MediaIdentity, MediaLabelizerService } from '@/services/media-labelizer';
-import { MediaTitlesResolver } from '@/services/media-titles-resolver';
 
 export const namingAuditConfigSchema = z.object({
   jellyfinLibraryRoot: z.string(),
@@ -49,7 +50,7 @@ export class NamingAuditService {
     private readonly config: NamingAuditConfig,
     private readonly jellyfin: JellyfinMediaService,
     private readonly labelizer: MediaLabelizerService,
-    private readonly titles: MediaTitlesResolver,
+    private readonly titles: MetadataSource,
     private readonly auditRepo: NamingAuditRepository,
   ) {}
 
@@ -166,7 +167,7 @@ export class NamingAuditService {
       };
     }
 
-    const tmdbResolution = await this.titles.resolve(imdbId);
+    const tmdbResolution = await this.titles.describe(imdbId);
     if (!tmdbResolution.title) {
       reasonHints.push('tmdb-not-found');
     }

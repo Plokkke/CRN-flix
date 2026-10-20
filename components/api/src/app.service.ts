@@ -1,11 +1,15 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 
+import { Downloader, Player } from '@crn-flix/contracts';
+
 import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
-import { JellyfinMediaService } from '@/modules/jellyfin/jellyfin';
+import { DOWNLOADER } from '@/providers/downloader';
+import { PLAYER } from '@/providers/player';
+import { CatalogSyncService } from '@/services/catalog/sync';
 import {
   DownloadJobEntity,
   DownloadJobEvents,
@@ -25,19 +29,18 @@ import {
 } from '@/services/database/requests';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UsersRepository } from '@/services/database/users';
-import { FetchrSyncService } from '@/services/fetchr-sync';
-import { JellyfinSyncService } from '@/services/jellyfin-sync';
 import { MediaTitlesService } from '@/services/media-titles';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { AllUserMessaging } from '@/services/messaging/user/all';
+import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { PlannerService } from '@/services/planner/planner';
+import { PlayerSyncService } from '@/services/player-sync';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { downloadActionResolution, isIdentificationError } from '@/services/tickets/auto-resolve';
 import { TICKET_ID_METADATA_KEY, TicketCategory } from '@/services/tickets/model';
 import { actionTitle } from '@/services/tickets/presenter';
 import { TicketReconcilerService } from '@/services/tickets/reconciler';
 import { TicketService } from '@/services/tickets/ticket.service';
-import { TraktSyncService } from '@/services/trakt-sync';
 
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
@@ -52,21 +55,22 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   constructor(
     readonly config: ConfigService<Config, true>,
     private readonly schedulerRegistry: SchedulerRegistry,
-    private readonly traktSync: TraktSyncService,
-    private readonly jellyfinSync: JellyfinSyncService,
+    private readonly catalogSync: CatalogSyncService,
+    private readonly playerSync: PlayerSyncService,
     private readonly planner: PlannerService,
     private readonly ticketService: TicketService,
     private readonly ticketReconciler: TicketReconcilerService,
-    private readonly jellyfin: JellyfinMediaService,
+    @Inject(PLAYER) private readonly player: Player,
     private readonly messaging: AllUserMessaging,
     private readonly usersRepository: UsersRepository,
     private readonly requestsRepository: RequestsRepository,
     private readonly plannedDownloads: PlannedDownloadsRepository,
     private readonly userNotifications: UserNotificationsRepository,
-    private readonly fetchrSync: FetchrSyncService,
+    @Inject(DOWNLOADER) private readonly downloader: Downloader,
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly mediaTitles: MediaTitlesService,
+    private readonly redelivery: NotificationRedeliveryService,
   ) {}
 
   onModuleInit(): void {
@@ -77,11 +81,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     );
 
     if (process.env.NODE_ENV === 'production') {
-      this.registerCronJob('trakt-sync-job', '*/5 * * * *', () => this.runSync());
+      this.registerCronJob('catalog-sync-job', '*/5 * * * *', () => this.runSync());
       this.registerCronJob('planner-job', '0 * * * *', () => this.planner.runAll());
-      this.registerCronJob('jellyfin-sync-job', '*/15 * * * *', () => this.jellyfinSync.sync());
+      this.registerCronJob('player-sync-job', '*/15 * * * *', () => this.playerSync.sync());
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
       this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
+      this.registerCronJob('notification-redelivery-job', '*/5 * * * *', () => this.redelivery.redeliver());
     }
   }
 
@@ -109,7 +114,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
     this.isRunning = true;
     try {
-      await this.traktSync.sync();
+      await this.catalogSync.sync();
     } catch (error) {
       AppService.logger.error(`Sync failed: ${error instanceof Error ? error.message : error}`);
       if (error instanceof Error && error.stack) {
@@ -164,16 +169,14 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
               continue;
             }
 
-            if (!(await this.userNotifications.claim(userId, request.mediaId, request.status))) {
+            if (await this.userNotifications.wasSent({ userId, mediaId: request.mediaId, status: request.status })) {
               AppService.logger.debug(`User ${user.name} already notified for ${request.mediaId} (${request.status})`);
               continue;
             }
 
-            AppService.logger.debug(
-              `Sending notification to user ${user.name} (${user.messagingKey}:${user.messagingId})`,
-            );
+            AppService.logger.debug(`Notifying user ${user.name} (${user.messagingKey}:${user.messagingId})`);
             const userCtxt = { key: user.messagingKey, id: user.messagingId };
-            await this.messaging.requestUpdated(userCtxt, request);
+            await this.messaging.requestUpdated(userCtxt, request, userId);
           }
         }),
       userJoined: (event: UserJoinedRequestEvent) =>
@@ -195,12 +198,13 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          if (!(await this.userNotifications.claim(event.userId, request.mediaId, request.status))) {
+          const key = { userId: event.userId, mediaId: request.mediaId, status: request.status };
+          if (await this.userNotifications.wasSent(key)) {
             AppService.logger.debug(`User ${user.name} already notified for ${request.mediaId} (${request.status})`);
             return;
           }
 
-          await this.messaging.requestUpdated({ key: user.messagingKey, id: user.messagingId }, request);
+          await this.messaging.requestUpdated({ key: user.messagingKey, id: user.messagingId }, request, user.id);
         }),
       userLeft: (event: UserLeftRequestEvent) =>
         this.trackEvent(async () => {
@@ -328,9 +332,9 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   private async onJobCompleted(job: DownloadJobEntity): Promise<void> {
     AppService.logger.log(`Download job ${job.id} completed`);
-    await this.jellyfin.refreshLibrary();
+    await this.player.refreshLibrary();
     await this.requestsRepository.fulfillByJobId(job.id);
-    this.fetchrSync.remove(job.sourceId);
+    this.downloader.remove(job.sourceId);
 
     await this.ticketService.resolveBySubject(
       TicketCategory.IdentificationFailure,
