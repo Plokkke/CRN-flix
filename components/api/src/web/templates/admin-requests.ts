@@ -2,6 +2,7 @@ import { IndexerCandidate, RejectReason } from '@crn-flix/contracts';
 import { PlanLabel, Sourcing } from '@crn-flix/planner';
 
 import { formatAge, formatBytes } from '@/helpers/format';
+import { COLORS, escapeHtml } from '@/html/styles';
 import {
   ActionView,
   Dashboard,
@@ -19,7 +20,6 @@ import { episodeRangesBySeason, formatSeasonRanges } from '@/services/request-gr
 import { actionTitle } from '@/services/tickets/presenter';
 
 import { DASHBOARD_LAYOUT_CSS, dashboardJs, executionDetailBlock, executionIndicator } from './dashboard-shared';
-import { COLORS, escapeHtml } from './email-styles';
 import {
   badge,
   BADGE_CSS,

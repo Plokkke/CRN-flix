@@ -1,6 +1,5 @@
+import { escapeHtml } from '@/html/styles';
 import { RequestStatus } from '@/services/database/requests';
-
-import { escapeHtml } from './email-styles';
 
 export const STATUS_LABELS_FR: Record<RequestStatus, string> = {
   [RequestStatus.Missing]: 'Introuvable',

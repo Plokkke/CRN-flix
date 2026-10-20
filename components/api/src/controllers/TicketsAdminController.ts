@@ -18,16 +18,12 @@ import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filte
 import { AdminSessionGuard } from '@/guards/admin-session.guard';
 import { ContextService } from '@/services/context';
 import { TicketsRepository } from '@/services/database/tickets';
-import { adminTicketDetailTemplate } from '@/services/messaging/user/email/templates/admin-ticket-detail';
-import {
-  adminTicketsTemplate,
-  TicketListFilter,
-  TicketListItem,
-} from '@/services/messaging/user/email/templates/admin-tickets';
 import { TicketContextLoader } from '@/services/tickets/context';
 import { isDeadLetter, TicketEntity, TicketOperation } from '@/services/tickets/model';
 import { buildTicketView } from '@/services/tickets/presenter';
 import { TicketService } from '@/services/tickets/ticket.service';
+import { adminTicketDetailTemplate } from '@/web/templates/admin-ticket-detail';
+import { adminTicketsTemplate, TicketListFilter, TicketListItem } from '@/web/templates/admin-tickets';
 
 const RECENTLY_CLOSED_LIMIT = 50;
 

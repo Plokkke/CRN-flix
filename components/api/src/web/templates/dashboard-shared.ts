@@ -1,6 +1,5 @@
+import { escapeHtml } from '@/html/styles';
 import { ExecutionView, PHASE_LABELS } from '@/services/admin/execution';
-
-import { escapeHtml } from './email-styles';
 
 /** Compact indicator on a row: phase and progress. */
 export const executionSummary = (execution: ExecutionView): string => {

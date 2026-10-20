@@ -1,7 +1,7 @@
+import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
 import { Dashboard, DashboardTab } from '@/services/admin/requests-view';
 
 import { ADMIN_REQUESTS_CSS, adminRequestsJs, adminRequestsSection } from './admin-requests';
-import { COLORS, escapeHtml, getWebTemplate } from './email-styles';
 
 interface JobDefinition {
   name: string;

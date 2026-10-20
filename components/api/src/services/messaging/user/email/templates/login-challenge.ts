@@ -1,6 +1,5 @@
+import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from '@/html/styles';
 import { LoginChallenge } from '@/services/messaging/user';
-
-import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from './email-styles';
 
 export const loginChallengeTemplate = (challenge: LoginChallenge): { subject: string; html: string; text: string } => {
   const subject = `Votre code de connexion ${challenge.serviceName}`;

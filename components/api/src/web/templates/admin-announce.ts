@@ -1,9 +1,8 @@
+import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
 import { NOTICE_PRESETS, NoticePreset, PRESET_LABELS } from '@/services/announcements/presets';
 import { DeliveryResult } from '@/services/announcements/service';
 import { UserEntity } from '@/services/database/users';
 import { NOTICE_TONES, ServiceNotice } from '@/services/messaging/user';
-
-import { COLORS, escapeHtml, getWebTemplate } from './email-styles';
 
 const TONE_LABELS: Record<ServiceNotice['tone'], string> = {
   warning: 'Alerte (orange)',

@@ -1,6 +1,6 @@
+import { COLORS, escapeHtml, getWebTemplate, renderRichText } from '@/html/styles';
 import { TicketEntity, TicketEventEntity, TicketView } from '@/services/tickets/model';
 
-import { COLORS, escapeHtml, getWebTemplate, renderRichText } from './email-styles';
 import { operationForm } from './ticket-controls';
 
 interface AdminTicketDetailParams {

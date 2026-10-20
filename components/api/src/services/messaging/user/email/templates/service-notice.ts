@@ -1,6 +1,5 @@
+import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from '@/html/styles';
 import { ServiceNotice } from '@/services/messaging/user';
-
-import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from './email-styles';
 
 const TITLE_ICON: Record<ServiceNotice['tone'], string> = {
   warning: '⚠️',

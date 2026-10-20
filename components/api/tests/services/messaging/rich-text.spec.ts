@@ -1,4 +1,4 @@
-import { renderRichText } from '@/services/messaging/user/email/templates/email-styles';
+import { renderRichText } from '@/html/styles';
 
 describe('renderRichText', () => {
   it('turns markdown links into anchors', () => {

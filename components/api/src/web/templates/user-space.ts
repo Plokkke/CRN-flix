@@ -1,6 +1,7 @@
 import { PlanLabel } from '@crn-flix/planner';
 
 import { formatAge } from '@/helpers/format';
+import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
 import {
   Dashboard,
   EpisodeView,
@@ -13,7 +14,6 @@ import { episodeRangesBySeason, formatSeasonRanges } from '@/services/request-gr
 import { actionTitle } from '@/services/tickets/presenter';
 
 import { DASHBOARD_LAYOUT_CSS, dashboardJs, executionDetailBlock, executionIndicator } from './dashboard-shared';
-import { COLORS, escapeHtml, getWebTemplate } from './email-styles';
 import { badge, BADGE_CSS, episodeCode, imdbLink, STATUS_LABELS_FR, statusBadge, traktLink } from './request-widgets';
 
 /** What the subscriber is waiting for. */

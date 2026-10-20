@@ -1,6 +1,5 @@
+import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
 import { NamingAuditItemEntity } from '@/services/database/naming-audit';
-
-import { COLORS, escapeHtml, getWebTemplate } from './email-styles';
 
 interface AdminNamingAuditParams {
   serviceName: string;

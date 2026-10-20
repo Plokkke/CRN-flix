@@ -35,14 +35,14 @@ import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { DiscordChannelCleanup } from '@/services/messaging/admin/channel-cleanup';
-import { adminDashboardTemplate } from '@/services/messaging/user/email/templates/admin-dashboard';
-import { adminLoginTemplate } from '@/services/messaging/user/email/templates/admin-login';
-import { adminNamingAuditTemplate } from '@/services/messaging/user/email/templates/admin-naming-audit';
 import { NamingAuditService } from '@/services/naming-audit';
 import { PlannerService } from '@/services/planner/planner';
 import { PlayerSyncService } from '@/services/player-sync';
 import { TicketReconcilerService } from '@/services/tickets/reconciler';
 import { truthy } from '@/utils';
+import { adminDashboardTemplate } from '@/web/templates/admin-dashboard';
+import { adminLoginTemplate } from '@/web/templates/admin-login';
+import { adminNamingAuditTemplate } from '@/web/templates/admin-naming-audit';
 
 const JOBS = [
   { name: 'catalog-sync', schedule: 'Every 5 minutes' },

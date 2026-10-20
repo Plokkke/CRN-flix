@@ -1,4 +1,4 @@
-import { getWebTemplate } from './email-styles';
+import { getWebTemplate } from '@/html/styles';
 
 export interface RegistrationFormParams {
   serviceName: string;

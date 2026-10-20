@@ -1,4 +1,4 @@
-import { getWebTemplate, TYPOGRAPHY, COLORS } from './email-styles';
+import { getWebTemplate, TYPOGRAPHY, COLORS } from '@/html/styles';
 
 export interface UserGuideTemplateParams {
   serviceName: string;

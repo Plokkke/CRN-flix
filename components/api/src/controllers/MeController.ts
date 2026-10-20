@@ -17,8 +17,6 @@ import { PlannerFindingsRepository } from '@/services/database/planner-findings'
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestEntity, RequestsRepository } from '@/services/database/requests';
 import { UsersRepository } from '@/services/database/users';
-import { userLoginTemplate } from '@/services/messaging/user/email/templates/user-login';
-import { parseUserSpaceTab, userSpaceTemplate } from '@/services/messaging/user/email/templates/user-space';
 import {
   CHALLENGE_TTL_MINUTES,
   USER_LOGIN_COOKIE,
@@ -27,6 +25,8 @@ import {
   UserAuthService,
   UserCodeRequestOutcome,
 } from '@/services/user-auth';
+import { userLoginTemplate } from '@/web/templates/user-login';
+import { parseUserSpaceTab, userSpaceTemplate } from '@/web/templates/user-space';
 
 const LOGIN_PATH = `${USER_SPACE_PATH}/login`;
 

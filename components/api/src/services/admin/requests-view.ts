@@ -21,10 +21,10 @@ import { PlannerFindingEntity } from '@/services/database/planner-findings';
 import { RequestStateEntity } from '@/services/database/request-states';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { candidateDisplayLink, candidateId } from '@/services/indexer-link';
-import { IndexerLinkView } from '@/services/messaging/user/email/templates/request-widgets';
 import { episodeRangesBySeason, formatSeasonRanges, groupRequests, RequestGroup } from '@/services/request-groups';
 import { isDeadLetter, TicketCategory, TicketEntity, TicketPayloadMap, TicketView } from '@/services/tickets/model';
 import { buildTicketView } from '@/services/tickets/presenter';
+import { IndexerLinkView } from '@/web/templates/request-widgets';
 
 export { downloadActionId } from '@/services/admin/execution';
 

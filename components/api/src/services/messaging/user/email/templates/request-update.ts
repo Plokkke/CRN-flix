@@ -1,7 +1,6 @@
+import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from '@/html/styles';
 import { displayTitle } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
-
-import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from './email-styles';
 
 const getStatusDescription = (status: RequestStatus): string => {
   const descriptions: Record<RequestStatus, string> = {

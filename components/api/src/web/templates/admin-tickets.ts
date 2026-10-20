@@ -1,6 +1,5 @@
+import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
 import { TicketEntity, TicketStatus, TicketView } from '@/services/tickets/model';
-
-import { COLORS, escapeHtml, getWebTemplate } from './email-styles';
 
 export type TicketListFilter = 'open' | 'dead-letter' | 'closed';
 

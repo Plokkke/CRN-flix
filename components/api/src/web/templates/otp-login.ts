@@ -1,4 +1,4 @@
-import { escapeHtml, getWebTemplate } from './email-styles';
+import { escapeHtml, getWebTemplate } from '@/html/styles';
 
 export type LoginStep = 'request' | 'code';
 

@@ -1,4 +1,4 @@
-import { getEmailTemplate, getInfoBox, TYPOGRAPHY } from './email-styles';
+import { getEmailTemplate, getInfoBox, TYPOGRAPHY } from '@/html/styles';
 
 export const errorTemplate = (message: string): { subject: string; html: string; text: string } => {
   const subject = "❌ Quelque chose s'est mal passé!";

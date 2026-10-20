@@ -7,9 +7,9 @@ import { TraktPlugin } from '@crn-flix/player-jellyfin';
 
 import { ContextService } from '@/services/context';
 import { UsersRepository } from '@/services/database/users';
-import { registrationFormTemplate } from '@/services/messaging/user/email/templates';
 import { TicketCategory } from '@/services/tickets/model';
 import { TicketService } from '@/services/tickets/ticket.service';
+import { registrationFormTemplate } from '@/web/templates/registration-form';
 
 const registrationSchema = z.object({
   email: z.email('Email invalide'),
