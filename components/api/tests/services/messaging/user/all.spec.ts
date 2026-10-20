@@ -56,6 +56,21 @@ describe('AllUserMessaging', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
+  it('checks its channels off the boot path and retries every minute until they can send', async () => {
+    const { channel, messaging } = build();
+    channel.verify.mockRejectedValueOnce(new Error('Connection timeout'));
+
+    messaging.onModuleInit();
+    expect(messaging.canReachUsers).toBe(false);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(messaging.canReachUsers).toBe(false);
+
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(channel.verify).toHaveBeenCalledTimes(2);
+    expect(messaging.canReachUsers).toBe(true);
+    await messaging.onModuleDestroy();
+  });
+
   it('batches the notices of one user into one message and marks them sent once delivered', async () => {
     const { channel, notifications, messaging } = build();
 
