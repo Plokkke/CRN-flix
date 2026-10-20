@@ -9,6 +9,7 @@ import { Config } from '@/app.module';
 import { Listener } from '@/helpers/events';
 import { DOWNLOADER } from '@/providers/downloader';
 import { PLAYER } from '@/providers/player';
+import { ScheduledAnnouncementsService } from '@/services/announcements/scheduled';
 import { CatalogSyncService } from '@/services/catalog/sync';
 import {
   DownloadJobEntity,
@@ -71,6 +72,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly mediaTitles: MediaTitlesService,
     private readonly redelivery: NotificationRedeliveryService,
+    private readonly scheduledAnnouncements: ScheduledAnnouncementsService,
   ) {}
 
   onModuleInit(): void {
@@ -87,6 +89,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
       this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
       this.registerCronJob('notification-redelivery-job', '*/5 * * * *', () => this.redelivery.redeliver());
+      this.registerCronJob('scheduled-announcements-job', '* * * * *', () => this.scheduledAnnouncements.sendDue());
     }
   }
 

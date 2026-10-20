@@ -1,7 +1,7 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { COLORS, escapeHtml, getWebTemplate, RADIUS } from '@crn-flix/design-system';
 
 import { NOTICE_PRESETS, NoticePreset, PRESET_LABELS } from '@/services/announcements/presets';
-import { DeliveryResult } from '@/services/announcements/service';
+import { ScheduledAnnouncementEntity } from '@/services/database/scheduled-announcements';
 import { UserEntity } from '@/services/database/users';
 import { NOTICE_TONES, ServiceNotice } from '@/services/messaging/user';
 
@@ -15,16 +15,19 @@ const CHANNEL_ICONS: Record<string, string> = { email: '✉️', discord: '💬'
 
 interface AdminAnnounceFormParams {
   serviceName: string;
-  preset: NoticePreset;
+  /** Null when the form comes back with what the admin typed. */
+  preset: NoticePreset | null;
   notice: ServiceNotice;
   recipients: UserEntity[];
+  /** Every recipient is checked unless the form comes back with a selection. */
+  selectedUserIds?: string[];
   flashMessage?: string;
-}
-
-interface AdminAnnounceResultParams {
-  serviceName: string;
-  notice: ServiceNotice;
-  results: DeliveryResult[];
+  /** Shown as an error: the form was refused. */
+  flashError?: boolean;
+  /** `sendAt` is a `datetime-local` value; dates are shown in the service's time zone. */
+  schedule: { sendAt: string; quietLabel: string; format: (date: Date) => string };
+  upcoming: ScheduledAnnouncementEntity[];
+  sent: ScheduledAnnouncementEntity[];
 }
 
 const ADMIN_CSS = `
@@ -62,21 +65,31 @@ const ADMIN_CSS = `
   .actions button { width: auto; padding: 12px 24px; }
   .actions .send { background-color: ${COLORS.secondary}; }
   .actions .preview { background-color: #2a2a3e; }
-  .result { display: flex; gap: 12px; padding: 10px 12px; border-radius: 6px; margin-bottom: 6px; background: #22223a; }
-  .result.sent { border-left: 4px solid ${COLORS.success}; }
-  .result.failed { border-left: 4px solid ${COLORS.error}; }
-  .result .error { color: #ff8888; font-size: 13px; }
+  .flash-message.error { border-left-color: ${COLORS.error}; background-color: #3a1e24; }
+  input[type="datetime-local"] { width: auto; color-scheme: dark; }
+  .schedule-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .announcement {
+    display: flex; gap: 12px; align-items: center; padding: 12px 14px; margin-bottom: 8px;
+    border: 1px solid #2a2a3e; border-radius: ${RADIUS.md}; background: #22223a;
+  }
+  .announcement .what { flex: 1; min-width: 0; }
+  .announcement .subject { font-weight: 600; }
+  .announcement .meta { font-size: 13px; color: #888; margin-top: 2px; }
+  .announcement form { margin: 0; }
+  .announcement button { width: auto; padding: 6px 14px; font-size: 13px; background: transparent; border: 1px solid #3a3a52; color: #e0e0e0; }
+  .count-sent { color: ${COLORS.success}; }
+  .count-failed { color: #ff8888; }
 `;
 
-const recipientRow = (user: UserEntity): string => `
+const recipientRow = (user: UserEntity, checked: boolean): string => `
   <label class="recipient">
-    <input type="checkbox" name="users" value="${escapeHtml(user.id)}" checked />
+    <input type="checkbox" name="users" value="${escapeHtml(user.id)}" ${checked ? 'checked' : ''} />
     <span>${escapeHtml(user.name)}</span>
     <span class="channel">${CHANNEL_ICONS[user.messagingKey] ?? ''} ${escapeHtml(user.messagingKey)}</span>
   </label>
 `;
 
-const presetTabs = (active: NoticePreset): string =>
+const presetTabs = (active: NoticePreset | null): string =>
   NOTICE_PRESETS.map(
     (key) =>
       `<a class="filter-tab ${key === active ? 'active' : ''}" href="/admin/announce?preset=${key}">${PRESET_LABELS[key]}</a>`,
@@ -119,16 +132,62 @@ const TOGGLE_JS = `
   document.getElementById('announce-form').addEventListener('submit', (e) => {
     if (e.submitter && e.submitter.classList.contains('send')) {
       const count = boxes().filter((b) => b.checked).length;
-      if (count === 0 || !confirm('Envoyer cette annonce à ' + count + ' utilisateur(s) ?')) e.preventDefault();
+      const when = document.getElementById('sendAt').value.replace('T', ' à ');
+      if (count === 0 || !confirm('Programmer cette annonce pour ' + count + ' utilisateur(s), le ' + when + ' ?')) e.preventDefault();
     }
   });
 `;
 
+type DateFormat = (date: Date) => string;
+
+const upcomingRow = (announcement: ScheduledAnnouncementEntity, format: DateFormat): string => `
+  <div class="announcement">
+    <div class="what">
+      <div class="subject">${escapeHtml(announcement.notice.subject)}</div>
+      <div class="meta">Le ${escapeHtml(format(announcement.sendAt))} · ${announcement.userIds.length} destinataire(s)</div>
+    </div>
+    <form method="POST" action="/admin/announce/${escapeHtml(announcement.id)}/cancel" onsubmit="return confirm('Annuler cette annonce ?')">
+      <button type="submit">Annuler</button>
+    </form>
+  </div>
+`;
+
+const sentRow = (announcement: ScheduledAnnouncementEntity, format: DateFormat): string => {
+  const outcomes = announcement.outcomes ?? [];
+  const failed = outcomes.filter((o) => o.outcome === 'failed');
+  const failedNames = failed.map((o) => escapeHtml(o.userName)).join(', ');
+  return `
+  <div class="announcement">
+    <div class="what">
+      <div class="subject">${escapeHtml(announcement.notice.subject)}</div>
+      <div class="meta">Envoyée le ${escapeHtml(format(announcement.sentAt ?? announcement.sendAt))}${failedNames ? ` · échec : ${failedNames}` : ''}</div>
+    </div>
+    ${
+      announcement.outcomes
+        ? `<span class="count-sent">${outcomes.length - failed.length} ✓</span><span class="count-failed">${failed.length ? `${failed.length} ✗` : ''}</span>`
+        : '<span class="hint">En cours…</span>'
+    }
+  </div>
+`;
+};
+
+const announcementLists = (
+  upcoming: ScheduledAnnouncementEntity[],
+  sent: ScheduledAnnouncementEntity[],
+  format: DateFormat,
+): string => `
+  <h2>Programmées (${upcoming.length})</h2>
+  ${upcoming.length ? upcoming.map((a) => upcomingRow(a, format)).join('') : '<p class="hint">Aucune annonce en attente.</p>'}
+  <h2>Envoyées récemment</h2>
+  ${sent.length ? sent.map((a) => sentRow(a, format)).join('') : '<p class="hint">Aucune annonce envoyée.</p>'}
+`;
+
 export const adminAnnounceFormTemplate = (params: AdminAnnounceFormParams): string => {
-  const { serviceName, preset, notice, recipients, flashMessage } = params;
+  const { serviceName, preset, notice, recipients, selectedUserIds, flashMessage, flashError, schedule } = params;
+  const isChecked = (user: UserEntity): boolean => !selectedUserIds || selectedUserIds.includes(user.id);
 
   const content = `
-    ${flashMessage ? `<div class="flash-message">${escapeHtml(flashMessage)}</div>` : ''}
+    ${flashMessage ? `<div class="flash-message${flashError ? ' error' : ''}">${escapeHtml(flashMessage)}</div>` : ''}
     <p><a href="/admin">← Dashboard</a></p>
     <h2>📣 Annonce aux abonnés</h2>
     <div class="filter-tabs">${presetTabs(preset)}</div>
@@ -139,37 +198,19 @@ export const adminAnnounceFormTemplate = (params: AdminAnnounceFormParams): stri
         <a href="#" id="select-all">Tout cocher</a>
         <a href="#" id="select-none">Tout décocher</a>
       </div>
-      <div class="recipients">${recipients.map(recipientRow).join('')}</div>
+      <div class="recipients">${recipients.map((user) => recipientRow(user, isChecked(user))).join('')}</div>
+      <h2>Programmer l'envoi</h2>
+      <div class="schedule-row">
+        <input type="datetime-local" id="sendAt" name="sendAt" value="${escapeHtml(schedule.sendAt)}" />
+        <span class="hint">Heure de Paris : rien ne part pendant les quiet hours (${escapeHtml(schedule.quietLabel)}).</span>
+      </div>
       <div class="actions">
         <button type="submit" class="preview" formaction="/admin/announce/preview" formtarget="_blank">Prévisualiser</button>
-        <button type="submit" class="send">Envoyer</button>
+        <button type="submit" class="send">Programmer l'envoi</button>
       </div>
     </form>
+    ${announcementLists(params.upcoming, params.sent, schedule.format)}
   `;
 
   return getWebTemplate(`Annonce - ${serviceName}`, serviceName, content, ADMIN_CSS, TOGGLE_JS);
-};
-
-const resultRow = ({ user, outcome, error }: DeliveryResult): string => `
-  <div class="result ${outcome}">
-    <span>${outcome === 'sent' ? '✅' : '❌'}</span>
-    <span>${escapeHtml(user.name)}</span>
-    <span class="channel">${escapeHtml(user.messagingKey)}</span>
-    ${error ? `<span class="error">${escapeHtml(error)}</span>` : ''}
-  </div>
-`;
-
-export const adminAnnounceResultTemplate = (params: AdminAnnounceResultParams): string => {
-  const { serviceName, notice, results } = params;
-  const sent = results.filter((r) => r.outcome === 'sent').length;
-  const failed = results.length - sent;
-
-  const content = `
-    <p><a href="/admin/announce">← Nouvelle annonce</a> · <a href="/admin">Dashboard</a></p>
-    <h2>📣 « ${escapeHtml(notice.subject)} »</h2>
-    <div class="flash-message">${sent} envoyé(s), ${failed} échec(s).</div>
-    ${results.length ? results.map(resultRow).join('') : '<p class="hint">Aucun destinataire sélectionné.</p>'}
-  `;
-
-  return getWebTemplate(`Annonce envoyée - ${serviceName}`, serviceName, content, ADMIN_CSS);
 };

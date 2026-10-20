@@ -22,6 +22,9 @@ export const environmentVariablesSchema = z
     GMAIL_PASSWORD: z.string(),
     /** `dry-run` logs what would reach users without sending nor recording anything. */
     USER_MESSAGING: z.enum(['send', 'dry-run']),
+    /** Subscribers are only messaged outside this window (login codes excepted). */
+    USER_MESSAGING_QUIET_HOURS: z.string().default('00:00-07:00'),
+    USER_MESSAGING_TIMEZONE: z.string().default('Europe/Paris'),
     DATABASE_HOST: z.string(),
     DATABASE_PORT: z.coerce.number(),
     DATABASE_NAME: z.string(),
@@ -79,6 +82,7 @@ export const environmentVariablesSchema = z
     },
     userMessaging: {
       mode: env.USER_MESSAGING,
+      quietHours: { window: env.USER_MESSAGING_QUIET_HOURS, timeZone: env.USER_MESSAGING_TIMEZONE },
     },
     mailing: {
       serviceName: env.SERVICE_NAME,

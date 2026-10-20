@@ -10,6 +10,7 @@ import { UserNotificationsRepository } from '@/services/database/user-notificati
 import { UserEntity } from '@/services/database/users';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { DebouncedRequestQueue } from '@/services/messaging/user/notification-queue';
+import { QuietHours } from '@/services/messaging/user/quiet-hours';
 
 /** How a user is reached: `users.messaging_key` (a channel kind) and `messaging_id` (its address). */
 export type UserMessagingCtxt = {
@@ -27,13 +28,22 @@ export const messagingContextOf = (user: UserEntity): UserMessagingCtxt => ({
 /** `dry-run` logs what would reach users and sends nothing — nor records anything as sent. */
 export type UserMessagingMode = 'send' | 'dry-run';
 
-/** Thrown instead of sending in `dry-run`, so callers never treat the message as delivered. */
+/**
+ * Thrown instead of sending in `dry-run` or during quiet hours, so callers never treat the
+ * message as delivered (whatever relies on it stays pending and is tried again later).
+ */
 export class UserMessagingDisabledError extends Error {
-  constructor(what: string) {
-    super(`User messaging is in dry-run: ${what} not sent`);
+  constructor(what: string, reason = 'in dry-run') {
+    super(`User messaging is ${reason}: ${what} not sent`);
     this.name = 'UserMessagingDisabledError';
   }
 }
+
+/**
+ * Never held by quiet hours: a login code is awaited on screen, and an admin's decision on a
+ * registration (welcome with credentials, refusal or registration error) is told at once.
+ */
+export const QUIET_HOURS_EXEMPT_KINDS: ReadonlySet<UserMessageKind> = new Set(['login', 'welcome', 'error']);
 
 const SHOWCASE_SIZE = 5;
 const VERIFY_RETRY_MS = 60_000;
@@ -82,6 +92,8 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
     private readonly notifications: UserNotificationsRepository,
     private readonly journal: UserMessagesRepository,
     readonly mode: UserMessagingMode,
+    readonly quietHours: QuietHours,
+    private readonly now: () => Date = () => new Date(),
   ) {
     this.channelByKind = new Map(channels.map((channel) => [channel.kind, channel]));
     this.queue = new DebouncedRequestQueue((key, requests) => this.flushRequests(key, requests));
@@ -203,6 +215,10 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
       AllUserMessaging.logger.log(`DRY-RUN: would notify ${address} of ${requests.length} request(s), kept queued`);
       return;
     }
+    if (this.quietUntil()) {
+      AllUserMessaging.logger.log(`Quiet hours: ${requests.length} request notice(s) for ${address} kept queued`);
+      return;
+    }
     await this.channelOf(kind).requestsUpdated({ name: address, address }, requests.map(noticeOf));
     await this.notifications.markSent(requests.map((r) => ({ userId, mediaId: r.mediaId, status: r.status })));
     await this.journalize(userId, 'requests-updated', kind);
@@ -215,7 +231,7 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
     what: string,
     send: (channel: UserChannel) => Promise<void>,
   ): Promise<void> {
-    this.ensureSending(`${what} to ${ctxt.id}`);
+    this.ensureSending(`${what} to ${ctxt.id}`, kind);
     const channel = this.channelOf(ctxt.key);
     await send(channel);
     await this.journalize(ctxt.userId, kind, channel.kind);
@@ -230,10 +246,22 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private ensureSending(what: string): void {
+  /** When quiet hours end, null outside them. */
+  quietUntil(): Date | null {
+    const now = this.now();
+    const until = this.quietHours.nextSendableAt(now);
+    return until === now ? null : until;
+  }
+
+  private ensureSending(what: string, kind: UserMessageKind): void {
     if (this.mode === 'dry-run') {
       AllUserMessaging.logger.log(`DRY-RUN: ${what} not sent`);
       throw new UserMessagingDisabledError(what);
+    }
+    const quietUntil = QUIET_HOURS_EXEMPT_KINDS.has(kind) ? null : this.quietUntil();
+    if (quietUntil) {
+      AllUserMessaging.logger.log(`Quiet hours: ${what} held until ${this.quietHours.format(quietUntil)}`);
+      throw new UserMessagingDisabledError(what, `in quiet hours until ${this.quietHours.format(quietUntil)}`);
     }
   }
 

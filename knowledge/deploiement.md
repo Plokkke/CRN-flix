@@ -7,6 +7,7 @@ La pile `infrastructure/terraform` déploie le moteur (migration ponctuelle + AP
 - **Rollback** : `gh workflow run deploy -R Plokkke/CRN-flix -f version=<précédente>` (les migrations sont toujours compatibles avec la version précédente).
 - **Secrets** : `infrastructure/secrets/production.sops.yaml` (édition : `SOPS_AGE_KEY_FILE=~/.config/sops/age/se-identity.txt sops infrastructure/secrets/production.sops.yaml`). Configuration non secrète : `infrastructure/terraform/variables.tf`.
 - **Messages aux abonnés** : `user_messaging` (`send` | `dry-run`). En `dry-run` rien ne part et rien n'est marqué envoyé : les notifications attendent dans `user_notifications` et partent au retour en `send`.
+- **Heures calmes** : `user_messaging_quiet_hours` (`00:00-07:00` par défaut) dans `user_messaging_timezone` (`Europe/Paris`). Rien ne part pendant cette plage sauf le code de connexion, le mail de bienvenue et le refus ou l'erreur d'inscription (décision de l'admin, annoncée tout de suite) : les notifications de la nuit partent groupées au premier passage après 7h ; une annonce ne peut pas être programmée dans la plage (refusée, jamais décalée ; « maintenant » la nuit propose 7h à confirmer).
 
 ## Bascule depuis le compose (une fois)
 

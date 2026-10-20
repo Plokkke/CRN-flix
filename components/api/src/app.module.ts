@@ -39,6 +39,8 @@ import {
   allUserMessagingProvider,
   announcementProvider,
   notificationRedeliveryProvider,
+  quietHoursProvider,
+  scheduledAnnouncementsProvider,
 } from '@/providers/messaging/all';
 import { namingAuditProviders } from '@/providers/naming-audit';
 import { indexersRegistryProvider, plannerProvider } from '@/providers/planner';
@@ -55,6 +57,7 @@ import { syncConfigSchema } from '@/services/catalog/sync';
 import { DownloadProgressService } from '@/services/download-progress';
 import { HealthChecksService } from '@/services/health-checks';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
+import { quietHoursConfigSchema } from '@/services/messaging/user/quiet-hours';
 import { namingAuditConfigSchema } from '@/services/naming-audit';
 import { StartupRecoveryService } from '@/services/startup-recovery';
 
@@ -68,7 +71,7 @@ export const configSchema = z.object({
   datasource: syncDataSourceConfigSchema,
   jellyfin: jellyfinConfigSchema,
   mailing: emailConfigSchema,
-  userMessaging: z.object({ mode: z.enum(['send', 'dry-run']) }),
+  userMessaging: z.object({ mode: z.enum(['send', 'dry-run']), quietHours: quietHoursConfigSchema }),
   discord: discordConfigSchema,
   indexer: z.object({
     loadix: loadixConfigSchema.nullable(),
@@ -159,9 +162,11 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       traktPluginProvider,
       discordProvider,
       DiscordConnectionLifecycle,
+      quietHoursProvider,
       allUserMessagingProvider,
       notificationRedeliveryProvider,
       announcementProvider,
+      scheduledAnnouncementsProvider,
       ...adminMessagingProviders,
       ...ticketProviders,
       ...downloaderProviders,
