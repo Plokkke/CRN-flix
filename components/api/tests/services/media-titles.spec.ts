@@ -17,6 +17,7 @@ const resolved: MediaMetadata = {
   frenchTitle: 'Very Bad Trip',
   originalLanguage: 'en',
   year: 2009,
+  kind: 'movie',
   posterUrl: 'https://image.tmdb.org/t/p/w342/hangover.jpg',
 };
 
@@ -43,7 +44,7 @@ describe('MediaTitlesService.ensure', () => {
   it('resolves, persists on every row of the imdb id and returns the completed titles', async () => {
     const { service, updateTitles } = build(resolved);
 
-    const { posterUrl: _poster, ...titles } = resolved;
+    const { posterUrl: _poster, kind: _kind, ...titles } = resolved;
     await expect(service.ensure('tt1119646', stored)).resolves.toEqual(titles);
     expect(updateTitles).toHaveBeenCalledWith('tt1119646', resolved);
   });

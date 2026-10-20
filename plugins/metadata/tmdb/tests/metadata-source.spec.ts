@@ -31,6 +31,7 @@ describe('TmdbMetadataSource', () => {
       frenchTitle: 'Very Bad Trip',
       originalLanguage: 'en',
       year: 2009,
+      kind: 'movie',
       posterUrl: 'https://image.tmdb.org/t/p/w342/hangover-fr.jpg',
     });
     expect(findByImdbId.mock.calls.map(([, opts]) => opts.language)).toEqual(['en-US', 'fr-FR']);
@@ -42,6 +43,7 @@ describe('TmdbMetadataSource', () => {
     const resolver = new TmdbMetadataSource(tmdb(findByImdbId));
 
     await expect(resolver.describe('tt14688458')).resolves.toMatchObject({
+      kind: 'show',
       title: 'Silo',
       frenchTitle: 'Silo',
       year: 2023,

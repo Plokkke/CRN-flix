@@ -1,7 +1,7 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AxiosError } from 'axios';
 
-import { AccountNameTakenError, Downloader, LiveDownload, Player } from '@crn-flix/contracts';
+import { AccountNameTakenError, Downloader, IdentifiedMedia, LiveDownload, Player } from '@crn-flix/contracts';
 
 import { Listener } from '@/helpers/events';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
@@ -31,7 +31,7 @@ export { TICKET_ID_METADATA_KEY };
 const IMDB_ID_PATTERN = /^tt\d{7,}$/;
 const SETTLED_DOWNLOAD_STATUSES = new Set(['completed', 'failed']);
 
-type Identification = { imdbId: string | null; title: string; year: number | null; mediaType: 'movie' | 'episode' };
+type Identification = IdentifiedMedia;
 type ManualDownloadPayload = TicketPayloadMap[TicketCategory.ManualDownload];
 
 function labelOf(identification: Identification): string {
@@ -196,7 +196,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     const payload = ticket.payload as TicketPayloadMap[TicketCategory.ManualDownload];
 
     if (operation.kind === 'submitImdb') {
-      const identification = await this.identifyFromImdbId(operation.imdbId);
+      const identification = await this.mediaIdentifier.identifyImdbId(operation.imdbId);
       if (!identification) {
         return failed(`Aucun média TMDB pour ${operation.imdbId}`);
       }
@@ -233,27 +233,6 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     return this.launchIdentifiedDownload(ticket, url, identification);
   }
 
-  private async identifyFromImdbId(imdbId: string): Promise<Identification | null> {
-    const { movies, tvShows } = await this.mediaIdentifier.tmdbFindByImdbId(imdbId);
-    if (movies[0]) {
-      return {
-        imdbId,
-        title: movies[0].title,
-        year: movies[0].release_date ? parseInt(movies[0].release_date.substring(0, 4), 10) : null,
-        mediaType: 'movie',
-      };
-    }
-    if (tvShows[0]) {
-      return {
-        imdbId,
-        title: tvShows[0].name,
-        year: tvShows[0].first_air_date ? parseInt(tvShows[0].first_air_date.substring(0, 4), 10) : null,
-        mediaType: 'episode',
-      };
-    }
-    return null;
-  }
-
   private findInFlightDownload(ticketId: string): LiveDownload | undefined {
     return this.downloader
       .liveDownloads()
@@ -262,8 +241,8 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
 
   private async ensurePendingRequest(identification: Identification): Promise<MediaEntity> {
     const media = await this.mediasRepository.upsert({
-      imdbId: identification.imdbId ?? '',
-      type: identification.mediaType === 'movie' ? MediaType.Movie : MediaType.Episode,
+      imdbId: identification.imdbId,
+      type: identification.kind === 'movie' ? MediaType.Movie : MediaType.Episode,
       title: identification.title,
       originalTitle: null,
       frenchTitle: null,

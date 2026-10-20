@@ -1,6 +1,14 @@
-import { createLogger, MediaMetadata, MetadataSource } from '@crn-flix/contracts';
+import {
+  createLogger,
+  IdentificationQuery,
+  IdentifiedMedia,
+  MediaKind,
+  MediaMetadata,
+  MetadataSource,
+} from '@crn-flix/contracts';
 
 import { TmdbApiService, TmdbMovie, TmdbTvShow } from './api';
+import { identifyMovie, identifyShow } from './identify';
 
 /** TMDB serves posters anonymously in fixed widths; w342 suits emails and cards. */
 const POSTER_BASE_URL = 'https://image.tmdb.org/t/p/w342';
@@ -11,6 +19,7 @@ const UNKNOWN: MediaMetadata = {
   frenchTitle: null,
   originalLanguage: null,
   year: null,
+  kind: null,
   posterUrl: null,
 };
 
@@ -18,6 +27,7 @@ const ENGLISH = 'en-US';
 const FRENCH = 'fr-FR';
 
 type Localized = {
+  kind: MediaKind;
   title: string | null;
   originalTitle: string | null;
   originalLanguage: string | null;
@@ -35,6 +45,7 @@ function yearOf(date: string | undefined): number | null {
 
 function fromMovie(movie: TmdbMovie): Localized {
   return {
+    kind: 'movie',
     title: movie.title || null,
     originalTitle: movie.original_title || null,
     originalLanguage: movie.original_language ?? null,
@@ -45,6 +56,7 @@ function fromMovie(movie: TmdbMovie): Localized {
 
 function fromTvShow(show: TmdbTvShow): Localized {
   return {
+    kind: 'show',
     title: show.name || null,
     originalTitle: show.original_name || null,
     originalLanguage: show.original_language ?? null,
@@ -83,6 +95,10 @@ export class TmdbMetadataSource implements MetadataSource {
     return resolution;
   }
 
+  identify(query: IdentificationQuery): Promise<IdentifiedMedia | null> {
+    return query.kind === 'movie' ? identifyMovie(this.tmdb, query) : identifyShow(this.tmdb, query);
+  }
+
   private async lookup(imdbId: string): Promise<MediaMetadata> {
     const english = await this.localized(imdbId, ENGLISH);
     if (!english) {
@@ -95,6 +111,7 @@ export class TmdbMetadataSource implements MetadataSource {
       frenchTitle: french?.title ?? null,
       originalLanguage: english.originalLanguage,
       year: english.year,
+      kind: english.kind,
       posterUrl: posterUrlOf(french?.posterPath ?? english.posterPath),
     };
   }

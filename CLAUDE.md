@@ -99,7 +99,7 @@ One-off notices to subscribers (outage, restoration). `ServiceNotice` (`services
 
 ### Downloads
 
-- `download_jobs` table = **post-download** processing only (`detected → identifying → completed|failed`), created when Fetchr reports completion. `PostDownloadPipeline` resolves identity via metadata cascade requestId → imdbId → filename. On `completed`: Jellyfin library refresh + `fulfillByJobId` + Fetchr remove.
+- `download_jobs` table = **post-download** processing only (`detected → identifying → completed|failed`), created when Fetchr reports completion. `PostDownloadPipeline` resolves identity via metadata cascade requestId → imdbId → filename (`media-identifier.ts`: the `MetadataSource` port's `describe` for an imdb id, `identify` for a parsed file name). On `completed`: Jellyfin library refresh + `fulfillByJobId` + Fetchr remove.
 - Correlation metadata: `buildDownloadMetadata` in `services/downloads/metadata.ts` (`crn-flix-request-id`, imdbid, type, title, ...), echoed back by Fetchr.
 - `StartupRecoveryService` re-drains stuck jobs on boot and on LISTEN reconnect.
 

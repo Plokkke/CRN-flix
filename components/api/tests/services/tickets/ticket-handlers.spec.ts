@@ -88,8 +88,8 @@ function buildStubs() {
       parseFilename: jest.fn().mockReturnValue({ title: 'Movie' }),
       identifyFromParsed: jest
         .fn()
-        .mockResolvedValue({ imdbId: 'tt1234567', title: 'Movie', year: 2020, mediaType: 'movie' }),
-      tmdbFindByImdbId: jest.fn().mockResolvedValue({ movies: [], tvShows: [] }),
+        .mockResolvedValue({ imdbId: 'tt1234567', kind: 'movie', title: 'Movie', originalTitle: null, year: 2020 }),
+      identifyImdbId: jest.fn().mockResolvedValue(null),
     },
     planner: { schedulePass: jest.fn() },
     downloadJobs: { get: jest.fn().mockResolvedValue({ status: DownloadJobStatus.Completed, errorMessage: null }) },
@@ -297,9 +297,12 @@ describe('TicketHandlersService', () => {
 
     it('recovers via a forced IMDb id', async () => {
       const stubs = buildStubs();
-      stubs.mediaIdentifier.tmdbFindByImdbId.mockResolvedValue({
-        movies: [{ title: 'Movie', release_date: '2020-01-01' }],
-        tvShows: [],
+      stubs.mediaIdentifier.identifyImdbId.mockResolvedValue({
+        imdbId: 'tt1234567',
+        kind: 'movie',
+        title: 'Movie',
+        originalTitle: null,
+        year: 2020,
       });
       const handle = handlerFor(stubs, TicketCategory.ManualDownload);
 
@@ -314,12 +317,12 @@ describe('TicketHandlersService', () => {
 
     describe('with the download still running in Fetchr', () => {
       const inFlight = (status: string) => ({ id: 'd1', status, metadata: { [TICKET_ID_METADATA_KEY]: 't1' } });
-      const tmdbMovie = { movies: [{ title: 'Right Movie', release_date: '2021-01-01' }], tvShows: [] };
+      const rightMovie = { imdbId: 'tt7654321', kind: 'movie', title: 'Right Movie', originalTitle: null, year: 2021 };
 
       it('re-points the ticket at the corrected request instead of relaunching', async () => {
         const stubs = buildStubs();
         stubs.downloader.liveDownloads.mockReturnValue([inFlight('downloading')]);
-        stubs.mediaIdentifier.tmdbFindByImdbId.mockResolvedValue(tmdbMovie);
+        stubs.mediaIdentifier.identifyImdbId.mockResolvedValue(rightMovie);
         stubs.mediasRepository.upsert.mockResolvedValue({ id: 'm2', imdbId: 'tt7654321', title: 'Right Movie' });
         const handle = handlerFor(stubs, TicketCategory.ManualDownload);
 
@@ -342,7 +345,7 @@ describe('TicketHandlersService', () => {
       it('drops the misidentified request only when nobody asked for it', async () => {
         const stubs = buildStubs();
         stubs.downloader.liveDownloads.mockReturnValue([inFlight('queued')]);
-        stubs.mediaIdentifier.tmdbFindByImdbId.mockResolvedValue(tmdbMovie);
+        stubs.mediaIdentifier.identifyImdbId.mockResolvedValue(rightMovie);
         stubs.mediasRepository.upsert.mockResolvedValue({ id: 'm2', imdbId: 'tt7654321', title: 'Right Movie' });
         stubs.requestsRepository.listUsers.mockResolvedValue([{ userId: 'u1' }]);
         const handle = handlerFor(stubs, TicketCategory.ManualDownload);
@@ -359,7 +362,7 @@ describe('TicketHandlersService', () => {
       it('relaunches when the previous download already failed', async () => {
         const stubs = buildStubs();
         stubs.downloader.liveDownloads.mockReturnValue([inFlight('failed')]);
-        stubs.mediaIdentifier.tmdbFindByImdbId.mockResolvedValue(tmdbMovie);
+        stubs.mediaIdentifier.identifyImdbId.mockResolvedValue(rightMovie);
         const handle = handlerFor(stubs, TicketCategory.ManualDownload);
 
         await handle(buildTicket(TicketCategory.ManualDownload, { url: 'https://x', requestId: 'm1' }), {

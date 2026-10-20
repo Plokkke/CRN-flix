@@ -48,7 +48,7 @@ Links the engine shows to admins carry query params — `crn-flix-request-id` (p
 | Role | Implementation | Code | Contract | Status |
 |---|---|---|---|---|
 | Catalog | Trakt | `plugins/catalogs/trakt` (`TraktCatalog`) | `Catalog`, `CatalogAccountSource` (Jellyfin's Trakt plugin) | Plugin; account linking (`UsersController`) still uses the concrete classes |
-| Metadata | TMDB | `plugins/metadata/tmdb` (`TmdbMetadataSource`) | `MetadataSource` | Plugin; file identification (`media-identifier.ts`) still calls the TMDB client directly |
+| Metadata | TMDB | `plugins/metadata/tmdb` (`TmdbMetadataSource`) | `MetadataSource` | Plugin (titles, artwork, file identification) |
 | Indexer | Loadix | `plugins/indexers/loadix` | `Indexer` | Plugin |
 | Downloader | Fetchr | `plugins/downloaders/fetchr` (`FetchrDownloader`) | `Downloader` | Plugin; completions become download jobs in the engine (`services/downloads/intake.ts`) |
 | Layout | Jellyfin conventions | `plugins/layouts/jellyfin` (`JellyfinLayout`) | `LibraryLayout` | Plugin; file identification and moves stay in the engine |

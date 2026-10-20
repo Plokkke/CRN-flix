@@ -4,7 +4,6 @@ import { Pool } from 'pg';
 
 import { MetadataSource } from '@crn-flix/contracts';
 import { JellyfinLayout } from '@crn-flix/layout-jellyfin';
-import { TmdbApiService } from '@crn-flix/metadata-tmdb';
 
 import { Config } from '@/app.module';
 import { METADATA } from '@/providers/media-titles';
@@ -19,14 +18,13 @@ import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 
 export const identificationProvider: Provider = {
   provide: MediaIdentifierService,
-  inject: [TmdbApiService, SYNC_DATASOURCE, MediasRepository, RequestsRepository, METADATA],
+  inject: [METADATA, SYNC_DATASOURCE, MediasRepository, RequestsRepository],
   useFactory: (
-    tmdb: TmdbApiService,
+    metadata: MetadataSource,
     pool: Pool,
     medias: MediasRepository,
     requests: RequestsRepository,
-    titles: MetadataSource,
-  ): MediaIdentifierService => new MediaIdentifierService(tmdb, pool, medias, requests, titles),
+  ): MediaIdentifierService => new MediaIdentifierService(metadata, pool, medias, requests),
 };
 
 export const placementProvider: Provider = {
