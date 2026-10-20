@@ -53,7 +53,7 @@ variable "run_as" {
 variable "user_messaging" {
   description = "send, or dry-run: nothing reaches users and notifications stay queued until switched back"
   type        = string
-  default     = "dry-run"
+  default     = "send"
 
   validation {
     condition     = contains(["send", "dry-run"], var.user_messaging)
