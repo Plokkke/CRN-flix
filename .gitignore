@@ -33,3 +33,4 @@ terraform.tfstate.backup
 *.tfplan
 *.tfvars
 !terraform.tfvars.example
+.claude/worktrees/

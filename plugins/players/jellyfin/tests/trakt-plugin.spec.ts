@@ -33,4 +33,36 @@ describe('TraktPlugin', () => {
     await expect(plugin.listAccounts()).resolves.toEqual([]);
     expect(jellyfin.listPlugins).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps every account when several tokens are written at once', async () => {
+    let stored = {
+      TraktUsers: ['jf1', 'jf2', 'jf3'].map((id) => ({
+        LinkedMbUserId: id,
+        Scrobble: true,
+        SkipUnwatchedImportFromTrakt: false,
+        SkipPlaybackProgressImportFromTrakt: true,
+        SkipWatchedImportFromTrakt: false,
+        PostWatchedHistory: true,
+        PostUnwatchedHistory: false,
+        PostSetWatched: false,
+        PostSetUnwatched: false,
+        SynchronizeCollections: false,
+        ExportMediaInfo: false,
+        DontRemoveItemFromTrakt: false,
+        ExtraLogging: false,
+        RefreshToken: 'old',
+      })),
+    };
+    const { jellyfin, plugin } = setup();
+    jellyfin.getPluginConfiguration.mockImplementation(async () => structuredClone(stored));
+    jellyfin.setPluginConfiguration.mockImplementation(async (_id: string, next: typeof stored) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      stored = structuredClone(next);
+    });
+    const tokens = (refreshToken: string) => ({ accessToken: 'a', refreshToken, accessTokenExpiration: 'x' });
+
+    await Promise.all(['jf1', 'jf2', 'jf3'].map((id) => plugin.saveCredentials(id, tokens(`new-${id}`))));
+
+    expect(stored.TraktUsers.map((user) => user.RefreshToken)).toEqual(['new-jf1', 'new-jf2', 'new-jf3']);
+  });
 });

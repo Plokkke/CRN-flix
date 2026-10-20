@@ -71,6 +71,7 @@ export class TraktPlugin implements CatalogAccountSource {
   private static readonly logger = createLogger(TraktPlugin.name);
 
   private pluginId: Promise<string> | null = null;
+  private pendingWrite: Promise<void> = Promise.resolve();
 
   constructor(private readonly jellyfin: JellyfinMediaService) {}
 
@@ -119,7 +120,17 @@ export class TraktPlugin implements CatalogAccountSource {
     return userConfig;
   }
 
-  async setConfig(userId: string, tokens: z.infer<typeof traktTokensSchema>): Promise<void> {
+  /**
+   * The plugin configuration is one document rewritten whole: concurrent writes (several
+   * accounts renewed at once) would each drop the others' tokens, so they run one after another.
+   */
+  setConfig(userId: string, tokens: z.infer<typeof traktTokensSchema>): Promise<void> {
+    const write = this.pendingWrite.then(() => this.writeTokens(userId, tokens));
+    this.pendingWrite = write.catch(() => undefined);
+    return write;
+  }
+
+  private async writeTokens(userId: string, tokens: z.infer<typeof traktTokensSchema>): Promise<void> {
     const userConfig: TraktPluginUserConfig = {
       ...DEFAULT_TRAKT_PLUGIN_CONFIG,
       LocationsExcluded: DEFAULT_TRAKT_PLUGIN_CONFIG.LocationsExcluded.slice(),
