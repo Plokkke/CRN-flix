@@ -1,4 +1,4 @@
-import { escapeHtml, getWebTemplate } from '@/html/styles';
+import { escapeHtml, getWebTemplate } from '@crn-flix/design-system';
 
 export type LoginStep = 'request' | 'code';
 

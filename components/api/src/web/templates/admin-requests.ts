@@ -1,8 +1,8 @@
 import { IndexerCandidate, RejectReason } from '@crn-flix/contracts';
+import { COLORS, escapeHtml } from '@crn-flix/design-system';
 import { PlanLabel, Sourcing } from '@crn-flix/planner';
 
 import { formatAge, formatBytes } from '@/helpers/format';
-import { COLORS, escapeHtml } from '@/html/styles';
 import {
   ActionView,
   Dashboard,

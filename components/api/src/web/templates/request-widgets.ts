@@ -1,4 +1,5 @@
-import { escapeHtml } from '@/html/styles';
+import { escapeHtml } from '@crn-flix/design-system';
+
 import { RequestStatus } from '@/services/database/requests';
 
 export const STATUS_LABELS_FR: Record<RequestStatus, string> = {

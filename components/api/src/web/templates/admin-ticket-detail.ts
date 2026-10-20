@@ -1,4 +1,5 @@
-import { COLORS, escapeHtml, getWebTemplate, renderRichText } from '@/html/styles';
+import { COLORS, escapeHtml, getWebTemplate, renderRichText } from '@crn-flix/design-system';
+
 import { TicketEntity, TicketEventEntity, TicketView } from '@/services/tickets/model';
 
 import { operationForm } from './ticket-controls';

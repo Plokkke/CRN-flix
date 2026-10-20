@@ -1,6 +1,5 @@
 import { ShowcaseItem } from '@crn-flix/contracts';
-
-import { getEmailTemplate, getInfoBox, getMediaGrid, TYPOGRAPHY, BUTTONS, COLORS } from '@/html/styles';
+import { BUTTONS, COLORS, getEmailTemplate, getInfoBox, getMediaGrid, TYPOGRAPHY } from '@crn-flix/design-system';
 
 type MediaItem = ShowcaseItem;
 

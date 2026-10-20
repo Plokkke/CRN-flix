@@ -1,4 +1,5 @@
-import { escapeHtml } from '@/html/styles';
+import { escapeHtml } from '@crn-flix/design-system';
+
 import { ExecutionView, PHASE_LABELS } from '@/services/admin/execution';
 
 /** Compact indicator on a row: phase and progress. */

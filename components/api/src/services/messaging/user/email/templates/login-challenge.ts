@@ -1,4 +1,5 @@
-import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from '@/html/styles';
+import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from '@crn-flix/design-system';
+
 import { LoginChallenge } from '@/services/messaging/user';
 
 export const loginChallengeTemplate = (challenge: LoginChallenge): { subject: string; html: string; text: string } => {

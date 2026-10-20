@@ -1,4 +1,5 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
+import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+
 import { TicketEntity, TicketStatus, TicketView } from '@/services/tickets/model';
 
 export type TicketListFilter = 'open' | 'dead-letter' | 'closed';

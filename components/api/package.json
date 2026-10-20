@@ -29,6 +29,7 @@
   "dependencies": {
     "@crn-flix/catalog-trakt": "workspace:*",
     "@crn-flix/contracts": "workspace:*",
+    "@crn-flix/design-system": "workspace:*",
     "@crn-flix/downloader-fetchr": "workspace:*",
     "@crn-flix/http": "workspace:*",
     "@crn-flix/indexer-loadix": "workspace:*",

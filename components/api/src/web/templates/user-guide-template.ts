@@ -1,4 +1,4 @@
-import { getWebTemplate, TYPOGRAPHY, COLORS } from '@/html/styles';
+import { COLORS, getWebTemplate, TYPOGRAPHY } from '@crn-flix/design-system';
 
 export interface UserGuideTemplateParams {
   serviceName: string;

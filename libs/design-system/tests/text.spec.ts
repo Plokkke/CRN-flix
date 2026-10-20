@@ -1,4 +1,4 @@
-import { renderRichText } from '@/html/styles';
+import { renderRichText } from '../src';
 
 describe('renderRichText', () => {
   it('turns markdown links into anchors', () => {

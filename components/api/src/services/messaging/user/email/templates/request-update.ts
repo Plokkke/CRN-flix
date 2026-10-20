@@ -1,4 +1,5 @@
-import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from '@/html/styles';
+import { getEmailTemplate, getMediaCard, TYPOGRAPHY } from '@crn-flix/design-system';
+
 import { displayTitle } from '@/services/database/medias';
 import { RequestEntity, RequestStatus } from '@/services/database/requests';
 

@@ -1,4 +1,5 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
+import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+
 import { NamingAuditItemEntity } from '@/services/database/naming-audit';
 
 interface AdminNamingAuditParams {

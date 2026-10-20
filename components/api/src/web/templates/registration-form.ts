@@ -1,4 +1,4 @@
-import { getWebTemplate } from '@/html/styles';
+import { getWebTemplate } from '@crn-flix/design-system';
 
 export interface RegistrationFormParams {
   serviceName: string;

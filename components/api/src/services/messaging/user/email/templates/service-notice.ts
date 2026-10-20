@@ -1,4 +1,5 @@
-import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from '@/html/styles';
+import { BUTTONS, escapeHtml, getEmailTemplate, getInfoBox, TYPOGRAPHY } from '@crn-flix/design-system';
+
 import { ServiceNotice } from '@/services/messaging/user';
 
 const TITLE_ICON: Record<ServiceNotice['tone'], string> = {

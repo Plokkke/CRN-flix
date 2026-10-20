@@ -1,4 +1,5 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
+import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+
 import { Dashboard, DashboardTab } from '@/services/admin/requests-view';
 
 import { ADMIN_REQUESTS_CSS, adminRequestsJs, adminRequestsSection } from './admin-requests';

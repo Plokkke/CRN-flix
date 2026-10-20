@@ -1,7 +1,7 @@
+import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
 import { PlanLabel } from '@crn-flix/planner';
 
 import { formatAge } from '@/helpers/format';
-import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
 import {
   Dashboard,
   EpisodeView,

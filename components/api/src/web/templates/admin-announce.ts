@@ -1,4 +1,5 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@/html/styles';
+import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+
 import { NOTICE_PRESETS, NoticePreset, PRESET_LABELS } from '@/services/announcements/presets';
 import { DeliveryResult } from '@/services/announcements/service';
 import { UserEntity } from '@/services/database/users';
