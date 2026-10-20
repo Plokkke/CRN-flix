@@ -11,6 +11,7 @@ import { PlannedDownloadsRepository } from '@/services/database/planned-download
 import { PlannerFindingsRepository } from '@/services/database/planner-findings';
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
+import { ScheduledAnnouncementsRepository } from '@/services/database/scheduled-announcements';
 import { TicketsRepository } from '@/services/database/tickets';
 import { UserActivitiesRepository } from '@/services/database/user-activities';
 import { UserMessagesRepository } from '@/services/database/user-messages';
@@ -34,6 +35,7 @@ const REPOSITORIES = [
   IndexerBookmarksRepository,
   RequestStatesRepository,
   PlannerFindingsRepository,
+  ScheduledAnnouncementsRepository,
 ];
 
 export const repositoryProviders: Provider[] = [

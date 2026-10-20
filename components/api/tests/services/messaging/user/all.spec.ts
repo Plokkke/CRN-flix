@@ -5,7 +5,17 @@ import { RequestEntity, RequestStatus } from '@/services/database/requests';
 import { UserMessagesRepository } from '@/services/database/user-messages';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UserEntity } from '@/services/database/users';
-import { AllUserMessaging, UserMessagingDisabledError, UserMessagingMode } from '@/services/messaging/user/all';
+import {
+  AllUserMessaging,
+  QUIET_HOURS_EXEMPT_KINDS,
+  UserMessagingDisabledError,
+  UserMessagingMode,
+} from '@/services/messaging/user/all';
+import { QuietHours } from '@/services/messaging/user/quiet-hours';
+
+const quietHours = new QuietHours({ window: '00:00-07:00', timeZone: 'Europe/Paris' });
+const NOON = quietHours.parseLocal('2026-10-22T12:00')!;
+const THREE_AM = quietHours.parseLocal('2026-10-22T03:00')!;
 
 const ctxt = { key: 'email', id: 'antoine@test', userId: 'u1' };
 
@@ -25,7 +35,7 @@ function request(mediaId: string, status: RequestStatus, episodeNumber: number):
   } as unknown as RequestEntity;
 }
 
-function build(mode: UserMessagingMode = 'send') {
+function build(mode: UserMessagingMode = 'send', clock = { now: NOON }) {
   const channel = {
     kind: 'email',
     verify: jest.fn().mockResolvedValue(undefined),
@@ -52,6 +62,8 @@ function build(mode: UserMessagingMode = 'send') {
     notifications as unknown as UserNotificationsRepository,
     journal as unknown as UserMessagesRepository,
     mode,
+    quietHours,
+    () => clock.now,
   );
   return { channel, notifications, journal, messaging };
 }
@@ -153,6 +165,59 @@ describe('AllUserMessaging', () => {
       await expect(messaging.error(ctxt, 'x')).rejects.toBeInstanceOf(UserMessagingDisabledError);
       expect(channel.welcome).not.toHaveBeenCalled();
       expect(channel.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('quiet hours', () => {
+    it('exempts exactly the login code, the welcome and the registration refusal/error', () => {
+      expect([...QUIET_HOURS_EXEMPT_KINDS].sort()).toEqual(['error', 'login', 'welcome']);
+    });
+
+    it('still sends exempt messages at night', async () => {
+      const { channel, journal, messaging } = build('send', { now: THREE_AM });
+
+      await messaging.loginChallenge(ctxt, {
+        code: '123456',
+        link: 'l',
+        serviceName: 'CRN-Flix',
+        expiresInMinutes: 10,
+      });
+      await messaging.registered(ctxt, { id: 'u1', name: 'antoine' } as UserEntity, 'pw');
+      await messaging.error(ctxt, 'Votre inscription a été refusée');
+
+      expect(channel.loginChallenge).toHaveBeenCalled();
+      expect(channel.welcome).toHaveBeenCalled();
+      expect(channel.error).toHaveBeenCalled();
+      expect(journal.record).toHaveBeenCalledTimes(3);
+    });
+
+    it('holds every other message until morning, without recording it as sent', async () => {
+      const { channel, journal, messaging } = build('send', { now: THREE_AM });
+
+      await expect(messaging.catalogRelink(ctxt, 'antoine', 'Trakt')).rejects.toThrow(UserMessagingDisabledError);
+      await expect(
+        messaging.announce(ctxt, { subject: 's', title: 't', tone: 'info', paragraphs: [] }),
+      ).rejects.toThrow('quiet hours until 22/10 à 07:00');
+
+      expect(channel.catalogRelink).not.toHaveBeenCalled();
+      expect(journal.record).not.toHaveBeenCalled();
+      expect(messaging.quietUntil()?.toISOString()).toBe('2026-10-22T05:00:00.000Z');
+    });
+
+    it('keeps night notices queued, so the morning redelivery sends them as one batch', async () => {
+      const clock = { now: THREE_AM };
+      const { channel, notifications, messaging } = build('send', clock);
+
+      await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Fulfilled, 1));
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(channel.requestsUpdated).not.toHaveBeenCalled();
+      expect(notifications.markSent).not.toHaveBeenCalled();
+
+      clock.now = quietHours.parseLocal('2026-10-22T07:05')!;
+      await messaging.requestUpdated(ctxt, request('m1', RequestStatus.Fulfilled, 1));
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(channel.requestsUpdated).toHaveBeenCalledTimes(1);
+      expect(notifications.markSent).toHaveBeenCalled();
     });
   });
 

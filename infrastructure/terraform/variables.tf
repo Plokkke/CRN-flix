@@ -53,12 +53,29 @@ variable "run_as" {
 variable "user_messaging" {
   description = "send, or dry-run: nothing reaches users and notifications stay queued until switched back"
   type        = string
-  default     = "dry-run"
+  default     = "send"
 
   validation {
     condition     = contains(["send", "dry-run"], var.user_messaging)
     error_message = "user_messaging is send or dry-run."
   }
+}
+
+variable "user_messaging_quiet_hours" {
+  description = "HH:MM-HH:MM, in user_messaging_timezone: no message reaches subscribers in this window (login codes excepted)"
+  type        = string
+  default     = "00:00-07:00"
+
+  validation {
+    condition     = can(regex("^\\d{2}:\\d{2}-\\d{2}:\\d{2}$", var.user_messaging_quiet_hours))
+    error_message = "user_messaging_quiet_hours is HH:MM-HH:MM."
+  }
+}
+
+variable "user_messaging_timezone" {
+  description = "IANA time zone of the quiet hours and of scheduled announcements"
+  type        = string
+  default     = "Europe/Paris"
 }
 
 variable "log_level" {

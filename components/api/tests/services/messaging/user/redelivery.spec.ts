@@ -7,13 +7,13 @@ import { NotificationRedeliveryService } from '@/services/messaging/user/redeliv
 const pending = { userId: 'u1', mediaId: 'm1', status: RequestStatus.Fulfilled };
 const user = { id: 'u1', messagingKey: 'email', messagingId: 'antoine@test' };
 
-function build(mode: 'send' | 'dry-run', requestStatus = RequestStatus.Fulfilled) {
+function build(mode: 'send' | 'dry-run', requestStatus = RequestStatus.Fulfilled, quietUntil: Date | null = null) {
   const notifications = {
     listPending: jest.fn().mockResolvedValue([pending]),
     discard: jest.fn().mockResolvedValue(undefined),
   };
   const request = { mediaId: 'm1', status: requestStatus };
-  const messaging = { mode, requestUpdated: jest.fn().mockResolvedValue(undefined) };
+  const messaging = { mode, quietUntil: () => quietUntil, requestUpdated: jest.fn().mockResolvedValue(undefined) };
   const service = new NotificationRedeliveryService(
     notifications as unknown as UserNotificationsRepository,
     { get: jest.fn().mockResolvedValue(request) } as unknown as RequestsRepository,
@@ -43,6 +43,15 @@ describe('NotificationRedeliveryService', () => {
 
   it('keeps everything queued in dry-run', async () => {
     const { service, notifications, messaging } = build('dry-run');
+
+    await service.redeliver();
+
+    expect(messaging.requestUpdated).not.toHaveBeenCalled();
+    expect(notifications.discard).not.toHaveBeenCalled();
+  });
+
+  it('keeps everything queued during quiet hours, for the first pass of the morning', async () => {
+    const { service, notifications, messaging } = build('send', RequestStatus.Fulfilled, new Date());
 
     await service.redeliver();
 

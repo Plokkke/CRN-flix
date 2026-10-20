@@ -8,6 +8,8 @@ locals {
     "SERVER_URL=${local.public_url}",
     "SERVICE_NAME=${var.service_name}",
     "USER_MESSAGING=${var.user_messaging}",
+    "USER_MESSAGING_QUIET_HOURS=${var.user_messaging_quiet_hours}",
+    "USER_MESSAGING_TIMEZONE=${var.user_messaging_timezone}",
     "DATABASE_HOST=${local.shared_server}",
     "DATABASE_PORT=5432",
     "DATABASE_NAME=${postgresql_database.app.name}",

@@ -34,6 +34,10 @@ export class NotificationRedeliveryService {
       NotificationRedeliveryService.logger.log(`DRY-RUN: ${pending.length}+ notification(s) kept queued`);
       return;
     }
+    if (this.messaging.quietUntil()) {
+      NotificationRedeliveryService.logger.debug(`Quiet hours: ${pending.length}+ notification(s) kept queued`);
+      return;
+    }
     NotificationRedeliveryService.logger.log(`Redelivering ${pending.length} queued notification(s)`);
     for (const key of pending) {
       await this.redeliverOne(key).catch((error: unknown) =>

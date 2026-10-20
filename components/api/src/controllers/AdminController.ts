@@ -24,6 +24,7 @@ import { DOWNLOADER } from '@/providers/downloader';
 import { executionByTrack, ExecutionView } from '@/services/admin/execution';
 import { buildDashboard, DashboardTab, TABS } from '@/services/admin/requests-view';
 import { ADMIN_SESSION_COOKIE, AdminAuthService, CodeRequestOutcome } from '@/services/admin-auth';
+import { ScheduledAnnouncementsService } from '@/services/announcements/scheduled';
 import { CatalogSyncService } from '@/services/catalog/sync';
 import { ContextService } from '@/services/context';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
@@ -51,6 +52,7 @@ const JOBS = [
   { name: 'player-sync', schedule: 'Every 15 minutes' },
   { name: 'ticket-sync', schedule: 'Every 5 minutes' },
   { name: 'notification-redelivery', schedule: 'Every 5 minutes' },
+  { name: 'scheduled-announcements', schedule: 'Every minute' },
   { name: 'naming-audit', schedule: 'Manual only' },
   { name: 'admin-channel-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
 ] as const;
@@ -93,6 +95,7 @@ export class AdminController {
     private readonly namingAuditRepository: NamingAuditRepository,
     private readonly adminRelay: AdminTicketRelay,
     private readonly redelivery: NotificationRedeliveryService,
+    private readonly scheduledAnnouncements: ScheduledAnnouncementsService,
   ) {
     this.jobHandlers = {
       'catalog-sync': () => this.catalogSync.sync(),
@@ -100,6 +103,7 @@ export class AdminController {
       'player-sync': () => this.playerSync.sync(),
       'ticket-sync': () => this.ticketReconciler.sync(),
       'notification-redelivery': () => this.redelivery.redeliver(),
+      'scheduled-announcements': () => this.scheduledAnnouncements.sendDue(),
       'naming-audit': async () => {
         await this.namingAudit.run();
       },
