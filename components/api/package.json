@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "@crn-flix/api",
-  "version": "1.0.3-draft.0",
+  "version": "0.0.0",
   "author": "Antoine Caron <antoine@crn-tech.fr>",
   "license": "ISC",
   "description": "CRN-Flix engine: turns catalog requests into downloads and notifies requesters when they become available.",

@@ -17,6 +17,7 @@ import { AppService } from '@/app.service';
 import { AdminController } from '@/controllers/AdminController';
 import { AnnounceAdminController } from '@/controllers/AnnounceAdminController';
 import { AssetsController } from '@/controllers/AssetsController';
+import { HealthVersionController } from '@/controllers/HealthController';
 import { MailingController } from '@/controllers/MailingController';
 import { MeController } from '@/controllers/MeController';
 import { TicketsAdminController } from '@/controllers/TicketsAdminController';
@@ -131,6 +132,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       MailingController,
       UserGuideController,
       AssetsController,
+      HealthVersionController,
       AdminController,
       TicketsAdminController,
       AnnounceAdminController,

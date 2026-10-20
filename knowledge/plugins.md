@@ -58,4 +58,4 @@ Build : chaque lib et plugin compile vers `dist/` (`tsc`). Turborepo construit l
 
 ## Reporté
 
-- **DÉCIDÉ (2026-10-20)** — Migration Jest → Vitest, passage à Terraform et refonte des GitHub Actions : après cette réorganisation. Les workflows actuels (`.github/`) supposent encore npm et l'ancienne arborescence.
+- **DÉCIDÉ (2026-10-20)** — Migration Jest → Vitest : plus tard. Terraform et la CI/CD du cookbook sont en place (`knowledge/deploiement.md`).

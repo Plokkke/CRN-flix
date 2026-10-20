@@ -17,7 +17,7 @@ pnpm workspace (`components/*`, `libs/*`, `plugins/*/*`) + Turborepo. Plugin arc
 - `libs/contracts` — every role's contract (`catalog`, `metadata`, `indexer/`, `downloader`, `storage`, `player`, `messaging`, `policy`, `runtime`) + shared media types (`media.ts`). Only `Indexer` is wired; the others are **DRAFT**.
 - `libs/planner` — the planner's pure core. `libs/http` — axios logging/retry, rate limiter, `wait`. `libs/tooling` — eslint/tsconfig/jest presets.
 - `plugins/<role>/<name>` — implementations (`indexers/loadix`, `catalogs/trakt`, `metadata/tmdb`, `players/jellyfin`), package `@crn-flix/<role>-<name>`. **A plugin imports only `@crn-flix/contracts` / `@crn-flix/http`, never the engine (`@/`), the database nor Nest** (loggers via `createLogger`, routed to Nest at boot by `services/logger/plugins.ts`).
-- `infrastructure/compose/` — production compose + deploy script. `terraform/`, `components/*/terraform/` — legacy infra (Terraform migration postponed).
+- `infrastructure/terraform/` — the deployment stack (deployer, shared Postgres, `start_engine` cutover gate, `user_messaging`); `infrastructure/secrets/` (sops), `infrastructure/scripts/` (secret import, DB transfer). `infrastructure/compose/` — legacy, Jellyfin only until it moves. Runbook: `knowledge/deploiement.md`.
 - `knowledge/` — design docs. See `knowledge/download-planner-brief.md` for the download-planner design (intent/plan separation, runway, starved/needed/deferred labels, set-cover resolution) — **implemented** as of migration `00013`.
 
 ## Key Development Commands

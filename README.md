@@ -88,9 +88,8 @@ plugins/
 ├── messaging-user/email  @crn-flix/messaging-user-email
 ├── messaging-admin/discord @crn-flix/messaging-admin-discord
 └── players/jellyfin      @crn-flix/player-jellyfin
-infrastructure/compose/   production compose file + deploy script
+infrastructure/terraform/ the deployment stack · secrets/ (sops) · scripts/ (cutover) · compose/ (legacy, Jellyfin until it moves)
 knowledge/        design docs (plugins, policy, download planner)
-terraform/        legacy local stack, not used by the production deploy
 ```
 
 The SQL migrations and the TypeScript code are the source of truth for the schema.
@@ -143,13 +142,14 @@ Validated at boot by `components/api/src/environment.ts`.
 
 ## Deployment
 
-Production runs as Docker containers next to PostgreSQL and the services behind each role. The API image builds from the repository root (`components/api/Dockerfile`, `pnpm deploy`). `infrastructure/compose/deploy.sh` builds and pushes `antoinecaron/crn-flix` (API) and `antoinecaron/crn-flix-migration`, syncs `infrastructure/compose/docker-compose.yaml` to the server and restarts the stack; the server's `.env` keys are listed in `infrastructure/compose/.env.example`. The compose file in this repository is the source of truth: never edit it on the server. The migration container runs first; the engine only waits on it and on PostgreSQL.
+Production runs on the home server, deployed by its deployer from `infrastructure/terraform` (engine + one-shot migration; the database lives on the shared Postgres). A squash-merged PR on `main` releases (semantic-release), publishes `ghcr.io/plokkke/crn-flix/{api,migration}:<version>` and requests the deployment; a push touching `infrastructure/**` redeploys the current version. Secrets: `infrastructure/secrets/production.sops.yaml`. The cutover from the old compose stack and the rollback procedure: [`knowledge/deploiement.md`](knowledge/deploiement.md).
 
-Migrations are applied in filename order and hashed: **never edit an applied migration, add a new one.**
+Migrations are applied in filename order and hashed: **never edit an applied migration, add a new one**, and keep it compatible with the previous version (rollback).
 
 ## Further reading
 
 - [`CLAUDE.md`](CLAUDE.md) — detailed architecture: syncs, planner, indexer contract, tickets, read model, schema, NOTIFY channels.
+- [`knowledge/deploiement.md`](knowledge/deploiement.md) — deployment, cutover and rollback.
 - [`knowledge/plugins.md`](knowledge/plugins.md) — plugin architecture, roles, extraction status.
 - [`knowledge/policy.md`](knowledge/policy.md) — the policy role.
 - [`knowledge/download-planner-brief.md`](knowledge/download-planner-brief.md) — planner design.
