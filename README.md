@@ -11,7 +11,7 @@ Catalog ──► catalog sync ──► requests (intent) ──► planner ─
                                                       │
                                      auto-trigger, or admin launches a link
                                                       ▼
-Player ◄── library refresh ◄── post-download pipeline (Storage) ◄── Downloader
+Player ◄── library refresh ◄── post-download pipeline (Layout) ◄── Downloader
      │
      └──► library sync ──► request fulfilled ──► user notified (user channels)
 ```
@@ -23,7 +23,7 @@ Player ◄── library refresh ◄── post-download pipeline (Storage) ◄�
 | **Policy** | Filters requests coming out of the catalogs before planning: accept, reject (user notified) or send to review — *defined, not implemented* |
 | **Indexer** | Searches releases for a movie or show and returns scoped candidates (episode, season, series) |
 | **Downloader** | Downloads a link, reports progress, echoes the metadata attached to it |
-| **Storage** | Where finished files land and how they are named for the player |
+| **Layout** | The library's naming and organisation rules (usually the player's conventions); the engine moves the files on the volume it shares with the downloader |
 | **Player** | Hosts the library and the user accounts, tells what is available, gets refreshed after a placement |
 | **Messaging** | Admin channel (tickets, admin replies) and user channels (notifications, announcements, login codes, one per user) |
 
@@ -51,10 +51,10 @@ Links the engine shows to admins carry query params — `crn-flix-request-id` (p
 | Metadata | TMDB | `plugins/metadata/tmdb` (`TmdbMetadataSource`) | `MetadataSource` | Plugin; file identification (`media-identifier.ts`) still calls the TMDB client directly |
 | Indexer | Loadix | `plugins/indexers/loadix` | `Indexer` | Plugin |
 | Downloader | Fetchr | `plugins/downloaders/fetchr` (`FetchrDownloader`) | `Downloader` | Plugin; completions become download jobs in the engine (`services/downloads/intake.ts`) |
-| Storage | Local filesystem | engine `services/media-labelizer.ts`, `media-identifier.ts`, `post-download-pipeline.ts` | `Storage` (draft) | Coupled |
+| Layout | Jellyfin conventions | `plugins/layouts/jellyfin` (`JellyfinLayout`) | `LibraryLayout` | Plugin; file identification and moves stay in the engine |
 | Player | Jellyfin | `plugins/players/jellyfin` (`JellyfinPlayer`, Trakt plugin tokens) | `Player`, `CatalogAccountSource` | Plugin; the naming audit still reads library paths from the client directly |
 | Messaging (admin) | Discord | engine `modules/discord/`, `services/messaging/admin/` | ticket adapter (`services/tickets/`) | Coupled |
-| Messaging (users) | Email, Discord DM | engine `services/messaging/user/` | `UserChannel` (draft) | Coupled |
+| Messaging (users) | Email | engine `services/messaging/user/` | `UserChannel` (draft) | Coupled; the Discord DM channel is not really implemented and will not be ported |
 | Policy | — | — | `Policy` | Defined only |
 
 *Draft* contracts are typed in `libs/contracts` but not implemented by any plugin yet. Couplings left on the way, in order, are listed in [`knowledge/plugins.md`](knowledge/plugins.md).
@@ -75,11 +75,14 @@ libs/
 ├── contracts/    @crn-flix/contracts — every role's contract + shared media types
 ├── planner/      @crn-flix/planner — pure planner core (runway, labels, set cover, diff, sourcing)
 ├── http/         @crn-flix/http — axios logging, retries, rate limiting for plugins
+├── design-system/ @crn-flix/design-system — tokens, components, page and email layouts
 └── tooling/      @crn-flix/tooling — eslint, tsconfig and jest presets
 plugins/
 ├── catalogs/trakt        @crn-flix/catalog-trakt
 ├── indexers/loadix       @crn-flix/indexer-loadix
 ├── metadata/tmdb         @crn-flix/metadata-tmdb
+├── layouts/jellyfin      @crn-flix/layout-jellyfin
+├── downloaders/fetchr    @crn-flix/downloader-fetchr
 └── players/jellyfin      @crn-flix/player-jellyfin
 infrastructure/compose/   production compose file + deploy script
 knowledge/        design docs (plugins, policy, download planner)

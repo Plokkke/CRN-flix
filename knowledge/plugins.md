@@ -13,14 +13,17 @@ Publier l'engine indépendamment de ses plugins, pour que n'importe qui compose 
 | **policy** | Filtre automatique en sortie de catalog : accepter, refuser, faire relire (voir [policy.md](policy.md)) | `Policy` | — | Défini, pas implémenté |
 | **indexer** | Cherche les releases d'un film ou d'une série | `Indexer` | Loadix | **Plugin** (`plugins/indexers/loadix`) |
 | **downloader** | Télécharge une URL, rend compte de la progression | `Downloader` | Fetchr | **Plugin** (`plugins/downloaders/fetchr`) |
-| **storage** | Où atterrissent les fichiers terminés et comment ils sont nommés | `Storage` | Disque local | Couplé (labelizer, identifier, pipeline) |
+| **layout** | Règles de nommage et d'organisation de la bibliothèque (en pratique les conventions du player) | `LibraryLayout` | Conventions Jellyfin | **Plugin** (`plugins/layouts/jellyfin`) |
 | **player** | Sert la bibliothèque, porte les comptes de visionnage | `Player` | Jellyfin | **Plugin** (`plugins/players/jellyfin`) |
-| **messaging** | Canal admin (tickets) et canaux utilisateurs (notifications, annonces, codes de connexion) | `UserChannel` | Discord, email | Couplé (`services/messaging/`) |
+| **messaging-user** | Joindre les abonnés (notifications, annonces, codes de connexion) | `UserChannel` | Email | Couplé (`services/messaging/user/`) |
+| **messaging-admin** | Canal admin : tickets, réponses, codes de connexion admin | `AdminChannel` | Discord | Couplé (`services/messaging/admin/`, `modules/discord/`) |
 
 `Indexer`, `Catalog`, `CatalogAccountSource`, `Downloader`, `Player` et `MetadataSource` sont implémentés et branchés. Les autres contrats sont marqués **DRAFT** : typés d'après le code actuel, à valider au moment d'extraire le plugin correspondant.
 
 ## Règles
 
+- **DÉCIDÉ (2026-10-20)** — Pas de rôle « storage » : le disque est forcément le volume partagé avec le downloader et l'engine se contente d'y déplacer les fichiers ; ce qui est enfichable, ce sont les règles de nommage et d'organisation (`layout`).
+- **DÉCIDÉ (2026-10-20)** — Messaging : deux contrats et deux familles de plugins, `plugins/messaging-user/<nom>` (email seulement ; le DM Discord utilisateur n'est pas réellement implémenté et n'est pas porté) et `plugins/messaging-admin/<nom>` (Discord) ; la connexion Discord vit dans une lib commune avec une instance partagée. Le style est une lib `design-system` utilisée par les pages web et les emails.
 - **DÉCIDÉ (2026-10-20)** — Un plugin vit dans `plugins/<rôle au pluriel>/<nom>` (`indexers/loadix`, `catalogs/trakt`…), paquet `@crn-flix/<rôle>-<nom>`. Les paquets sont à la racine du monorepo car externalisables.
 - **DÉCIDÉ** — Un plugin dépend de `@crn-flix/contracts` (et au besoin de `@crn-flix/http`), **jamais de l'engine** (pas d'alias `@/`) ni de la base. Ce qu'il veut retenir passe par l'engine : il reçoit des données en entrée et rend ce qu'il faut sauvegarder (voir les mémos d'indexer, `IndexerBookmark`).
 - **DÉCIDÉ** — TMDB n'est pas un catalog : il ne permet pas à un utilisateur de référencer ses demandes. C'est une brique **metadata**.
@@ -50,7 +53,7 @@ Build : chaque lib et plugin compile vers `dist/` (`tsc`). Turborepo construit l
 4. ~~**Player**~~ — fait (2026-10-20) : `JellyfinPlayer` (disponibilité, rafraîchissement, comptes via `upsertAccount` / `AccountNameTakenError`, vitrine d'affiches construite depuis l'URL du player au lieu de `jellyfin.crn-tech.fr` en dur). Reste : `naming-audit` lit les chemins de la bibliothèque via `JellyfinMediaService` (relève du storage) ; la colonne `users.jellyfin_id` porte l'id de compte du player.
 5. ~~**Metadata**~~ — fait (2026-10-20) : `TmdbMetadataSource.describe` (titres + URL d'affiche complète). Migration 00024 : `medias.poster_url` (rattrapée depuis `poster_path`) ; **`poster_path` est à supprimer dans une release ultérieure** (gardée pour le rollback). Reste : `media-identifier.ts` (identification d'un fichier par recherche TMDB) appelle `TmdbApiService` directement — à porter par une méthode `identify` du contrat au moment du storage.
 6. **Messaging** — préalable fait (2026-10-20) : les pages web sont dans `components/api/src/web/templates/`, les emails seuls restent dans `services/messaging/user/email/templates/`, styles communs dans `src/html/styles.ts`. Reste : `UserChannel` pour l'email et le DM Discord, puis l'adaptateur de tickets Discord (canal admin, authentification OTP admin).
-7. **Storage** — démêler les règles de nommage (pures), les I/O disque, l'identification et les tickets dans `media-labelizer`, `media-identifier`, `post-download-pipeline`, `naming-audit`.
+7. ~~**Layout**~~ (ex-storage) — fait (2026-10-20) : `JellyfinLayout.place` donne section + dossiers + nom de fichier ; l'engine choisit la racine (partagée ou privée) et déplace (`media-labelizer.ts`). Reste : `media-identifier.ts` (identification d'un fichier par recherche TMDB) appelle `TmdbApiService` directement, à porter par une méthode `identify` du contrat metadata ; `naming-audit` lit les chemins de la bibliothèque via `JellyfinMediaService`.
 8. **Publication** — l'engine publié seul : la composition des plugins devient de la configuration.
 
 ## Reporté

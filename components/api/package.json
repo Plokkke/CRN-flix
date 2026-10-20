@@ -33,6 +33,7 @@
     "@crn-flix/downloader-fetchr": "workspace:*",
     "@crn-flix/http": "workspace:*",
     "@crn-flix/indexer-loadix": "workspace:*",
+    "@crn-flix/layout-jellyfin": "workspace:*",
     "@crn-flix/metadata-tmdb": "workspace:*",
     "@crn-flix/planner": "workspace:*",
     "@crn-flix/player-jellyfin": "workspace:*",

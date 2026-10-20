@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Pool } from 'pg';
 
 import { MetadataSource } from '@crn-flix/contracts';
+import { JellyfinLayout } from '@crn-flix/layout-jellyfin';
 import { TmdbApiService } from '@crn-flix/metadata-tmdb';
 
 import { Config } from '@/app.module';
@@ -31,10 +32,8 @@ export const identificationProvider: Provider = {
 export const placementProvider: Provider = {
   provide: MediaLabelizerService,
   inject: [ConfigService, METADATA],
-  useFactory: (configService: ConfigService<Config, true>, titles: MetadataSource): MediaLabelizerService => {
-    const config = configService.get('mediaPaths');
-    return new MediaLabelizerService(config, titles);
-  },
+  useFactory: (configService: ConfigService<Config, true>, titles: MetadataSource): MediaLabelizerService =>
+    new MediaLabelizerService(configService.get('mediaPaths'), titles, new JellyfinLayout()),
 };
 
 export const postDownloadPipelineProvider: Provider = {

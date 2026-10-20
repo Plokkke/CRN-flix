@@ -4,7 +4,7 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
-import { MetadataSource } from '@crn-flix/contracts';
+import { LibraryLayout, LibrarySection, MetadataSource } from '@crn-flix/contracts';
 
 import { IdentificationResult } from './media-identifier';
 
@@ -35,33 +35,13 @@ function isPrivateMetadata(metadata?: Record<string, string> | null): boolean {
   return metadata?.private === 'true';
 }
 
-function sanitizeTitle(title: string): string {
-  return title
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/['']/g, '.')
-    .replace(/[\s-]+/g, '.')
-    .replace(/[^a-zA-Z0-9.]/g, '')
-    .replace(/\.{2,}/g, '.');
-}
-
-function buildFolderName(title: string, year: number | null, imdbId: string | null): string {
-  const parts = [sanitizeTitle(title)];
-  if (year) {
-    parts.push(`(${year})`);
-  }
-  if (imdbId) {
-    parts.push(`[imdbid-${imdbId}]`);
-  }
-  return parts.join('.');
-}
-
 export class MediaLabelizerService {
   private static readonly logger = new Logger(MediaLabelizerService.name);
 
   constructor(
     private readonly config: MediaPathsConfig,
     private readonly titles: MetadataSource,
+    private readonly layout: LibraryLayout,
   ) {}
 
   async toCanonicalIdentity<T extends MediaIdentity>(identity: T): Promise<T> {
@@ -72,39 +52,18 @@ export class MediaLabelizerService {
     return resolution.title ? { ...identity, title: resolution.title } : identity;
   }
 
+  /** The layout names the file; the engine picks the root (shared or private) on its own volume. */
   generateDestination(identity: MediaIdentity, opts: PlacementOptions = {}): [string, string] {
-    const idName = buildFolderName(identity.title, identity.year, identity.imdbId);
+    const { mediaType, ...rest } = identity;
+    const { section, folders, fileName } = this.layout.place({ ...rest, type: mediaType });
+    return [path.join(this.rootOf(section, opts.isPrivate ?? false), ...folders), fileName];
+  }
 
-    let folderName;
-    let fileName;
-
-    if (identity.mediaType === 'episode') {
-      const season = identity.seasonNumber ?? 0;
-      const episode = identity.episodeNumber ?? 0;
-      const root = opts.isPrivate ? this.config.privateSeries : this.config.series;
-      const seasonPad = String(season).padStart(2, '0');
-      const episodePad = String(episode).padStart(2, '0');
-      let sxxexx = `S${seasonPad}E${episodePad}`;
-      if (identity.episodeNumberEnd && identity.episodeNumberEnd !== episode) {
-        sxxexx += `-E${String(identity.episodeNumberEnd).padStart(2, '0')}`;
-      }
-      folderName = path.join(root, idName, `Season${seasonPad}`);
-      const parts = [sanitizeTitle(identity.title)];
-      if (identity.year) {
-        parts.push(`(${identity.year})`);
-      }
-      parts.push(sxxexx);
-      if (identity.imdbId) {
-        parts.push(`[imdbid-${identity.imdbId}]`);
-      }
-      fileName = parts.join('.');
-    } else {
-      const root = opts.isPrivate ? this.config.privateMovies : this.config.movies;
-      folderName = path.join(root, idName);
-      fileName = idName;
+  private rootOf(section: LibrarySection, isPrivate: boolean): string {
+    if (section === 'series') {
+      return isPrivate ? this.config.privateSeries : this.config.series;
     }
-
-    return [folderName, fileName];
+    return isPrivate ? this.config.privateMovies : this.config.movies;
   }
 
   async move(
