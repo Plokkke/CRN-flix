@@ -11,6 +11,8 @@ import { PlannerService } from '@/services/planner/planner';
 import { TicketCategory } from '@/services/tickets/model';
 import { TicketService } from '@/services/tickets/ticket.service';
 
+import { UNTRACKED } from '../../helpers/integrations';
+
 const CONFIG = syncConfigSchema.parse({});
 
 const USER = { id: 'u1', jellyfinId: 'jf1', name: 'antoine', messagingKey: 'discord', messagingId: 'd1' };
@@ -80,6 +82,7 @@ function buildService(stubs: Stubs): CatalogSyncService {
     stubs.requestsRepository as unknown as RequestsRepository,
     stubs.planner as unknown as PlannerService,
     stubs.ticketService as unknown as TicketService,
+    UNTRACKED,
   );
 }
 

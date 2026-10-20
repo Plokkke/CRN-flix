@@ -12,7 +12,10 @@ import {
   Quality,
 } from '@crn-flix/contracts';
 
+import { IntegrationTracker } from '@/services/integrations/monitor';
 import { BookmarkStore, findAcrossIndexers } from '@/services/planner/bookmarks';
+
+import { UNTRACKED } from '../../helpers/integrations';
 
 const PREFS: EnginePreferences = {
   allowedQualities: [],
@@ -74,6 +77,7 @@ describe('findAcrossIndexers', () => {
       PREFS,
       bookmarks,
       logger,
+      UNTRACKED,
     );
 
     expect(candidates).toEqual({ candidates: [candidate], referenced: true });
@@ -95,6 +99,7 @@ describe('findAcrossIndexers', () => {
       PREFS,
       bookmarks,
       logger,
+      UNTRACKED,
     );
 
     expect(bookmarks.save).toHaveBeenCalledTimes(1);
@@ -110,6 +115,7 @@ describe('findAcrossIndexers', () => {
       PREFS,
       bookmarks,
       logger,
+      UNTRACKED,
     );
 
     expect(bookmarks.save).toHaveBeenCalledWith('a', 'tt1', null);
@@ -129,9 +135,20 @@ describe('findAcrossIndexers', () => {
       PREFS,
       bookmarks,
       logger,
+      UNTRACKED,
     );
 
     expect(candidates).toEqual({ candidates: [candidate], referenced: false });
+  });
+
+  it('reports each indexer search under the indexer name', async () => {
+    const track = jest.fn((_integration: string, _operation: string, run: () => Promise<unknown>) => run());
+    const find = jest.fn(async () => ({ candidates: [candidate], bookmark: null }));
+
+    await findAcrossIndexers([indexer('a', find)], target, PREFS, store(), logger, { track } as IntegrationTracker);
+
+    expect(track).toHaveBeenCalledWith('a', 'find', expect.any(Function));
+    expect(find).toHaveBeenCalledTimes(1);
   });
 
   it('still searches when bookmarks cannot be loaded', async () => {
@@ -143,7 +160,7 @@ describe('findAcrossIndexers', () => {
     };
     const find = jest.fn(async () => ({ candidates: [candidate], bookmark: null }));
 
-    const candidates = await findAcrossIndexers([indexer('a', find)], target, PREFS, bookmarks, logger);
+    const candidates = await findAcrossIndexers([indexer('a', find)], target, PREFS, bookmarks, logger, UNTRACKED);
 
     expect(candidates.candidates).toEqual([candidate]);
     expect(find).toHaveBeenCalledWith(target, PREFS, null);

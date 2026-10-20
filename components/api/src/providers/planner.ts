@@ -12,6 +12,7 @@ import { PlannedDownloadsRepository } from '@/services/database/planned-download
 import { PlannerFindingsRepository } from '@/services/database/planner-findings';
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
+import { IntegrationMonitor } from '@/services/integrations/monitor';
 import { MediaTitlesService } from '@/services/media-titles';
 import { PlannerService } from '@/services/planner/planner';
 
@@ -38,6 +39,7 @@ export const plannerProvider = {
     RequestStatesRepository,
     PlannerFindingsRepository,
     MediaTitlesService,
+    IntegrationMonitor,
   ],
   useFactory: (
     configService: ConfigService<Config, true>,
@@ -51,6 +53,7 @@ export const plannerProvider = {
     states: RequestStatesRepository,
     findings: PlannerFindingsRepository,
     mediaTitles: MediaTitlesService,
+    integrations: IntegrationMonitor,
   ): PlannerService => {
     const { needWindowHours, maxWindowHours } = configService.get('sync', { infer: true });
     const { preferences } = configService.get('indexer', { infer: true });
@@ -67,6 +70,7 @@ export const plannerProvider = {
       states,
       findings,
       mediaTitles,
+      integrations,
     );
   },
 };

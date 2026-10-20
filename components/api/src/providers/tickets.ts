@@ -10,6 +10,7 @@ import { PlannedDownloadsRepository } from '@/services/database/planned-download
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { UsersRepository } from '@/services/database/users';
+import { IntegrationMonitor } from '@/services/integrations/monitor';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { AdminTicketRelay } from '@/services/messaging/admin/relay';
 import { AllUserMessaging } from '@/services/messaging/user/all';
@@ -25,6 +26,12 @@ export const ticketProviders: Provider[] = [
     provide: TicketService,
     inject: [TicketsRepository],
     useFactory: (tickets: TicketsRepository): TicketService => new TicketService(tickets),
+  },
+  {
+    provide: IntegrationMonitor,
+    inject: [TicketsRepository, TicketService],
+    useFactory: (tickets: TicketsRepository, ticketService: TicketService): IntegrationMonitor =>
+      new IntegrationMonitor(tickets, ticketService),
   },
   {
     provide: TicketContextLoader,
