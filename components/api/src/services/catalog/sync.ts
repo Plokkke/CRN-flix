@@ -124,21 +124,23 @@ export class CatalogSyncService {
     const desiredMediaByKey: DesiredMediaByKey = {};
     const syncedKindsByUserId: GatheredData['syncedKindsByUserId'] = {};
 
+    let failed = 0;
     for (const { user, account } of accounts) {
-      syncedKindsByUserId[user.id] = await this.getKindsToSync(user.id, account);
-      CatalogSyncService.logger.log(
-        `User ${user.name}: syncing kinds ${Array.from(syncedKindsByUserId[user.id]).join(', ')}`,
-      );
-
-      for (const kind of syncedKindsByUserId[user.id]) {
-        const medias = await this.listRequests(account, kind);
-        CatalogSyncService.logger.log(`User ${user.name} kind ${kind}: ${medias.length} medias`);
-        addDesired(desiredMediaByKey, user.id, kind, medias);
+      try {
+        const mediasByKind = await this.gatherAccount(user, account);
+        syncedKindsByUserId[user.id] = new Set(mediasByKind.keys());
+        mediasByKind.forEach((medias, kind) => addDesired(desiredMediaByKey, user.id, kind, medias));
+      } catch (error) {
+        // Left out entirely: a partial read would drop the requests of the kinds it missed.
+        failed += 1;
+        CatalogSyncService.logger.warn(
+          `User ${user.name}: catalog unreachable, left out of this sync (${error instanceof Error ? error.message : error})`,
+        );
       }
     }
 
     CatalogSyncService.logger.log(
-      `Gathered ${Object.keys(desiredMediaByKey).length} unique desired medias across ${accounts.length} users`,
+      `Gathered ${Object.keys(desiredMediaByKey).length} unique desired medias across ${accounts.length - failed} users (${failed} left out)`,
     );
 
     const desiredKeys = Object.values(desiredMediaByKey).map((d) => d.mediaInfos);
@@ -146,6 +148,20 @@ export class CatalogSyncService {
     CatalogSyncService.logger.log(`Current requests: ${mediaRequests.length}`);
 
     return { desiredMediaByKey, syncedKindsByUserId, mediaRequests };
+  }
+
+  /** Everything one account asks for, per kind; throws without partial result. */
+  private async gatherAccount(user: UserEntity, account: CatalogAccount): Promise<Map<RequestReason, MediaInfos[]>> {
+    const kinds = await this.getKindsToSync(user.id, account);
+    CatalogSyncService.logger.log(`User ${user.name}: syncing kinds ${Array.from(kinds).join(', ')}`);
+
+    const mediasByKind = new Map<RequestReason, MediaInfos[]>();
+    for (const kind of kinds) {
+      const medias = await this.listRequests(account, kind);
+      CatalogSyncService.logger.log(`User ${user.name} kind ${kind}: ${medias.length} medias`);
+      mediasByKind.set(kind, medias);
+    }
+    return mediasByKind;
   }
 
   /**
