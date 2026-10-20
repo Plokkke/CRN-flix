@@ -167,6 +167,27 @@ describe('CatalogSyncService', () => {
     expect(stubs.catalog.listRequests.mock.calls.map(([, reason]) => reason)).toEqual([RequestReason.Watchlisted]);
   });
 
+  it('leaves an unreachable account out without touching it, and syncs the others', async () => {
+    const stubs = buildStubs();
+    const other = { ...USER, id: 'u2', name: 'other' };
+    stubs.accounts.list.mockResolvedValue([
+      { user: USER, account: { userRef: 'u1', credentials: { token: 'expired' } } },
+      { user: other, account: { userRef: 'u2', credentials: { token: 't' } } },
+    ]);
+    stubs.catalog.listRequests.mockImplementation((account: { userRef: string }, reason: RequestReason) =>
+      account.userRef === 'u1' && reason === RequestReason.Progress
+        ? Promise.reject(new Error('Request failed with status code 401'))
+        : Promise.resolve(SILO),
+    );
+
+    await buildService(stubs).sync();
+
+    const [, syncedUserIds] = stubs.requestsRepository.listSyncSnapshot.mock.calls[0];
+    expect(syncedUserIds).toEqual(['u2']);
+    expect(stubs.requestsRepository.setUserRequestReasons.mock.calls.every(([, userId]) => userId === 'u2')).toBe(true);
+    expect(stubs.userActivitiesRepository.upsert.mock.calls.every(([userId]) => userId === 'u2')).toBe(true);
+  });
+
   describe('missing imdb ids', () => {
     it('opens one missing-imdb ticket per title the catalog has no imdb id for', async () => {
       const stubs = buildStubs();
