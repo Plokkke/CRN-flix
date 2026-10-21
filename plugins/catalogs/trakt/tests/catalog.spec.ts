@@ -33,6 +33,7 @@ function buildApi() {
     requestUserWatchlist: jest.fn().mockResolvedValue([]),
     getHighRatedMedias: jest.fn().mockResolvedValue([]),
     getLastActivities: jest.fn().mockResolvedValue({}),
+    getLatestFollowedAiring: jest.fn().mockResolvedValue(null),
     requestUserWatched: jest.fn().mockResolvedValue([{ show }]),
     listExcludedShowIds: jest.fn().mockResolvedValue(new Set()),
     requestShowProgress: jest.fn().mockResolvedValue({ aired: 10, completed: 3, next_episode: null }),
@@ -102,6 +103,16 @@ describe('TraktCatalog', () => {
       expect(activity[RequestReason.Watchlisted]).toEqual(older.toJSDate());
       expect(activity[RequestReason.HighRated]).toEqual(newer.toJSDate());
       expect(activity[RequestReason.Progress]).toBeNull();
+    });
+
+    it('counts a new episode of a followed show as a progress activity', async () => {
+      const { api, catalog } = buildCatalog();
+      const watched = DateTime.fromISO('2026-10-17T10:05:07Z');
+      const aired = DateTime.fromISO('2026-10-21T01:00:00Z');
+      api.getLastActivities.mockResolvedValue({ episodes: { watched_at: watched }, shows: {}, movies: {} });
+      api.getLatestFollowedAiring.mockResolvedValue(aired);
+
+      expect((await catalog.lastActivity(account))[RequestReason.Progress]).toEqual(aired.toJSDate());
     });
   });
 

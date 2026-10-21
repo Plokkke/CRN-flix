@@ -46,8 +46,20 @@ const RESPONSES: Record<string, unknown> = {
   '/shows/3/progress/watched': progress,
 };
 
+/** Latest airing per show; shows absent here have aired nothing yet. */
+const LAST_AIRED: Record<number, string> = { 3: '2026-10-14T01:00:00.000Z' };
+
+const lastEpisode = (url: string) => {
+  const showId = Number(url.split('/')[2]);
+  const aired = LAST_AIRED[showId];
+  return { status: aired ? 200 : 204, data: aired ? { first_aired: aired } : '', headers: {}, config: {} };
+};
+
 const get = jest.fn();
-const respond = (url: string) => Promise.resolve({ status: 200, data: RESPONSES[url], headers: {}, config: {} });
+const respond = (url: string) =>
+  Promise.resolve(
+    url.endsWith('/last_episode') ? lastEpisode(url) : { status: 200, data: RESPONSES[url], headers: {}, config: {} },
+  );
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -103,5 +115,53 @@ describe('TraktApi progress of watched shows', () => {
 
     process.off('unhandledRejection', unhandled);
     expect(unhandled).not.toHaveBeenCalled();
+  });
+});
+
+describe('TraktApi new airings', () => {
+  const mapCache = (): PluginCache => {
+    const store = new Map<string, unknown>();
+    return {
+      withCache: async <T>(key: string, fn: () => Promise<T>): Promise<T> => {
+        // The latest airing has a short TTL: every read here stands for a refresh after it expired.
+        if (key.startsWith('show-last-aired-')) {
+          return fn();
+        }
+        if (!store.has(key)) {
+          store.set(key, await fn());
+        }
+        return store.get(key) as T;
+      },
+    };
+  };
+
+  beforeEach(() => {
+    get.mockImplementation(respond);
+    RESPONSES['/sync/watched/shows'] = [
+      watched(1, 'Hidden'),
+      watched(3, 'Caught up'),
+      { ...watched(6, 'Finished'), show: { ...show(6, 'Finished'), status: 'ended' } },
+    ];
+    RESPONSES['/shows/3/progress/watched'] = { ...progress, aired: 2, completed: 2, next_episode: null };
+    RESPONSES['/shows/6/progress/watched'] = { ...progress, aired: 8, completed: 8, next_episode: null };
+    LAST_AIRED[1] = '2026-10-30T01:00:00.000Z';
+    LAST_AIRED[3] = '2026-10-14T01:00:00.000Z';
+    LAST_AIRED[6] = '2026-10-29T01:00:00.000Z';
+  });
+
+  it('reports the latest airing among followed shows, ignoring hidden, dropped and finished ones', async () => {
+    const latest = await buildApi().getLatestFollowedAiring(user);
+
+    expect(latest?.toUTC().toISO()).toBe('2026-10-14T01:00:00.000Z');
+  });
+
+  it('reads the progress again once a new episode aired, though the user watched nothing', async () => {
+    const api = new TraktApi({ host: 'api.trakt.test', clientId: 'id', clientSecret: 'secret' }, mapCache());
+    expect(await api.getWatchingShows(user)).toEqual([]);
+
+    LAST_AIRED[3] = '2026-10-21T01:00:00.000Z';
+    RESPONSES['/shows/3/progress/watched'] = { ...progress, aired: 4, completed: 2 };
+
+    expect((await api.getWatchingShows(user)).map((w) => w.show.title)).toEqual(['Caught up']);
   });
 });
