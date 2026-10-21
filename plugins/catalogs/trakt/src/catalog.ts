@@ -87,11 +87,21 @@ export class TraktCatalog implements Catalog {
     private readonly config: TraktCatalogConfig,
   ) {}
 
+  /** A new episode of a followed show is a progress activity too, though the user did nothing. */
   async lastActivity(account: CatalogAccount): Promise<CatalogActivity> {
-    const activities = await this.api.getLastActivities(this.authOf(account));
-    return _.mapValues(ACTIVITIES_BY_REASON, (paths) =>
+    const auth = this.authOf(account);
+    const [activities, latestAiring] = await Promise.all([
+      this.api.getLastActivities(auth),
+      this.api.getLatestFollowedAiring(auth),
+    ]);
+    const activity = _.mapValues(ACTIVITIES_BY_REASON, (paths) =>
       latestOf(paths.map((path) => _.get(activities, path) as DateTime | null | undefined)),
     );
+    const progress = activity[RequestReason.Progress];
+    return {
+      ...activity,
+      [RequestReason.Progress]: latestOf([progress ? DateTime.fromJSDate(progress) : null, latestAiring]),
+    };
   }
 
   async listRequests(account: CatalogAccount, reason: RequestReason): Promise<CatalogItem[]> {

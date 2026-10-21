@@ -185,7 +185,11 @@ export const watchedShowSchema = z.object({
   last_watched_at: isoDateSchema,
   last_updated_at: isoDateSchema,
   reset_at: isoDateSchema.nullable(),
-  show: showSchema,
+  show: showSchema.extend({ status: z.string().nullable().optional() }),
+});
+
+export const lastEpisodeSchema = z.object({
+  first_aired: isoDateSchema.nullable(),
 });
 
 export const hiddenShowSchema = z.object({

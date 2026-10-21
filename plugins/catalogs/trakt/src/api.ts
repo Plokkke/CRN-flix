@@ -13,6 +13,7 @@ import {
   deviceTokenSchema,
   hiddenShowSchema,
   lastActivitiesSchema,
+  lastEpisodeSchema,
   mediaDetailsSchema,
   mediaSchema,
   movieDetailsSchema,
@@ -101,6 +102,11 @@ function toTokens(data: unknown): TraktDeviceAuthResult {
     accessTokenExpiration: new Date(expirationMs).toISOString(),
   };
 }
+
+/** Trakt statuses of a show that will air no new episode. */
+const FINISHED_STATUSES = ['ended', 'canceled'];
+/** New airings are noticed through this refresh: short enough to request an episode soon after it aired. */
+const LAST_AIRED_TTL_SECONDS = 15 * 60;
 
 function getAuthorization(user: UserAuthCtxt): string {
   return `Bearer ${user.accessToken}`;
@@ -297,9 +303,10 @@ export class TraktApi {
     );
   }
 
+  /** Keyed by the latest airing: the aired episode count must follow a new episode. */
   async requestShowDetails(showId: number): Promise<ShowDetails> {
     return this.cache.withCache(
-      `show-details-${showId}`,
+      `show-details-${showId}-${await this.requestLastAiredAt(showId)}`,
       async () => {
         const response = await this.api.get<unknown>(`/shows/${showId}`, {
           params: { extended: 'full' },
@@ -312,7 +319,7 @@ export class TraktApi {
 
   async requestShowSeasonsDetails(showId: number): Promise<SeasonDetails[]> {
     return this.cache.withCache(
-      `show-seasons-details-${showId}`,
+      `show-seasons-details-${showId}-${await this.requestLastAiredAt(showId)}`,
       async () => {
         const response = await this.api.get<unknown>(`/shows/${showId}/seasons`, {
           params: { extended: 'episodes' },
@@ -413,7 +420,7 @@ export class TraktApi {
     return this.withCache(user, ActivityType.Watched, async () => {
       const response = await this.api.get<unknown>(`/sync/watched/${type}s`, {
         headers: { Authorization: `Bearer ${user.accessToken}` },
-        params: { extended: 'noseasons' },
+        params: { extended: 'full,noseasons' },
       });
       return watchedShowSchema.array().parse(response.data);
     });
@@ -422,13 +429,45 @@ export class TraktApi {
   async requestShowProgress(user: UserAuthCtxt, showId: number): Promise<ProgressShowNoDetails> {
     const lastActivities = await this.requestLastActivities(user);
     const watchedTs = lastActivityOf(ActivityType.Watched, lastActivities);
-    const cacheKey = `show-progress-${user.id}-${showId}-${watchedTs}`;
+    const cacheKey = `show-progress-${user.id}-${showId}-${watchedTs}-${await this.requestLastAiredAt(showId)}`;
     return this.cache.withCache(cacheKey, async () => {
       const response = await this.api.get<unknown>(`/shows/${showId}/progress/watched`, {
         headers: { Authorization: getAuthorization(user) },
       });
       return progressShowSchema.parse(response.data);
     });
+  }
+
+  /** When the show's latest episode aired (ISO), null before its first one. */
+  async requestLastAiredAt(showId: number): Promise<string | null> {
+    return this.cache.withCache(
+      `show-last-aired-${showId}`,
+      async () => {
+        const response = await this.api.get<unknown>(`/shows/${showId}/last_episode`, {
+          params: { extended: 'full' },
+          validateStatus: (status) => status === 200 || status === 204,
+        });
+        return response.status === 204 ? null : (lastEpisodeSchema.parse(response.data).first_aired?.toISO() ?? null);
+      },
+      LAST_AIRED_TTL_SECONDS,
+    );
+  }
+
+  /**
+   * The latest airing among the shows the user follows (watched, neither hidden nor dropped, not
+   * finished). A new episode changes nothing in the user's own activity, yet it changes their
+   * progress: it counts as a progress activity, so the next sync reads the progress again.
+   */
+  async getLatestFollowedAiring(user: UserAuthCtxt): Promise<DateTime<true> | null> {
+    const excludedShowIds = await this.listExcludedShowIds(user);
+    const followed = (await this.requestUserWatched(user)).filter(
+      ({ show }) => !excludedShowIds.has(show.ids.trakt) && !FINISHED_STATUSES.includes(show.status ?? ''),
+    );
+    const airings = await Promise.all(followed.map(({ show }) => this.requestLastAiredAt(show.ids.trakt)));
+    const dates = airings
+      .filter((iso): iso is string => iso !== null)
+      .map((iso) => DateTime.fromISO(iso) as DateTime<true>);
+    return dates.length ? DateTime.max(...dates)! : null;
   }
 
   async getWatchingShows(user: UserAuthCtxt): Promise<ProgressShow[]> {
