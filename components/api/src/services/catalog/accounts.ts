@@ -23,6 +23,9 @@ export type CatalogAccountWatcher = {
 
 const NO_WATCHER: CatalogAccountWatcher = { revoked: () => undefined, usable: () => undefined };
 
+/** `proven`: the credentials are known to work (still valid, or just renewed). */
+type FreshCredentials = { credentials: unknown; proven: boolean };
+
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
@@ -35,6 +38,8 @@ export class CatalogAccountsService {
 
   /** One renewal per account at a time: the catalog revokes a refresh token once used. */
   private readonly renewals = new Map<string, Promise<unknown>>();
+  /** Credentials the catalog refused to renew: never retried, only new ones (a new link) are. */
+  private readonly refused = new Set<string>();
 
   constructor(
     private readonly usersRepository: UsersRepository,
@@ -47,32 +52,48 @@ export class CatalogAccountsService {
     const [users, linked] = await Promise.all([this.usersRepository.list(), this.source.listAccounts()]);
 
     const matched = await Promise.all(
-      linked.map(async (account): Promise<UserCatalogAccount | null> => {
+      linked.map(async (account) => {
         const user = users.find((candidate) => candidate.jellyfinId === account.playerAccountId);
-        const credentials = user ? await this.freshCredentials(user, account) : null;
-        return user && credentials ? { user, account: { userRef: user.id, credentials } } : null;
+        const fresh = user ? await this.freshCredentials(user, account) : null;
+        return user && fresh ? { user, fresh } : null;
       }),
     );
-    const usable = matched.filter((account): account is UserCatalogAccount => account !== null);
-    usable.forEach(({ user }) => this.watcher.usable(user));
+    const listed = matched.filter((entry) => entry !== null);
+    listed.filter(({ fresh }) => fresh.proven).forEach(({ user }) => this.watcher.usable(user));
+    const usable = listed.map(({ user, fresh }) => ({
+      user,
+      account: { userRef: user.id, credentials: fresh.credentials },
+    }));
     CatalogAccountsService.logger.debug(
       `${usable.length} users matched out of ${users.length} (${linked.length} linked catalog accounts)`,
     );
     return usable;
   }
 
-  /** Null when the user must link the account again; the current credentials when renewal merely failed. */
-  private async freshCredentials(user: UserEntity, { playerAccountId, credentials }: LinkedCatalogAccount) {
+  /**
+   * Null when the user must link the account again. A renewal that merely failed (catalog
+   * down) keeps the current credentials without proving anything: the account's state is unknown.
+   */
+  private async freshCredentials(
+    user: UserEntity,
+    { playerAccountId, credentials }: LinkedCatalogAccount,
+  ): Promise<FreshCredentials | null> {
+    const key = JSON.stringify(credentials);
+    if (this.refused.has(key)) {
+      this.watcher.revoked(user);
+      return null;
+    }
     try {
-      return (await this.renew(playerAccountId, credentials)) ?? credentials;
+      return { credentials: (await this.renew(playerAccountId, credentials)) ?? credentials, proven: true };
     } catch (error) {
       if (error instanceof CatalogAccountRevokedError) {
+        this.refused.add(key);
         CatalogAccountsService.logger.warn(`User ${user.name}: ${error.message}`);
         this.watcher.revoked(user);
         return null;
       }
       CatalogAccountsService.logger.warn(`User ${user.name}: credential renewal failed (${describeError(error)})`);
-      return credentials;
+      return { credentials, proven: false };
     }
   }
 

@@ -74,4 +74,31 @@ describe('CatalogAccountsService', () => {
     expect(revoked.watcher.revoked).toHaveBeenCalledWith(expect.objectContaining({ id: 'u1' }));
     expect(revoked.watcher.usable).not.toHaveBeenCalled();
   });
+
+  it('never declares an account working again when the catalog merely failed to renew it', async () => {
+    const { watcher, service } = build(jest.fn().mockRejectedValue(new Error('Request failed with status code 500')));
+
+    const accounts = await service.list();
+
+    expect(accounts).toHaveLength(1);
+    expect(watcher.usable).not.toHaveBeenCalled();
+    expect(watcher.revoked).not.toHaveBeenCalled();
+  });
+
+  it('does not ask the catalog again for credentials it already refused, until they change', async () => {
+    const { source, renewCredentials, watcher, service } = build(
+      jest.fn().mockRejectedValue(new CatalogAccountRevokedError('refused')),
+    );
+
+    await service.list();
+    await service.list();
+    expect(renewCredentials).toHaveBeenCalledTimes(1);
+    expect(watcher.revoked).toHaveBeenCalledTimes(2);
+
+    source.listAccounts.mockResolvedValue([{ playerAccountId: 'jf1', credentials: { token: 'linked-again' } }]);
+    renewCredentials.mockResolvedValue(null);
+    await service.list();
+    expect(renewCredentials).toHaveBeenCalledTimes(2);
+    expect(watcher.usable).toHaveBeenCalledTimes(1);
+  });
 });
