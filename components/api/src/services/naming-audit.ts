@@ -14,6 +14,7 @@ import {
   NamingAuditRepository,
 } from '@/services/database/naming-audit';
 import { MediaIdentity, MediaLabelizerService } from '@/services/media-labelizer';
+import { isVideoFile } from '@/services/video-files';
 
 export const namingAuditConfigSchema = z.object({
   jellyfinLibraryRoot: z.string(),
@@ -21,8 +22,6 @@ export const namingAuditConfigSchema = z.object({
 });
 
 export type NamingAuditConfig = z.infer<typeof namingAuditConfigSchema>;
-
-const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.m4v', '.mov', '.wmv', '.ts', '.webm']);
 
 type AuditCandidate = {
   mediaType: NamingAuditMediaType;
@@ -263,7 +262,7 @@ export class NamingAuditService {
     }
 
     const ext = path.extname(item.currentPath);
-    if (!VIDEO_EXTENSIONS.has(ext.toLowerCase())) {
+    if (!isVideoFile(item.currentPath)) {
       throw new Error(`unsupported extension ${ext}`);
     }
 
