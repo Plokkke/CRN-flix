@@ -22,7 +22,11 @@ function buildJob(metadata: Record<string, string>): DownloadJobEntity {
 
 function buildStubs(job: DownloadJobEntity, ticket: { category: TicketCategory; payload: unknown } | null) {
   return {
-    downloadJobs: { get: jest.fn().mockResolvedValue(job), updateStatus: jest.fn().mockResolvedValue(undefined) },
+    downloadJobs: {
+      get: jest.fn().mockResolvedValue(job),
+      updateStatus: jest.fn().mockResolvedValue(undefined),
+      updateSourcePaths: jest.fn().mockResolvedValue(undefined),
+    },
     identification: {
       identifyFromRequest: jest.fn().mockResolvedValue({ imdbId: 'tt1', title: 'Movie', mediaType: 'movie' }),
       identifyWithImdbId: jest.fn(),
@@ -33,12 +37,16 @@ function buildStubs(job: DownloadJobEntity, ticket: { category: TicketCategory; 
   };
 }
 
-function buildPipeline(stubs: ReturnType<typeof buildStubs>): PostDownloadPipeline {
+function buildPipeline(
+  stubs: ReturnType<typeof buildStubs>,
+  exists: (filePath: string) => Promise<boolean> = async () => true,
+): PostDownloadPipeline {
   return new PostDownloadPipeline(
     stubs.downloadJobs as unknown as DownloadJobsRepository,
     stubs.identification as unknown as MediaIdentifierService,
     stubs.placement as unknown as MediaLabelizerService,
     stubs.tickets as unknown as TicketsRepository,
+    exists,
   );
 }
 
@@ -75,5 +83,50 @@ describe('PostDownloadPipeline identity resolution', () => {
 
     expect(stubs.tickets.get).not.toHaveBeenCalled();
     expect(stubs.identification.identifyFromRequest).toHaveBeenCalledWith(expect.any(String), 'm1', 'j1');
+  });
+});
+
+describe('PostDownloadPipeline season packs', () => {
+  const dir = '/downloads/Show.S01';
+  const episode = (n: number) => `${dir}/Show.S01E0${n}.mkv`;
+  const identity = { imdbId: 'tt5103758', title: 'Show', mediaType: 'episode' };
+
+  function seasonJob(status: DownloadJobStatus): DownloadJobEntity {
+    return { ...buildJob({}), status, sourcePaths: [episode(1), `${dir}/Show.S01.nfo`, episode(2), episode(3)] };
+  }
+
+  it('places the videos and ignores the release side files', async () => {
+    const stubs = buildStubs(seasonJob(DownloadJobStatus.Detected), null);
+    stubs.identification.identify.mockResolvedValue(identity);
+
+    await buildPipeline(stubs).processJob('j1');
+
+    expect(stubs.placement.move.mock.calls.map(([file]) => file)).toEqual([episode(1), episode(2), episode(3)]);
+    expect(stubs.downloadJobs.updateStatus).toHaveBeenLastCalledWith('j1', DownloadJobStatus.Completed);
+  });
+
+  it('keeps only the files left to place when one cannot be identified', async () => {
+    const stubs = buildStubs(seasonJob(DownloadJobStatus.Detected), null);
+    stubs.identification.identify.mockResolvedValueOnce(identity).mockResolvedValueOnce(null);
+
+    await buildPipeline(stubs).processJob('j1');
+
+    expect(stubs.downloadJobs.updateSourcePaths).toHaveBeenCalledWith('j1', [episode(2), episode(3)]);
+    expect(stubs.downloadJobs.updateStatus).toHaveBeenLastCalledWith(
+      'j1',
+      DownloadJobStatus.Failed,
+      expect.any(String),
+    );
+  });
+
+  it('resumes a retry where the last attempt stopped, skipping what was already placed', async () => {
+    const stubs = buildStubs(seasonJob(DownloadJobStatus.Failed), null);
+    stubs.identification.identifyWithImdbId.mockResolvedValue(identity);
+    const stillDownloaded = async (filePath: string) => filePath !== episode(1);
+
+    await buildPipeline(stubs, stillDownloaded).retryWithImdbId('j1', 'tt5103758');
+
+    expect(stubs.placement.move.mock.calls.map(([file]) => file)).toEqual([episode(2), episode(3)]);
+    expect(stubs.downloadJobs.updateStatus).toHaveBeenLastCalledWith('j1', DownloadJobStatus.Completed);
   });
 });

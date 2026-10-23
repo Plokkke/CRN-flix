@@ -2,11 +2,16 @@ import { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
 import { PluginLogger } from '@crn-flix/contracts';
 
+/** Query parameters that carry a credential: their value never reaches the logs. */
+const SECRET_PARAM = /([?&](?:api[_-]?key|key|token|access_token|client_secret|secret|password)=)[^&#]*/gi;
+
+export const redactUrl = (url: string): string => url.replace(SECRET_PARAM, '$1***');
+
 function formatUrl(config: InternalAxiosRequestConfig): string {
   const base = config.baseURL ?? '';
   const url = config.url ?? '';
   const params = config.params ? `?${new URLSearchParams(config.params).toString()}` : '';
-  return `${base}${url}${params}`;
+  return redactUrl(`${base}${url}${params}`);
 }
 
 export function logAxiosRequest(logger: PluginLogger, config: InternalAxiosRequestConfig): void {
