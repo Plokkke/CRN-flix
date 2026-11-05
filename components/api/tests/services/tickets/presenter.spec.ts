@@ -87,8 +87,8 @@ describe('buildTicketView', () => {
       buildTicket(TicketCategory.MissingImdb, { title: 'Silo', year: 2023, kind: 'show', mediaIds: ['m1', 'm2'] }),
     );
 
-    expect(view.footer).toContain('tt1234567');
-    expect(view.operations).toEqual(['submitImdb', 'resolveManually']);
+    expect(view.footer).toContain("l'URL de la fiche TMDB");
+    expect(view.operations).toEqual(['submitIdentity', 'resolveManually']);
     expect(view.fields).toContainEqual({ name: 'Médias en attente', value: '2' });
   });
 

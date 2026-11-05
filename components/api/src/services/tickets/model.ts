@@ -1,4 +1,11 @@
-import { TicketEventKind, TicketOperation, TicketOperationKind, TicketTone, TicketView } from '@crn-flix/contracts';
+import {
+  IdentitySubmission,
+  TicketEventKind,
+  TicketOperation,
+  TicketOperationKind,
+  TicketTone,
+  TicketView,
+} from '@crn-flix/contracts';
 
 export { TicketEventKind, TicketOperation, TicketOperationKind, TicketTone, TicketView };
 
@@ -28,6 +35,9 @@ export type TicketSubject = {
   id: string;
 } | null;
 
+/** What the admin gave so far on a ticket asking who a media is; the next answer completes it. */
+export type IdentitySubmitted = { submitted?: IdentitySubmission | null };
+
 export type TicketPayloadMap = {
   [TicketCategory.UserApproval]: { userId: string };
   [TicketCategory.DownloadAction]: { actionId: string };
@@ -36,7 +46,7 @@ export type TicketPayloadMap = {
     packageName: string;
     failedFiles: string[];
     errorMessage: string;
-  };
+  } & IdentitySubmitted;
   [TicketCategory.PipelineFailure]: { jobId: string; fileNames: string; failedStep: string; errorMessage: string };
   [TicketCategory.ManualDownload]: {
     url: string;
@@ -45,8 +55,13 @@ export type TicketPayloadMap = {
     requestId?: string;
     jobId?: string;
     lastError?: string;
-  };
-  [TicketCategory.MissingImdb]: { title: string; year: number | null; kind: 'movie' | 'show'; mediaIds: string[] };
+  } & IdentitySubmitted;
+  [TicketCategory.MissingImdb]: {
+    title: string;
+    year: number | null;
+    kind: 'movie' | 'show';
+    mediaIds: string[];
+  } & IdentitySubmitted;
   [TicketCategory.IntegrationFailure]: {
     integration: string;
     operation: string;
@@ -85,10 +100,10 @@ export type TicketEventEntity = {
 export const OPERATIONS_BY_CATEGORY: Record<TicketCategory, TicketOperationKind[]> = {
   [TicketCategory.UserApproval]: ['approve', 'reject'],
   [TicketCategory.DownloadAction]: ['submitLink', 'reject', 'restore', 'resolveManually'],
-  [TicketCategory.IdentificationFailure]: ['submitImdb', 'resolveManually'],
+  [TicketCategory.IdentificationFailure]: ['submitIdentity', 'resolveManually'],
   [TicketCategory.PipelineFailure]: ['resolveManually'],
-  [TicketCategory.ManualDownload]: ['submitImdb', 'submitLink', 'resolveManually'],
-  [TicketCategory.MissingImdb]: ['submitImdb', 'resolveManually'],
+  [TicketCategory.ManualDownload]: ['submitIdentity', 'submitLink', 'resolveManually'],
+  [TicketCategory.MissingImdb]: ['submitIdentity', 'resolveManually'],
   [TicketCategory.IntegrationFailure]: ['resolveManually'],
 };
 

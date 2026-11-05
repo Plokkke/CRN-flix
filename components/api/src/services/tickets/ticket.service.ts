@@ -18,8 +18,8 @@ export const SYSTEM_ACTOR = 'system';
 
 function describeOperation(operation: TicketOperation): string {
   switch (operation.kind) {
-    case 'submitImdb':
-      return `IMDb soumis : ${operation.imdbId}`;
+    case 'submitIdentity':
+      return `Identité soumise : ${[operation.imdbId, operation.reference].filter(Boolean).join(' + ')}`;
     case 'submitLink':
       return `Lien soumis : ${operation.url}`;
     case 'approve':
