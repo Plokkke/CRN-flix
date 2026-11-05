@@ -11,6 +11,7 @@ import {
   OPERATIONS_BY_CATEGORY,
   TicketCategory,
   TicketEntity,
+  IdentitySubmitted,
   TicketPayloadMap,
   TicketStatus,
   TicketTone,
@@ -169,6 +170,14 @@ function userApprovalView(ticket: TicketEntity, user: UserEntity | null | undefi
   };
 }
 
+const IDENTITY_ANSWERS = "l'IMDb ID (tt…), l'URL IMDb et/ou l'URL de la fiche TMDB";
+
+/** What the admin already gave: the next answer only has to complete it. */
+function submittedFields(payload: IdentitySubmitted): TicketView['fields'] {
+  const given = [payload.submitted?.imdbId, payload.submitted?.reference].filter(Boolean).join(' + ');
+  return given ? [{ name: 'Déjà fourni', value: given }] : [];
+}
+
 function identificationFailureView(ticket: TicketEntity): TicketView {
   const payload = ticket.payload as TicketPayloadMap[TicketCategory.IdentificationFailure];
   return {
@@ -178,8 +187,9 @@ function identificationFailureView(ticket: TicketEntity): TicketView {
       { name: 'Package', value: payload.packageName.slice(0, 1024) },
       { name: 'Fichiers', value: payload.failedFiles.join('\n').slice(0, 1024) },
       { name: 'Erreur', value: payload.errorMessage.slice(0, 1024) },
+      ...submittedFields(payload),
     ],
-    footer: 'Repondre avec un IMDb ID (ex: tt1234567) pour relancer',
+    footer: `Répondre avec ${IDENTITY_ANSWERS} pour relancer`,
     operations: OPERATIONS_BY_CATEGORY[TicketCategory.IdentificationFailure],
   };
 }
@@ -208,11 +218,12 @@ function manualDownloadView(ticket: TicketEntity): TicketView {
   if (payload.lastError) {
     fields.push({ name: 'Erreur', value: payload.lastError.slice(0, 1024) });
   }
+  fields.push(...submittedFields(payload));
   return {
     title: ticket.title,
     tone: payload.lastError ? 'danger' : 'info',
     fields,
-    footer: "Repondre avec un IMDb ID (ex: tt1234567) pour forcer l'identification",
+    footer: `Répondre avec ${IDENTITY_ANSWERS} pour forcer l'identification`,
     operations: OPERATIONS_BY_CATEGORY[TicketCategory.ManualDownload],
   };
 }
@@ -225,8 +236,9 @@ function missingImdbView(ticket: TicketEntity): TicketView {
     fields: [
       { name: 'Type', value: payload.kind === 'show' ? 'Série' : 'Film' },
       { name: 'Médias en attente', value: String(payload.mediaIds.length) },
+      ...submittedFields(payload),
     ],
-    footer: "Repondre avec l'IMDb ID (ex: tt1234567) pour debloquer la recherche",
+    footer: `Répondre avec ${IDENTITY_ANSWERS} pour débloquer la recherche`,
     operations: OPERATIONS_BY_CATEGORY[TicketCategory.MissingImdb],
   };
 }

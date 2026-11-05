@@ -6,7 +6,7 @@ import { TicketContextLoader } from '@/services/tickets/context';
 import { TicketCategory, TicketEntity, TicketStatus } from '@/services/tickets/model';
 import { TicketService } from '@/services/tickets/ticket.service';
 
-const view: TicketView = { title: 'T', tone: 'info', fields: [], footer: null, operations: ['submitImdb'] };
+const view: TicketView = { title: 'T', tone: 'info', fields: [], footer: null, operations: ['submitIdentity'] };
 
 jest.mock('@/services/tickets/presenter', () => ({ buildTicketView: () => view }));
 
@@ -46,6 +46,7 @@ function build() {
     tickets as unknown as TicketsRepository,
     ticketService as unknown as TicketService,
     { load: jest.fn().mockResolvedValue({}) } as unknown as TicketContextLoader,
+    () => null,
   );
   return { relay, channel, tickets, ticketService };
 }
@@ -100,7 +101,7 @@ describe('AdminTicketRelay', () => {
       expect(ticketService.addAdminMessage).toHaveBeenCalledWith('t1', 'discord:admin', 'tt1234567', 'discord');
       expect(ticketService.applyOperation).toHaveBeenCalledWith(
         't1',
-        { kind: 'submitImdb', imdbId: 'tt1234567' },
+        { kind: 'submitIdentity', imdbId: 'tt1234567', reference: null },
         'discord:admin',
       );
       expect(ack).toBe('succeeded');

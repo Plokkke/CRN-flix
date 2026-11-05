@@ -15,6 +15,13 @@ import { TicketCategory, TicketEntity, TicketStatus } from '@/services/tickets/m
 import { TICKET_ID_METADATA_KEY, TicketHandlersService } from '@/services/tickets/ticket-handlers';
 import { TicketService } from '@/services/tickets/ticket.service';
 
+const movie = { imdbId: 'tt1234567', kind: 'movie', title: 'Movie', originalTitle: null, year: 2020 } as const;
+
+const designatedAs = (media: { imdbId: string; kind: 'movie' | 'show'; title: string; year: number | null }) => ({
+  ok: true as const,
+  designated: { media: { originalTitle: null, ...media }, metadata: {} },
+});
+
 function buildTicket(category: TicketCategory, payload: Record<string, unknown>): TicketEntity {
   return {
     id: 't1',
@@ -77,7 +84,7 @@ function buildStubs() {
       }),
       updateStatus: jest.fn().mockResolvedValue(undefined),
     },
-    postDownloadPipeline: { retryWithImdbId: jest.fn().mockResolvedValue(undefined) },
+    postDownloadPipeline: { retryAs: jest.fn().mockResolvedValue(undefined) },
     downloader: {
       canHandle: jest.fn().mockResolvedValue(true),
       download: jest.fn(),
@@ -90,7 +97,7 @@ function buildStubs() {
       identifyFromParsed: jest
         .fn()
         .mockResolvedValue({ imdbId: 'tt1234567', kind: 'movie', title: 'Movie', originalTitle: null, year: 2020 }),
-      identifyImdbId: jest.fn().mockResolvedValue(null),
+      resolveSubmission: jest.fn().mockResolvedValue({ ok: false, reason: 'TMDB ne connaît pas tt0' }),
     },
     planner: { schedulePass: jest.fn() },
     downloadJobs: { get: jest.fn().mockResolvedValue({ status: DownloadJobStatus.Completed, errorMessage: null }) },
@@ -251,38 +258,64 @@ describe('TicketHandlersService', () => {
   });
 
   describe('identification-failure', () => {
-    it('resolves when the retry completes the job', async () => {
+    const failure = (submitted?: { imdbId: string | null; reference: string | null }) =>
+      buildTicket(TicketCategory.IdentificationFailure, {
+        jobId: 'j1',
+        packageName: 'p',
+        failedFiles: [],
+        errorMessage: 'x',
+        submitted,
+      });
+
+    it('retries the job as the designated media and resolves when it completes', async () => {
+      const stubs = buildStubs();
+      const designated = designatedAs(movie);
+      stubs.mediaIdentifier.resolveSubmission.mockResolvedValue(designated);
+      const handle = handlerFor(stubs, TicketCategory.IdentificationFailure);
+
+      const outcome = await handle(failure(), { kind: 'submitIdentity', imdbId: 'tt1234567', reference: null });
+
+      expect(stubs.postDownloadPipeline.retryAs).toHaveBeenCalledWith('j1', designated.designated);
+      expect(outcome.status).toBe('resolved');
+    });
+
+    it('says where it is stuck and keeps what was given, without retrying', async () => {
       const stubs = buildStubs();
       const handle = handlerFor(stubs, TicketCategory.IdentificationFailure);
 
-      const outcome = await handle(
-        buildTicket(TicketCategory.IdentificationFailure, {
-          jobId: 'j1',
-          packageName: 'p',
-          failedFiles: [],
-          errorMessage: 'x',
-        }),
-        { kind: 'submitImdb', imdbId: 'tt1234567' },
-      );
+      const outcome = await handle(failure(), { kind: 'submitIdentity', imdbId: 'tt31510564', reference: null });
 
-      expect(stubs.postDownloadPipeline.retryWithImdbId).toHaveBeenCalledWith('j1', 'tt1234567');
-      expect(outcome.status).toBe('resolved');
+      expect(outcome).toMatchObject({
+        status: 'failed',
+        message: 'TMDB ne connaît pas tt0',
+        payloadPatch: { submitted: { imdbId: 'tt31510564', reference: null } },
+      });
+      expect(stubs.postDownloadPipeline.retryAs).not.toHaveBeenCalled();
+    });
+
+    it('completes the previous answer with the new one', async () => {
+      const stubs = buildStubs();
+      const handle = handlerFor(stubs, TicketCategory.IdentificationFailure);
+
+      await handle(failure({ imdbId: 'tt31510564', reference: null }), {
+        kind: 'submitIdentity',
+        imdbId: null,
+        reference: 'movie/1205366',
+      });
+
+      expect(stubs.mediaIdentifier.resolveSubmission).toHaveBeenCalledWith({
+        imdbId: 'tt31510564',
+        reference: 'movie/1205366',
+      });
     });
 
     it('stays open with the new error when the retry fails again', async () => {
       const stubs = buildStubs();
+      stubs.mediaIdentifier.resolveSubmission.mockResolvedValue(designatedAs(movie));
       stubs.downloadJobs.get.mockResolvedValue({ status: DownloadJobStatus.Failed, errorMessage: 'still broken' });
       const handle = handlerFor(stubs, TicketCategory.IdentificationFailure);
 
-      const outcome = await handle(
-        buildTicket(TicketCategory.IdentificationFailure, {
-          jobId: 'j1',
-          packageName: 'p',
-          failedFiles: [],
-          errorMessage: 'x',
-        }),
-        { kind: 'submitImdb', imdbId: 'tt1234567' },
-      );
+      const outcome = await handle(failure(), { kind: 'submitIdentity', imdbId: 'tt1234567', reference: null });
 
       expect(outcome).toMatchObject({ status: 'failed', message: 'still broken' });
     });
@@ -322,18 +355,13 @@ describe('TicketHandlersService', () => {
 
     it('recovers via a forced IMDb id', async () => {
       const stubs = buildStubs();
-      stubs.mediaIdentifier.identifyImdbId.mockResolvedValue({
-        imdbId: 'tt1234567',
-        kind: 'movie',
-        title: 'Movie',
-        originalTitle: null,
-        year: 2020,
-      });
+      stubs.mediaIdentifier.resolveSubmission.mockResolvedValue(designatedAs(movie));
       const handle = handlerFor(stubs, TicketCategory.ManualDownload);
 
       const outcome = await handle(buildTicket(TicketCategory.ManualDownload, { url: 'https://x' }), {
-        kind: 'submitImdb',
+        kind: 'submitIdentity',
         imdbId: 'tt1234567',
+        reference: null,
       });
 
       expect(outcome.status).toBe('progress');
@@ -342,18 +370,24 @@ describe('TicketHandlersService', () => {
 
     describe('with the download still running in Fetchr', () => {
       const inFlight = (status: string) => ({ id: 'd1', status, metadata: { [TICKET_ID_METADATA_KEY]: 't1' } });
-      const rightMovie = { imdbId: 'tt7654321', kind: 'movie', title: 'Right Movie', originalTitle: null, year: 2021 };
+      const rightMovie = {
+        imdbId: 'tt7654321',
+        kind: 'movie' as const,
+        title: 'Right Movie',
+        originalTitle: null,
+        year: 2021,
+      };
 
       it('re-points the ticket at the corrected request instead of relaunching', async () => {
         const stubs = buildStubs();
         stubs.downloader.liveDownloads.mockReturnValue([inFlight('downloading')]);
-        stubs.mediaIdentifier.identifyImdbId.mockResolvedValue(rightMovie);
+        stubs.mediaIdentifier.resolveSubmission.mockResolvedValue(designatedAs(rightMovie));
         stubs.mediasRepository.upsert.mockResolvedValue({ id: 'm2', imdbId: 'tt7654321', title: 'Right Movie' });
         const handle = handlerFor(stubs, TicketCategory.ManualDownload);
 
         const outcome = await handle(
           buildTicket(TicketCategory.ManualDownload, { url: 'https://x', imdbId: 'tt1234567', requestId: 'm1' }),
-          { kind: 'submitImdb', imdbId: 'tt7654321' },
+          { kind: 'submitIdentity', imdbId: 'tt7654321', reference: null },
         );
 
         expect(outcome.status).toBe('progress');
@@ -370,14 +404,15 @@ describe('TicketHandlersService', () => {
       it('drops the misidentified request only when nobody asked for it', async () => {
         const stubs = buildStubs();
         stubs.downloader.liveDownloads.mockReturnValue([inFlight('queued')]);
-        stubs.mediaIdentifier.identifyImdbId.mockResolvedValue(rightMovie);
+        stubs.mediaIdentifier.resolveSubmission.mockResolvedValue(designatedAs(rightMovie));
         stubs.mediasRepository.upsert.mockResolvedValue({ id: 'm2', imdbId: 'tt7654321', title: 'Right Movie' });
         stubs.requestsRepository.listUsers.mockResolvedValue([{ userId: 'u1' }]);
         const handle = handlerFor(stubs, TicketCategory.ManualDownload);
 
         await handle(buildTicket(TicketCategory.ManualDownload, { url: 'https://x', requestId: 'm1' }), {
-          kind: 'submitImdb',
+          kind: 'submitIdentity',
           imdbId: 'tt7654321',
+          reference: null,
         });
 
         expect(stubs.requestsRepository.listUsers).toHaveBeenCalledWith('m1');
@@ -387,12 +422,13 @@ describe('TicketHandlersService', () => {
       it('relaunches when the previous download already failed', async () => {
         const stubs = buildStubs();
         stubs.downloader.liveDownloads.mockReturnValue([inFlight('failed')]);
-        stubs.mediaIdentifier.identifyImdbId.mockResolvedValue(rightMovie);
+        stubs.mediaIdentifier.resolveSubmission.mockResolvedValue(designatedAs(rightMovie));
         const handle = handlerFor(stubs, TicketCategory.ManualDownload);
 
         await handle(buildTicket(TicketCategory.ManualDownload, { url: 'https://x', requestId: 'm1' }), {
-          kind: 'submitImdb',
+          kind: 'submitIdentity',
           imdbId: 'tt7654321',
+          reference: null,
         });
 
         expect(stubs.downloader.download).toHaveBeenCalled();
@@ -407,11 +443,25 @@ describe('TicketHandlersService', () => {
 
       const outcome = await handle(
         buildTicket(TicketCategory.MissingImdb, { title: 'Silo', year: 2023, kind: 'show', mediaIds: ['m1'] }),
-        { kind: 'submitImdb', imdbId: 'nope' },
+        { kind: 'submitIdentity', imdbId: 'nope', reference: null },
       );
 
       expect(outcome.status).toBe('failed');
       expect(stubs.mediasRepository.updateImdbId).not.toHaveBeenCalled();
+    });
+
+    it('reads the imdb id from a submitted page', async () => {
+      const stubs = buildStubs();
+      stubs.mediaIdentifier.resolveSubmission.mockResolvedValue(designatedAs({ ...movie, imdbId: 'tt14688458' }));
+      const handle = handlerFor(stubs, TicketCategory.MissingImdb);
+
+      const outcome = await handle(
+        buildTicket(TicketCategory.MissingImdb, { title: 'Silo', year: 2023, kind: 'show', mediaIds: ['m1'] }),
+        { kind: 'submitIdentity', imdbId: null, reference: 'tv/125988' },
+      );
+
+      expect(outcome.status).toBe('resolved');
+      expect(stubs.mediasRepository.updateImdbId).toHaveBeenCalledWith('m1', 'tt14688458');
     });
 
     it('writes the imdb id on every media of the group and reschedules the show', async () => {
@@ -420,7 +470,7 @@ describe('TicketHandlersService', () => {
 
       const outcome = await handle(
         buildTicket(TicketCategory.MissingImdb, { title: 'Silo', year: 2023, kind: 'show', mediaIds: ['m1', 'm2'] }),
-        { kind: 'submitImdb', imdbId: 'tt14688458' },
+        { kind: 'submitIdentity', imdbId: 'tt14688458', reference: null },
       );
 
       expect(outcome.status).toBe('resolved');

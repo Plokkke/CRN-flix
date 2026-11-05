@@ -1,6 +1,9 @@
+/** Who a media is, as an admin gave it: an IMDb id, a metadata source's page reference, or both. */
+export type IdentitySubmission = { imdbId: string | null; reference: string | null };
+
 /** What an admin can do on a ticket; which ones a ticket accepts is part of its view. */
 export type TicketOperation =
-  | { kind: 'submitImdb'; imdbId: string }
+  | ({ kind: 'submitIdentity' } & IdentitySubmission)
   | { kind: 'submitLink'; url: string }
   | { kind: 'approve' }
   | { kind: 'reject' }
@@ -13,7 +16,7 @@ export const OPERATION_LABELS: Record<TicketOperationKind, string> = {
   approve: 'Accepter',
   reject: 'Rejeter',
   restore: 'Restaurer',
-  submitImdb: 'Soumettre un IMDb ID',
+  submitIdentity: 'Identifier (IMDb / TMDB)',
   submitLink: 'Soumettre un lien',
   resolveManually: 'Marquer résolu',
 };

@@ -20,7 +20,7 @@ import {
   TicketEventKind,
   TicketStatus,
 } from '@/services/tickets/model';
-import { parseMessageOperation, parseSpontaneousUrl } from '@/services/tickets/parse';
+import { parseMessageOperation, parseSpontaneousUrl, ReferenceFinder } from '@/services/tickets/parse';
 import { buildTicketView } from '@/services/tickets/presenter';
 import { TicketService } from '@/services/tickets/ticket.service';
 
@@ -41,6 +41,7 @@ export class AdminTicketRelay implements AdminInbox, OnModuleInit, OnModuleDestr
     private readonly tickets: TicketsRepository,
     private readonly ticketService: TicketService,
     private readonly contextLoader: TicketContextLoader,
+    private readonly findReference: ReferenceFinder,
   ) {}
 
   get adapter(): string {
@@ -196,7 +197,11 @@ export class AdminTicketRelay implements AdminInbox, OnModuleInit, OnModuleDestr
     const actor = this.actorOf(message.adminId);
     await this.ticketService.addAdminMessage(ticket.id, actor, message.content, this.adapter);
 
-    const operation = parseMessageOperation(message.content, (await this.viewOf(ticket)).operations);
+    const operation = parseMessageOperation(
+      message.content,
+      (await this.viewOf(ticket)).operations,
+      this.findReference,
+    );
     if (!operation) {
       return null;
     }

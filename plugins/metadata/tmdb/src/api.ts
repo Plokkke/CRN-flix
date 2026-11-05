@@ -37,6 +37,13 @@ export type TmdbExternalIds = {
   tvdb_id: number | null;
 };
 
+export type TmdbPageKind = 'movie' | 'tv';
+
+/** A movie or show page, with its external ids. */
+export type TmdbPage<K extends TmdbPageKind> = (K extends 'movie' ? TmdbMovie : TmdbTvShow) & {
+  external_ids: TmdbExternalIds;
+};
+
 export type TmdbEpisode = {
   id: number;
   name: string;
@@ -107,6 +114,21 @@ export class TmdbApiService {
   async getTvExternalIds(tmdbId: number): Promise<TmdbExternalIds> {
     const response = await this.client.get<TmdbExternalIds>(`/tv/${tmdbId}/external_ids`);
     return response.data;
+  }
+
+  /** Null when TMDB has no such page. */
+  async getPage<K extends TmdbPageKind>(kind: K, tmdbId: number, language: string): Promise<TmdbPage<K> | null> {
+    try {
+      const response = await this.client.get<TmdbPage<K>>(`/${kind}/${tmdbId}`, {
+        params: { language, append_to_response: 'external_ids' },
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async findByImdbId(
