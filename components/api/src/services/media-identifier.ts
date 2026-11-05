@@ -4,7 +4,7 @@ import { Logger } from '@nestjs/common';
 import { parse as parseTorrentTitle } from 'parse-torrent-title';
 import { Pool } from 'pg';
 
-import { IdentifiedMedia, MetadataSource } from '@crn-flix/contracts';
+import { IdentifiedMedia, IdentitySubmission, MediaKind, MediaMetadata, MetadataSource } from '@crn-flix/contracts';
 
 import { MediasRepository, MediaType } from '@/services/database/medias';
 import { RequestsRepository, RequestStatus } from '@/services/database/requests';
@@ -28,6 +28,25 @@ export type IdentificationResult = {
   episodeNumberEnd: number | null;
   mediaRequestId: string;
 };
+
+/** A media an admin designated, with what the metadata source says about it. */
+export type DesignatedMedia = { media: IdentifiedMedia; metadata: MediaMetadata };
+
+/** `reason` says where it is stuck and what to give next. */
+export type SubmissionResolution = { ok: true; designated: DesignatedMedia } | { ok: false; reason: string };
+
+const refused = (reason: string): SubmissionResolution => ({ ok: false, reason });
+
+function designate(imdbId: string, kind: MediaKind, metadata: MediaMetadata): SubmissionResolution {
+  const title = metadata.title ?? metadata.originalTitle ?? metadata.frenchTitle ?? imdbId;
+  return {
+    ok: true,
+    designated: {
+      media: { imdbId, kind, title, originalTitle: metadata.originalTitle, year: metadata.year },
+      metadata,
+    },
+  };
+}
 
 export class MediaIdentifierService {
   private static readonly logger = new Logger(MediaIdentifierService.name);
@@ -72,28 +91,64 @@ export class MediaIdentifierService {
     imdbId: string,
     downloadJobId: string,
   ): Promise<IdentificationResult | null> {
-    const parsed = this.parseFilename(filePath);
-    MediaIdentifierService.logger.log(`Manual identification for "${path.basename(filePath)}" with IMDb ID ${imdbId}`);
-
-    const identification = await this.identifyImdbId(imdbId);
-    if (!identification) {
-      MediaIdentifierService.logger.warn(`No ${this.metadata.name} result for IMDb ID: ${imdbId}`);
+    const resolution = await this.resolveSubmission({ imdbId, reference: null });
+    if (!resolution.ok) {
+      MediaIdentifierService.logger.warn(`IMDb ${imdbId} not resolved: ${resolution.reason}`);
       return null;
     }
-    MediaIdentifierService.logger.log(
-      `Resolved IMDb ${imdbId} → "${identification.title}" (${identification.year}) [${identification.kind}]`,
-    );
-    return this.toResult(identification, parsed, downloadJobId);
+    return this.identifyAs(filePath, resolution.designated, downloadJobId);
   }
 
-  /** What an admin-given IMDb id is: a movie or a show, with its title and year. */
-  async identifyImdbId(imdbId: string): Promise<IdentifiedMedia | null> {
-    const described = await this.metadata.describe(imdbId);
-    const title = described.title ?? described.originalTitle;
-    if (!described.kind || !title) {
-      return null;
+  async identifyAs(
+    filePath: string,
+    designated: DesignatedMedia,
+    downloadJobId: string,
+  ): Promise<IdentificationResult> {
+    const { media } = designated;
+    MediaIdentifierService.logger.log(
+      `Identified "${path.basename(filePath)}" as IMDb ${media.imdbId} → "${media.title}" (${media.year}) [${media.kind}]`,
+    );
+    return this.toResult(media, this.parseFilename(filePath), downloadJobId, designated.metadata);
+  }
+
+  /**
+   * What an admin designated, read from the metadata source only — never guessed. An IMDb id
+   * alone needs the source to link it to a page; a page reference alone needs the page to
+   * link an IMDb id; both together pin the page to that id (unless it links another one).
+   */
+  async resolveSubmission({ imdbId, reference }: IdentitySubmission): Promise<SubmissionResolution> {
+    if (reference) {
+      return this.resolveReference(reference, imdbId);
     }
-    return { imdbId, kind: described.kind, title, originalTitle: described.originalTitle, year: described.year };
+    if (!imdbId) {
+      return refused('Ni IMDb ID ni fiche fournis');
+    }
+    const metadata = await this.metadata.describe(imdbId);
+    if (!metadata.kind) {
+      return refused(
+        `${this.sourceLabel} ne connaît pas ${imdbId} (aucune fiche liée) : répondre avec l'URL de la fiche ${this.sourceLabel}`,
+      );
+    }
+    return designate(imdbId, metadata.kind, metadata);
+  }
+
+  private async resolveReference(reference: string, imdbId: string | null): Promise<SubmissionResolution> {
+    const page = await this.metadata.describeReference(reference);
+    if (!page) {
+      return refused(`Fiche ${this.sourceLabel} ${reference} introuvable`);
+    }
+    if (imdbId && page.imdbId && page.imdbId !== imdbId) {
+      return refused(`La fiche ${page.pageUrl} est liée à ${page.imdbId}, pas à ${imdbId}`);
+    }
+    const resolvedImdbId = imdbId ?? page.imdbId;
+    if (!resolvedImdbId) {
+      return refused(`La fiche ${page.pageUrl} n'a pas d'IMDb ID : répondre avec l'IMDb ID (tt…) ou l'URL IMDb`);
+    }
+    return designate(resolvedImdbId, page.kind, page);
+  }
+
+  private get sourceLabel(): string {
+    return this.metadata.name.toUpperCase();
   }
 
   async identifyFromParsed(parsed: ParsedMedia): Promise<IdentifiedMedia | null> {
@@ -140,6 +195,7 @@ export class MediaIdentifierService {
     identification: IdentifiedMedia,
     parsed: ParsedMedia,
     downloadJobId: string,
+    metadata?: MediaMetadata,
   ): Promise<IdentificationResult> {
     const seasonNumber = parsed.season ?? null;
     const episodeNumber = parsed.episode ?? null;
@@ -151,7 +207,13 @@ export class MediaIdentifierService {
       seasonNumber,
       episodeNumber,
       episodeNumberEnd: null,
-      mediaRequestId: await this.ensureMediaRequest(identification, seasonNumber, episodeNumber, downloadJobId),
+      mediaRequestId: await this.ensureMediaRequest(
+        identification,
+        seasonNumber,
+        episodeNumber,
+        downloadJobId,
+        metadata,
+      ),
     };
   }
 
@@ -160,6 +222,7 @@ export class MediaIdentifierService {
     seasonNumber: number | null,
     episodeNumber: number | null,
     downloadJobId: string,
+    metadata?: MediaMetadata,
   ): Promise<string> {
     const existingRequestId = await this.findMatchingRequest(identification.imdbId, seasonNumber, episodeNumber);
 
@@ -170,7 +233,7 @@ export class MediaIdentifierService {
     }
 
     // Identification may match a localized title; the database keeps the canonical (English) one.
-    const titles = await this.metadata.describe(identification.imdbId);
+    const titles = metadata ?? (await this.metadata.describe(identification.imdbId));
     const media = await this.medias.upsert({
       imdbId: identification.imdbId,
       type: identification.kind === 'movie' ? MediaType.Movie : MediaType.Episode,

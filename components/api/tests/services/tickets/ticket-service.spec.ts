@@ -76,7 +76,11 @@ describe('TicketService', () => {
   describe('applyOperation', () => {
     it('rejects operations on a closed ticket without reopening it', async () => {
       const stubs = buildStubs(buildTicket({ status: TicketStatus.Resolved }));
-      const outcome = await buildService(stubs).applyOperation('t1', { kind: 'submitImdb', imdbId: 'tt1' }, 'a');
+      const outcome = await buildService(stubs).applyOperation(
+        't1',
+        { kind: 'submitIdentity', imdbId: 'tt1', reference: null },
+        'a',
+      );
 
       expect(outcome.status).toBe('failed');
       expect(stubs.close).not.toHaveBeenCalled();
@@ -96,7 +100,11 @@ describe('TicketService', () => {
       const service = buildService(stubs);
       service.registerHandler(TicketCategory.MissingImdb, async () => ({ status: 'resolved', message: 'ok' }));
 
-      const outcome = await service.applyOperation('t1', { kind: 'submitImdb', imdbId: 'tt1' }, 'discord:u1');
+      const outcome = await service.applyOperation(
+        't1',
+        { kind: 'submitIdentity', imdbId: 'tt1', reference: null },
+        'discord:u1',
+      );
 
       expect(outcome.status).toBe('resolved');
       expect(stubs.incrementAttempts).toHaveBeenCalledWith('t1');
@@ -113,7 +121,11 @@ describe('TicketService', () => {
         payloadPatch: { lastError: 'boom' },
       }));
 
-      const outcome = await service.applyOperation('t1', { kind: 'submitImdb', imdbId: 'tt1' }, 'a');
+      const outcome = await service.applyOperation(
+        't1',
+        { kind: 'submitIdentity', imdbId: 'tt1', reference: null },
+        'a',
+      );
 
       expect(outcome.status).toBe('failed');
       expect(stubs.close).not.toHaveBeenCalled();
@@ -128,7 +140,11 @@ describe('TicketService', () => {
         throw new Error('kaput');
       });
 
-      const outcome = await service.applyOperation('t1', { kind: 'submitImdb', imdbId: 'tt1' }, 'a');
+      const outcome = await service.applyOperation(
+        't1',
+        { kind: 'submitIdentity', imdbId: 'tt1', reference: null },
+        'a',
+      );
       expect(outcome).toEqual<OperationOutcome>({
         status: 'failed',
         message: 'kaput',

@@ -30,6 +30,7 @@ function buildStubs(job: DownloadJobEntity, ticket: { category: TicketCategory; 
     identification: {
       identifyFromRequest: jest.fn().mockResolvedValue({ imdbId: 'tt1', title: 'Movie', mediaType: 'movie' }),
       identifyWithImdbId: jest.fn(),
+      identifyAs: jest.fn(),
       identify: jest.fn(),
     },
     placement: { move: jest.fn().mockResolvedValue(undefined) },
@@ -121,10 +122,14 @@ describe('PostDownloadPipeline season packs', () => {
 
   it('resumes a retry where the last attempt stopped, skipping what was already placed', async () => {
     const stubs = buildStubs(seasonJob(DownloadJobStatus.Failed), null);
-    stubs.identification.identifyWithImdbId.mockResolvedValue(identity);
+    stubs.identification.identifyAs.mockResolvedValue(identity);
     const stillDownloaded = async (filePath: string) => filePath !== episode(1);
+    const designated = {
+      media: { imdbId: 'tt5103758', kind: 'show' as const, title: 'Show', originalTitle: null, year: 2016 },
+      metadata: {} as never,
+    };
 
-    await buildPipeline(stubs, stillDownloaded).retryWithImdbId('j1', 'tt5103758');
+    await buildPipeline(stubs, stillDownloaded).retryAs('j1', designated);
 
     expect(stubs.placement.move.mock.calls.map(([file]) => file)).toEqual([episode(2), episode(3)]);
     expect(stubs.downloadJobs.updateStatus).toHaveBeenLastCalledWith('j1', DownloadJobStatus.Completed);
