@@ -59,7 +59,7 @@ export class MediaFactsRepository {
       () =>
         this.pool.query<{ imdb_id: string }>(
           `SELECT m.imdb_id
-           FROM (SELECT DISTINCT imdb_id FROM medias) m
+           FROM (SELECT DISTINCT imdb_id FROM medias WHERE imdb_id <> '') m
            LEFT JOIN media_facts f ON f.imdb_id = m.imdb_id
            WHERE f.imdb_id IS NULL
               OR f.schema_version <> $1
