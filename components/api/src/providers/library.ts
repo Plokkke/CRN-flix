@@ -14,6 +14,7 @@ import { LibraryPaths } from '@/services/library/paths';
 import { PolicyShelfResolver } from '@/services/library/resolver';
 import { LibraryShelves } from '@/services/library/shelves';
 import { PlayerAccountsService } from '@/services/player-accounts';
+import { PolicyAnomalies } from '@/services/policy/anomaly';
 import { PolicyService } from '@/services/policy/policy';
 
 export const libraryProviders: Provider[] = [
@@ -41,14 +42,26 @@ export const libraryProviders: Provider[] = [
   },
   {
     provide: LibraryShelves,
-    inject: [LibraryPaths, LibraryTitlesRepository, PolicyShelfResolver, PLAYER, PlayerAccountsService],
+    inject: [
+      LibraryPaths,
+      LibraryTitlesRepository,
+      PolicyShelfResolver,
+      PLAYER,
+      PlayerAccountsService,
+      PolicyAnomalies,
+    ],
     useFactory: (
       paths: LibraryPaths,
       titles: LibraryTitlesRepository,
       resolver: PolicyShelfResolver,
       player: Player,
       accounts: PlayerAccountsService,
-    ): LibraryShelves => new LibraryShelves(paths, titles, resolver, player, () => accounts.applyAll()),
+      anomalies: PolicyAnomalies,
+    ): LibraryShelves => {
+      const shelves = new LibraryShelves(paths, titles, resolver, player, () => accounts.applyAll(), anomalies);
+      anomalies.onDecision(() => shelves.reconcile());
+      return shelves;
+    },
   },
   {
     provide: ManualDestinations,

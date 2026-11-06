@@ -24,6 +24,8 @@ export enum TicketCategory {
   IntegrationFailure = 'integration-failure',
   /** A subscriber contests a policy refusal or asks for an exemption. */
   PolicyAppeal = 'policy-appeal',
+  /** A title on a shared shelf now breaks a rule for everyone; it stays there until an admin decides. */
+  PolicyAnomaly = 'policy-anomaly',
 }
 
 export enum TicketStatus {
@@ -82,6 +84,13 @@ export type TicketPayloadMap = {
     motivation: string;
     refusals: { ruleId: string | null; ruleName: string; summary: string }[];
   };
+  [TicketCategory.PolicyAnomaly]: {
+    imdbId: string;
+    title: string;
+    /** Where the title is kept meanwhile. */
+    shelf: string;
+    refusals: { ruleId: string | null; ruleName: string; summary: string }[];
+  };
 };
 
 export type TicketEntity<C extends TicketCategory = TicketCategory> = {
@@ -127,6 +136,7 @@ export const OPERATIONS_BY_CATEGORY: Record<TicketCategory, TicketOperationKind[
   [TicketCategory.MissingImdb]: ['submitIdentity', 'resolveManually'],
   [TicketCategory.IntegrationFailure]: ['resolveManually'],
   [TicketCategory.PolicyAppeal]: ['grantExemption', 'excludeTitle', 'reject', 'reply'],
+  [TicketCategory.PolicyAnomaly]: ['excludeTitle', 'unpublish'],
 };
 
 export type OperationOutcome =

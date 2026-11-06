@@ -10,7 +10,7 @@ import { titlesPolicy } from '@crn-flix/policy-titles';
 
 import { Config } from '@/app.module';
 import { ContextService } from '@/services/context';
-import { ShelfOverridesRepository } from '@/services/database/library';
+import { LibraryTitlesRepository, ShelfOverridesRepository } from '@/services/database/library';
 import { MediasRepository } from '@/services/database/medias';
 import {
   PolicyAssessmentsRepository,
@@ -18,11 +18,13 @@ import {
   PolicyRefusalsRepository,
   PolicyRulesRepository,
 } from '@/services/database/policy';
+import { TicketsRepository } from '@/services/database/tickets';
 import { UsersRepository } from '@/services/database/users';
 import { LibraryShelves } from '@/services/library/shelves';
 import { MediaFactsService } from '@/services/media-facts';
 import { AllUserMessaging } from '@/services/messaging/user/all';
 import { PlannerService } from '@/services/planner/planner';
+import { PolicyAnomalies } from '@/services/policy/anomaly';
 import { PolicyAppealService } from '@/services/policy/appeal';
 import { PolicyGate } from '@/services/policy/gate';
 import { PolicyService } from '@/services/policy/policy';
@@ -98,6 +100,28 @@ export const policyProviders: Provider[] = [
       context: ContextService,
     ): PolicyRefusalNotices =>
       new PolicyRefusalNotices(policy, refusals, users, medias, messaging, (imdbId) => appealUrl(context, imdbId)),
+  },
+  {
+    provide: PolicyAnomalies,
+    inject: [
+      PolicyService,
+      TicketService,
+      TicketsRepository,
+      ShelfOverridesRepository,
+      PolicyExemptionsRepository,
+      MediasRepository,
+      LibraryTitlesRepository,
+    ],
+    useFactory: (
+      policy: PolicyService,
+      tickets: TicketService,
+      ticketsRepository: TicketsRepository,
+      overrides: ShelfOverridesRepository,
+      exemptions: PolicyExemptionsRepository,
+      medias: MediasRepository,
+      titles: LibraryTitlesRepository,
+    ): PolicyAnomalies =>
+      new PolicyAnomalies(policy, tickets, ticketsRepository, overrides, exemptions, medias, titles),
   },
   {
     provide: PolicyAppealService,

@@ -16,6 +16,14 @@ export type ShelfResolver = {
   shelvesOf(titles: LibraryTitle[]): Promise<(imdbId: string) => TitleShelves>;
 };
 
+/** Keeps titles the rules now restrict on their shared shelf until an admin decides (retroactivity). */
+export type ShelfGuard = {
+  sweep(): Promise<void>;
+  freeze(leaving: { imdbId: string; shelf: string }[]): Promise<Set<string>>;
+};
+
+const NO_GUARD: ShelfGuard = { sweep: async () => {}, freeze: async () => new Set() };
+
 /** Until the policy places titles, everything is on the standard shelf, as before the store. */
 export const STANDARD_ONLY: ShelfResolver = {
   sharedShelves: [STANDARD_SHELF],
@@ -51,6 +59,7 @@ export class LibraryShelves {
     private readonly resolver: ShelfResolver,
     private readonly player: Player,
     private readonly afterChange: () => Promise<void> = async () => {},
+    private readonly guard: ShelfGuard = NO_GUARD,
     private readonly fs: Fs = fsPromises,
   ) {}
 
@@ -76,11 +85,16 @@ export class LibraryShelves {
     } while (this.rerun);
   }
 
-  private async pass(): Promise<void> {
+  /** A title frozen by the guard changes where it goes: the pass starts over once, with it kept. */
+  private async pass(mayFreeze = true): Promise<void> {
+    await this.guard.sweep();
     const titles = await this.presentTitles();
     const shelvesOf = await this.resolver.shelvesOf(titles);
     const desired = desiredLinks(titles, shelvesOf, this.paths);
     const { create, remove } = diffLinks(desired, await this.actualLinks());
+    if (mayFreeze && (await this.freezeLeaving(titles, remove)).size > 0) {
+      return this.pass(false);
+    }
     if (create.length === 0 && remove.length === 0) {
       return;
     }
@@ -95,6 +109,20 @@ export class LibraryShelves {
     await this.afterChange().catch((error: unknown) => {
       LibraryShelves.logger.warn(`After shelving: ${describeError(error)}`);
     });
+  }
+
+  /** The titles about to leave a shared shelf, handed to the guard. */
+  private async freezeLeaving(titles: LibraryTitle[], remove: Link[]): Promise<Set<string>> {
+    const sharedLinks = new Map(
+      titles.flatMap((title) =>
+        this.resolver.sharedShelves.map(
+          (shelf) =>
+            [path.join(this.paths.shelf(shelf, title.section), title.folder), { imdbId: title.imdbId, shelf }] as const,
+        ),
+      ),
+    );
+    const leaving = remove.flatMap((link) => sharedLinks.get(link.path) ?? []);
+    return leaving.length > 0 ? this.guard.freeze(leaving) : new Set();
   }
 
   /** Titles whose store folder exists: a row written just before a crash must not become a dangling link. */
