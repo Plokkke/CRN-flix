@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 
-import { Exemption, PolicyRuleRecord, RuleOutcome } from '@crn-flix/policy';
+import { Exemption, PolicyRuleRecord, Refusal, RuleOutcome } from '@crn-flix/policy';
 
 import { withDbRetry } from '@/helpers/db-retry';
 
@@ -219,5 +219,90 @@ export class PolicyAssessmentsRepository {
       { label: 'policyAssessments.listStale' },
     );
     return result.rows.map((row) => row.imdb_id);
+  }
+}
+
+export type PolicyRefusalEntity = {
+  userId: string;
+  imdbId: string;
+  refusals: Refusal[];
+  refusedAt: Date;
+  notifiedAt: Date | null;
+};
+
+type PolicyRefusalRecord = {
+  user_id: string;
+  imdb_id: string;
+  refusals: Refusal[];
+  refused_at: Date;
+  notified_at: Date | null;
+};
+
+const fromRefusalRecord = (record: PolicyRefusalRecord): PolicyRefusalEntity => ({
+  userId: record.user_id,
+  imdbId: record.imdb_id,
+  refusals: record.refusals,
+  refusedAt: record.refused_at,
+  notifiedAt: record.notified_at,
+});
+
+/** Titles refused to requesters: what to tell them, and whether they were told. */
+export class PolicyRefusalsRepository {
+  constructor(private readonly pool: Pool) {}
+
+  /** A new or lifted refusal is told again; a holding one only gets its wording refreshed. */
+  async record(userId: string, imdbId: string, refusals: Refusal[]): Promise<void> {
+    await withDbRetry(
+      () =>
+        this.pool.query(
+          `INSERT INTO policy_refusals (user_id, imdb_id, refusals) VALUES ($1, $2, $3)
+           ON CONFLICT (user_id, imdb_id) DO UPDATE SET
+             refusals = EXCLUDED.refusals,
+             refused_at = CASE WHEN policy_refusals.lifted_at IS NULL THEN policy_refusals.refused_at ELSE NOW() END,
+             notified_at = CASE WHEN policy_refusals.lifted_at IS NULL THEN policy_refusals.notified_at ELSE NULL END,
+             lifted_at = NULL
+           WHERE policy_refusals.lifted_at IS NOT NULL OR policy_refusals.refusals IS DISTINCT FROM EXCLUDED.refusals`,
+          [userId, imdbId, JSON.stringify(refusals)],
+        ),
+      { label: 'policyRefusals.record' },
+    );
+  }
+
+  async lift(userId: string, imdbId: string): Promise<void> {
+    await withDbRetry(
+      () =>
+        this.pool.query(
+          `UPDATE policy_refusals SET lifted_at = NOW() WHERE user_id = $1 AND imdb_id = $2 AND lifted_at IS NULL`,
+          [userId, imdbId],
+        ),
+      { label: 'policyRefusals.lift' },
+    );
+  }
+
+  /** Holding refusals nobody was told about yet, oldest first. */
+  async listToNotify(limit: number): Promise<PolicyRefusalEntity[]> {
+    const result = await this.pool.query<PolicyRefusalRecord>(
+      `SELECT user_id, imdb_id, refusals, refused_at, notified_at FROM policy_refusals
+       WHERE notified_at IS NULL AND lifted_at IS NULL ORDER BY refused_at LIMIT $1`,
+      [limit],
+    );
+    return result.rows.map(fromRefusalRecord);
+  }
+
+  async markNotified(userId: string, imdbIds: string[]): Promise<void> {
+    await this.pool.query(
+      `UPDATE policy_refusals SET notified_at = NOW() WHERE user_id = $1 AND imdb_id = ANY($2) AND lifted_at IS NULL`,
+      [userId, imdbIds],
+    );
+  }
+
+  /** What still holds against one user, newest first. */
+  async listHolding(userId: string): Promise<PolicyRefusalEntity[]> {
+    const result = await this.pool.query<PolicyRefusalRecord>(
+      `SELECT user_id, imdb_id, refusals, refused_at, notified_at FROM policy_refusals
+       WHERE user_id = $1 AND lifted_at IS NULL ORDER BY refused_at DESC`,
+      [userId],
+    );
+    return result.rows.map(fromRefusalRecord);
   }
 }

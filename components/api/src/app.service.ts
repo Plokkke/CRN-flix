@@ -21,6 +21,7 @@ import {
 import { PlannedDownloadEvents, PlannedDownloadsRepository } from '@/services/database/planned-downloads';
 import {
   RequestCreatedEvent,
+  RequestEntity,
   RequestEvents,
   RequestsRepository,
   RequestStatus,
@@ -37,7 +38,9 @@ import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/
 import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { PlannerService } from '@/services/planner/planner';
 import { PlayerSyncService } from '@/services/player-sync';
+import { PolicyGate } from '@/services/policy/gate';
 import { PolicyService } from '@/services/policy/policy';
+import { PolicyRefusalNotices } from '@/services/policy/refusal-notices';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { downloadActionResolution, isIdentificationError } from '@/services/tickets/auto-resolve';
 import { TICKET_ID_METADATA_KEY, TicketCategory } from '@/services/tickets/model';
@@ -75,6 +78,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly mediaTitles: MediaTitlesService,
     private readonly mediaFacts: MediaFactsService,
     private readonly policy: PolicyService,
+    private readonly policyGate: PolicyGate,
+    private readonly policyRefusalNotices: PolicyRefusalNotices,
     private readonly redelivery: NotificationRedeliveryService,
     private readonly scheduledAnnouncements: ScheduledAnnouncementsService,
   ) {}
@@ -95,6 +100,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('media-facts-job', '40 * * * *', () => this.mediaFacts.refresh());
       if (this.policy.mode !== 'off') {
         this.registerCronJob('policy-assessment-job', '*/10 * * * *', () => this.policy.refresh());
+        this.registerCronJob('policy-refusal-notices-job', '*/5 * * * *', () => this.policyRefusalNotices.notify());
       }
       this.registerCronJob('notification-redelivery-job', '*/5 * * * *', () => this.redelivery.redeliver());
       this.registerCronJob('scheduled-announcements-job', '* * * * *', () => this.scheduledAnnouncements.sendDue());
@@ -143,6 +149,16 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** A title the policies refuse to a requester is never announced to them as available. */
+  private async notifiableUserIds(request: RequestEntity): Promise<string[]> {
+    const userIds = request.userRequests?.map((user) => user.userId) ?? [];
+    if (request.status !== RequestStatus.Fulfilled || !request.media?.imdbId) {
+      return userIds;
+    }
+    const admitted = await this.policyGate.admittedUserIds(request.media.imdbId, userIds);
+    return userIds.filter((userId) => admitted.has(userId));
+  }
+
   private listenRequestsEvents(): Listener<RequestEvents> {
     return this.requestsRepository.listen({
       created: (event: RequestCreatedEvent) =>
@@ -171,7 +187,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          const userIds = request.userRequests?.map((user) => user.userId) ?? [];
+          const userIds = await this.notifiableUserIds(request);
           AppService.logger.log(`Notifying ${userIds.length} users for request ${event.requestId}`);
           for (const userId of userIds) {
             const user = await this.usersRepository.get(userId);
@@ -205,6 +221,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             AppService.logger.debug(
               `Skipping user notifications for request ${event.requestId} (status ${request.status} is transient)`,
             );
+            return;
+          }
+
+          if (!(await this.notifiableUserIds(request)).includes(event.userId)) {
             return;
           }
 

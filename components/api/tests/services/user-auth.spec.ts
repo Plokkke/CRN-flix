@@ -11,6 +11,7 @@ const USER: UserEntity = {
   jellyfinId: 'jf-1',
   maxStreams: 1,
   catalogRelinkRequestedAt: null,
+  profile: 'adult',
   messagingKey: 'email',
   messagingId: 'alice@example.com',
   status: UserStatus.Active,

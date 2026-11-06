@@ -1,6 +1,13 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 
-import { LoginChallenge, Recipient, RequestNotice, ServiceNotice, UserChannel } from '@crn-flix/contracts';
+import {
+  LoginChallenge,
+  PolicyRefusal,
+  Recipient,
+  RequestNotice,
+  ServiceNotice,
+  UserChannel,
+} from '@crn-flix/contracts';
 
 import { ContextService } from '@/services/context';
 import { displayTitle } from '@/services/database/medias';
@@ -187,6 +194,13 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
         catalogName,
         linkUrl: this.context.getTraktLinkUrl(ctxt.userId),
       }),
+    );
+  }
+
+  /** Tells the user which titles the policies refuse them and why; throws when not delivered. */
+  async policyRefused(ctxt: UserMessagingCtxt, userName: string, refusals: PolicyRefusal[]): Promise<void> {
+    await this.deliver(ctxt, 'policy-refusal', `policy refusal of ${refusals.length} title(s)`, (channel) =>
+      channel.policyRefused(recipientOf(ctxt, userName), refusals),
     );
   }
 
