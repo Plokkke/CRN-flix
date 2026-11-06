@@ -39,6 +39,8 @@ function parseOperation(
 ): TicketOperation | null {
   switch (op) {
     case 'approve':
+    case 'approveAdult':
+    case 'approveKids':
     case 'reject':
     case 'restore':
       return { kind: op };

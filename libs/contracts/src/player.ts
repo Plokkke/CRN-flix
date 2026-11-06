@@ -1,3 +1,4 @@
+import { LibrarySection } from './layout';
 import { MediaItem } from './media';
 
 /** A media the player can serve right now; for an episode, `imdbId` is the show's. */
@@ -11,9 +12,24 @@ export class AccountNameTakenError extends Error {
   }
 }
 
-/** What the engine decides for a viewing account; `maxStreams` 0 means unlimited, absent leaves the account's own. */
+/** A library the engine wants served: one folder (as the player sees it), one kind of content. */
+export type PlayerLibrary = {
+  name: string;
+  section: LibrarySection;
+  path: string;
+};
+
+/** What the engine decides for a viewing account; every absent field leaves the account's own. */
 export type AccountPolicy = {
+  /** 0 means unlimited. */
   maxStreams?: number;
+  /**
+   * The libraries the account sees, by folder. Only libraries under `managedRoot` are the
+   * engine's: the others keep being visible to everyone.
+   */
+  libraries?: { paths: string[]; managedRoot: string };
+  /** Highest parental rating the account may play, on the player's scale; null lifts the limit. */
+  maxParentalRating?: number | null;
 };
 
 export type ShowcaseKind = 'movie' | 'show' | 'episode';
@@ -36,6 +52,8 @@ export interface Player {
   /** Every asset whose media identity is known (imdb id resolved). */
   listAvailable(): Promise<PlayerAsset[]>;
   refreshLibrary(): Promise<void>;
+  /** Creates the libraries the player does not serve yet (matched by folder); returns how many were created. */
+  ensureLibraries(libraries: PlayerLibrary[]): Promise<number>;
   /**
    * Gives the user an account with this password: resets it when `accountId` is known,
    * otherwise adopts an account of the same name or creates one. Returns the account id.

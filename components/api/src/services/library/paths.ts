@@ -14,6 +14,8 @@ export const libraryConfigSchema = z.object({
   seriesFolder: z.string(),
   /** Where the player sees `mediasPath`. */
   playerRoot: z.string(),
+  /** The player's parental limit on kids accounts (a safety net under the kids shelf's rules). */
+  kidsMaxParentalRating: z.number().int().min(0),
 });
 
 export type LibraryConfig = z.infer<typeof libraryConfigSchema>;

@@ -39,6 +39,7 @@ describe('LibraryShelves', () => {
       moviesFolder: 'movies',
       seriesFolder: 'series',
       playerRoot: '/medias',
+      kidsMaxParentalRating: 10,
     });
     player = { refreshLibrary: jest.fn().mockResolvedValue(undefined) };
   });

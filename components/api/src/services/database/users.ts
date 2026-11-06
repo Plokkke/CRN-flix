@@ -128,6 +128,10 @@ export class UsersRepository {
     await this.pool.query(`UPDATE users SET max_streams = $2 WHERE id = $1`, [userId, maxStreams]);
   }
 
+  async setProfile(userId: string, profile: Profile): Promise<void> {
+    await this.pool.query(`UPDATE users SET profile = $2, updated_at = NOW() WHERE id = $1`, [userId, profile]);
+  }
+
   async setCatalogRelinkRequestedAt(userId: string, requestedAt: Date | null): Promise<void> {
     await this.pool.query(`UPDATE users SET catalog_relink_requested_at = $2 WHERE id = $1`, [userId, requestedAt]);
   }

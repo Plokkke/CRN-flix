@@ -6,10 +6,13 @@ import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filte
 import { AdminSessionGuard } from '@/guards/admin-session.guard';
 import { ContextService } from '@/services/context';
 import { UsersRepository, UserStatus } from '@/services/database/users';
+import { LibraryShelves } from '@/services/library/shelves';
 import { PlayerAccountsService } from '@/services/player-accounts';
-import { adminUsersTemplate } from '@/web/templates/admin-users';
+import { PROFILES } from '@/services/policy/shelves';
+import { adminUsersTemplate, PROFILE_LABELS } from '@/web/templates/admin-users';
 
 const maxStreamsFormSchema = z.object({ maxStreams: z.coerce.number().int().min(0) });
+const profileFormSchema = z.object({ profile: z.enum(PROFILES) });
 
 @Controller('admin/users')
 @UseGuards(AdminSessionGuard)
@@ -19,6 +22,7 @@ export class UsersAdminController {
     private readonly contextService: ContextService,
     private readonly usersRepository: UsersRepository,
     private readonly playerAccounts: PlayerAccountsService,
+    private readonly shelves: LibraryShelves,
   ) {}
 
   @Get()
@@ -45,5 +49,25 @@ export class UsersAdminController {
       .then(() => 'appliqué')
       .catch(() => 'enregistré, appliqué au prochain passage');
     res.redirect(`/admin/users?message=${encodeURIComponent(`${user.name} : ${maxStreams} flux (${outcome})`)}`);
+  }
+
+  /** The profile decides the shelves the account sees; the planner applies it to requests on its next pass. */
+  @Post(':id/profile')
+  async setProfile(@Param('id') id: string, @Body() body: unknown, @Res() res: Response): Promise<void> {
+    const { profile } = profileFormSchema.parse(body);
+    const user = await this.usersRepository.get(id);
+    if (!user) {
+      res.redirect('/admin/users?message=Utilisateur introuvable');
+      return;
+    }
+    await this.usersRepository.setProfile(id, profile);
+    await this.shelves.reconcile().catch(() => undefined);
+    const outcome = await this.playerAccounts
+      .apply({ ...user, profile })
+      .then(() => 'appliqué')
+      .catch(() => 'enregistré, appliqué au prochain passage');
+    res.redirect(
+      `/admin/users?message=${encodeURIComponent(`${user.name} : profil ${PROFILE_LABELS[profile]} (${outcome})`)}`,
+    );
   }
 }
