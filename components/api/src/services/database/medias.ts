@@ -161,13 +161,18 @@ export class MediasRepository {
     );
   }
 
-  /** The titles of an imdb id (the same on every row of a show), null when no row carries it. */
-  async titlesOf(imdbId: string): Promise<MediaTitles | null> {
+  /** The first row of an imdb id (the movie, or a show's first episode). */
+  async firstOf(imdbId: string): Promise<MediaEntity | null> {
     const { rows } = await this.pool.query<MediaRecord>(
       `SELECT * FROM medias WHERE imdb_id = $1 ORDER BY season_number NULLS FIRST, episode_number NULLS FIRST LIMIT 1`,
       [imdbId],
     );
-    const media = rows[0] && fromMediaRecord(rows[0]);
+    return rows[0] ? fromMediaRecord(rows[0]) : null;
+  }
+
+  /** The titles of an imdb id (the same on every row of a show), null when no row carries it. */
+  async titlesOf(imdbId: string): Promise<MediaTitles | null> {
+    const media = await this.firstOf(imdbId);
     return media
       ? {
           title: media.title,

@@ -9,12 +9,14 @@ import {
   subscriberSourcing,
   SubscriberSourcing,
 } from '@/services/admin/requests-view';
+import { ExemptionStatus } from '@/services/database/policy';
 import { RequestStatus } from '@/services/database/requests';
 import { episodeRangesBySeason, formatSeasonRanges } from '@/services/request-groups';
 import { actionTitle } from '@/services/tickets/presenter';
 
 import { DASHBOARD_LAYOUT_CSS, dashboardJs, executionDetailBlock, executionIndicator } from './dashboard-shared';
 import { badge, BADGE_CSS, episodeCode, imdbLink, STATUS_LABELS_FR, statusBadge, traktLink } from './request-widgets';
+import { APPEAL_STATUS_LABELS } from './user-appeal';
 
 /** What the subscriber is waiting for. */
 export type UserSpaceTab = 'pending' | 'available' | 'rejected';
@@ -32,6 +34,8 @@ export interface UserSpaceParams {
   serviceName: string;
   userName: string;
   dashboard: Dashboard;
+  /** Titles the policies refuse to the subscriber, with the state of their appeal. */
+  refused: Map<string, ExemptionStatus | null>;
   activeTab: UserSpaceTab;
   basePath: string;
   mediaServerUrl: string;
@@ -59,9 +63,20 @@ const veiled = (html: string, deferred: boolean): string =>
 
 const isDeferred = (episode: EpisodeView): boolean => episode.missing && episode.state?.urgency === PlanLabel.Deferred;
 
-const tabsOf = (row: RequestRowView): UserSpaceTab[] => [
-  ...new Set(row.episodes.map((e) => TAB_BY_STATUS[e.requestStatus])),
-];
+const tabsOf = (row: RequestRowView, refused: UserSpaceParams['refused']): UserSpaceTab[] =>
+  refused.has(row.group.imdbId) ? ['rejected'] : [...new Set(row.episodes.map((e) => TAB_BY_STATUS[e.requestStatus]))];
+
+/** A refused title: the reason and the appeal are one click away. */
+const refusedCell = (row: RequestRowView, status: ExemptionStatus | null, basePath: string): string => {
+  const appealUrl = `${basePath}/policy/${encodeURIComponent(row.group.imdbId)}/appeal`;
+  return [
+    statusBadge(RequestStatus.Rejected, 'Refusé · politique'),
+    status ? `<span class="muted small">${escapeHtml(APPEAL_STATUS_LABELS[status])}</span>` : '',
+    `<a href="${escapeHtml(appealUrl)}" onclick="event.stopPropagation()">Motif et recours</a>`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+};
 
 const countBy = <K extends string>(items: K[]): Partial<Record<K, number>> =>
   items.reduce<Partial<Record<K, number>>>((acc, k) => ({ ...acc, [k]: (acc[k] ?? 0) + 1 }), {});
@@ -117,7 +132,7 @@ const fold = (row: RequestRowView): string => {
     </div>`;
 };
 
-const groupRow = (row: RequestRowView): string => {
+const groupRow = (row: RequestRowView, refused: UserSpaceParams['refused'], basePath: string): string => {
   const { group } = row;
   const isShow = group.kind === 'show';
   const year = group.year === null ? '' : ` (${group.year})`;
@@ -132,20 +147,22 @@ const groupRow = (row: RequestRowView): string => {
     ? `<tr class="fold-row hidden-row" data-parent="${row.key}"><td colspan="3">${fold(row)}</td></tr>`
     : '';
   return `
-    <tr class="group-row ${isShow ? 'expandable' : ''}" data-key="${row.key}" data-tabs="${tabsOf(row).join(' ')}" data-users=""
+    <tr class="group-row ${isShow ? 'expandable' : ''}" data-key="${row.key}" data-tabs="${tabsOf(row, refused).join(' ')}" data-users=""
         ${isShow ? `onclick="toggleRow('${row.key}')"` : ''}>
       <td class="c-title">
         <div class="group-title">${escapeHtml(group.title)}${year}</div>
         <div class="group-meta">${meta}</div>
       </td>
-      <td class="c-situation">${situationCell(row)}</td>
+      <td class="c-situation">${
+        refused.has(group.imdbId) ? refusedCell(row, refused.get(group.imdbId) ?? null, basePath) : situationCell(row)
+      }</td>
       <td class="c-download">${downloads}</td>
     </tr>
     ${foldRow}`;
 };
 
-const tabsBar = (dashboard: Dashboard, activeTab: UserSpaceTab): string => {
-  const counts = countBy(dashboard.rows.flatMap(tabsOf));
+const tabsBar = (dashboard: Dashboard, activeTab: UserSpaceTab, refused: UserSpaceParams['refused']): string => {
+  const counts = countBy(dashboard.rows.flatMap((row) => tabsOf(row, refused)));
   return `<div class="tabs">${USER_SPACE_TABS.map(
     ({ key, label }) =>
       `<button type="button" class="tab ${key === activeTab ? 'active' : ''}" data-tab="${key}" onclick="selectTab('${key}')">${label} <b>${counts[key] ?? 0}</b></button>`,
@@ -187,7 +204,7 @@ const ADDITIONAL_CSS = `
 `;
 
 export const userSpaceTemplate = (params: UserSpaceParams): string => {
-  const { serviceName, userName, dashboard, activeTab, basePath, mediaServerUrl, flashMessage } = params;
+  const { serviceName, userName, dashboard, refused, activeTab, basePath, mediaServerUrl, flashMessage } = params;
   const lastPass = formatAge(dashboard.lastPassAt);
 
   const content = `
@@ -199,11 +216,11 @@ export const userSpaceTemplate = (params: UserSpaceParams): string => {
       Ce qui est disponible se regarde sur <a href="${escapeHtml(mediaServerUrl)}">${escapeHtml(serviceName)}</a>.
     </p>
     <div class="banner"><span>Dernière vérification : <b>${lastPass ? escapeHtml(lastPass) : 'jamais'}</b></span></div>
-    ${tabsBar(dashboard, activeTab)}
+    ${tabsBar(dashboard, activeTab, refused)}
     <div class="table-wrapper" data-panel="rows">
       <table class="requests-table">
         <thead><tr><th>Media</th><th>État</th><th>Téléchargement</th></tr></thead>
-        <tbody>${dashboard.rows.map(groupRow).join('')}</tbody>
+        <tbody>${dashboard.rows.map((row) => groupRow(row, refused, basePath)).join('')}</tbody>
       </table>
       <p class="empty-state hidden-row" id="empty-state">Rien dans cet onglet.</p>
     </div>

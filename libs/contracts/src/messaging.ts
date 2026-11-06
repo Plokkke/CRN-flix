@@ -47,6 +47,14 @@ export type PolicyRefusal = {
   appealUrl: string | null;
 };
 
+/** What an admin answered to a subscriber's appeal of a policy refusal. */
+export type AppealAnswer = {
+  title: string;
+  /** `granted`: on their own shelf; `excluded`: the rule no longer applies to the title; `message`: no decision yet. */
+  outcome: 'granted' | 'excluded' | 'denied' | 'message';
+  message: string | null;
+};
+
 /** Fixed facts every channel words its messages with. */
 export type ServiceIdentity = {
   serviceName: string;
@@ -92,4 +100,5 @@ export interface UserChannel {
   announce(to: Recipient, notice: ServiceNotice): Promise<void>;
   catalogRelink(to: Recipient, relink: CatalogRelink): Promise<void>;
   policyRefused(to: Recipient, refusals: PolicyRefusal[]): Promise<void>;
+  appealAnswered(to: Recipient, answer: AppealAnswer): Promise<void>;
 }

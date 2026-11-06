@@ -11,6 +11,12 @@ export type TicketOperation =
   | { kind: 'approveKids' }
   | { kind: 'reject' }
   | { kind: 'restore' }
+  /** Policy appeal: the requester gets the title on their personal shelf. */
+  | { kind: 'grantExemption' }
+  /** Policy appeal: the rules no longer apply to this title, for everyone. */
+  | { kind: 'excludeTitle' }
+  /** A message to the user the ticket is about; the ticket stays open. */
+  | { kind: 'reply'; message: string }
   | { kind: 'resolveManually'; note: string };
 
 export type TicketOperationKind = TicketOperation['kind'];
@@ -21,6 +27,9 @@ export const OPERATION_LABELS: Record<TicketOperationKind, string> = {
   approveKids: 'Accepter (enfant)',
   reject: 'Rejeter',
   restore: 'Restaurer',
+  grantExemption: 'Accorder la dérogation',
+  excludeTitle: 'Exclure le titre de la règle (pour tous)',
+  reply: 'Répondre à l’abonné',
   submitIdentity: 'Identifier (IMDb / TMDB)',
   submitLink: 'Soumettre un lien',
   resolveManually: 'Marquer résolu',

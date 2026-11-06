@@ -259,6 +259,29 @@ function integrationFailureView(ticket: TicketEntity): TicketView {
   };
 }
 
+const APPEAL_KINDS = { contest: 'Contestation (la règle s’applique à tort)', exemption: 'Demande de dérogation' };
+
+function policyAppealView(ticket: TicketEntity): TicketView {
+  const payload = ticket.payload as TicketPayloadMap[TicketCategory.PolicyAppeal];
+  return {
+    title: ticket.title,
+    tone: 'warning',
+    fields: [
+      { name: 'Abonné', value: payload.userName },
+      { name: 'Titre', value: `${payload.title} (${payload.imdbId})` },
+      { name: 'Démarche', value: APPEAL_KINDS[payload.kind] },
+      { name: 'Motivation', value: payload.motivation.slice(0, 1024) },
+      ...payload.refusals.map((refusal) => ({
+        name: `Refus : ${refusal.ruleName}`,
+        value: refusal.summary.slice(0, 1024),
+      })),
+    ],
+    footer:
+      'Accorder = sa collection personnelle seulement · Exclure = la règle ne vise plus ce titre, pour tous · Répondre dans le fil',
+    operations: OPERATIONS_BY_CATEGORY[TicketCategory.PolicyAppeal],
+  };
+}
+
 export function buildTicketView(ticket: TicketEntity, context: TicketContext = {}): TicketView {
   if (ticket.status !== TicketStatus.Open) {
     return closedView(ticket);
@@ -277,6 +300,8 @@ export function buildTicketView(ticket: TicketEntity, context: TicketContext = {
       return manualDownloadView(ticket);
     case TicketCategory.MissingImdb:
       return missingImdbView(ticket);
+    case TicketCategory.PolicyAppeal:
+      return policyAppealView(ticket);
     case TicketCategory.IntegrationFailure:
       return integrationFailureView(ticket);
   }

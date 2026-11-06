@@ -29,6 +29,10 @@ export function parseMessageOperation(
     return { kind: 'submitIdentity', imdbId, reference };
   }
 
+  if (allowed.includes('reply') && content.trim()) {
+    return { kind: 'reply', message: content.trim() };
+  }
+
   return null;
 }
 

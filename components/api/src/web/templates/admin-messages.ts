@@ -16,6 +16,7 @@ const KIND_LABELS: Record<UserMessageKind, string> = {
   announce: 'Annonce',
   'catalog-relink': 'Reconnexion Trakt',
   'policy-refusal': 'Refus (politique)',
+  'appeal-answered': 'Réponse à un appel',
 };
 
 const MESSAGES_CSS = `

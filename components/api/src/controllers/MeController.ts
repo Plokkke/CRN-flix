@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Header, Inject, Post, Query, Req, Res, UseFilters, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Inject,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
+import { z } from 'zod';
 
 import { Downloader } from '@crn-flix/contracts';
 
@@ -12,11 +26,14 @@ import { executionByTrack, ExecutionView } from '@/services/admin/execution';
 import { buildDashboard, Dashboard } from '@/services/admin/requests-view';
 import { ContextService } from '@/services/context';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
+import { displayTitle, MediasRepository } from '@/services/database/medias';
 import { PlannedDownloadEntity, PlannedDownloadsRepository } from '@/services/database/planned-downloads';
 import { PlannerFindingsRepository } from '@/services/database/planner-findings';
+import { PolicyExemptionsRepository, PolicyRefusalsRepository } from '@/services/database/policy';
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestEntity, RequestsRepository } from '@/services/database/requests';
 import { UsersRepository } from '@/services/database/users';
+import { AppealSubmission, PolicyAppealService } from '@/services/policy/appeal';
 import {
   CHALLENGE_TTL_MINUTES,
   USER_LOGIN_COOKIE,
@@ -25,10 +42,24 @@ import {
   UserAuthService,
   UserCodeRequestOutcome,
 } from '@/services/user-auth';
+import { MOTIVATION_MAX_LENGTH, MOTIVATION_MIN_LENGTH, userAppealTemplate } from '@/web/templates/user-appeal';
 import { userLoginTemplate } from '@/web/templates/user-login';
 import { parseUserSpaceTab, userSpaceTemplate } from '@/web/templates/user-space';
 
 const LOGIN_PATH = `${USER_SPACE_PATH}/login`;
+
+const appealFormSchema = z.object({
+  kind: z.enum(['contest', 'exemption']),
+  motivation: z.string().trim().min(MOTIVATION_MIN_LENGTH).max(MOTIVATION_MAX_LENGTH),
+});
+
+const APPEAL_MESSAGES: Record<AppealSubmission, string> = {
+  submitted: 'Demande envoyée à l’administrateur : vous recevrez sa réponse par email.',
+  'not-refused': 'Ce titre ne vous est pas (ou plus) refusé.',
+  'already-pending': 'Une demande est déjà en cours d’examen pour ce titre.',
+};
+
+const userIdOf = (req: Request): string => (req as Request & Record<string, string>)[USER_REQUEST_KEY];
 
 const CODE_REQUEST_MESSAGES: Record<UserCodeRequestOutcome, string> = {
   sent: 'Code envoyé. Vérifiez vos emails ou vos messages privés Discord.',
@@ -61,6 +92,10 @@ export class MeController {
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly findings: PlannerFindingsRepository,
     @Inject(DOWNLOADER) private readonly downloader: Downloader,
+    private readonly policyRefusals: PolicyRefusalsRepository,
+    private readonly policyExemptions: PolicyExemptionsRepository,
+    private readonly medias: MediasRepository,
+    private readonly appeals: PolicyAppealService,
   ) {}
 
   @Get('login')
@@ -143,18 +178,78 @@ export class MeController {
   @Get()
   @Header('content-type', 'text/html')
   async getSpace(@Req() req: Request, @Query('tab') tab?: string, @Query('message') message?: string): Promise<string> {
-    const userId = (req as Request & Record<string, string>)[USER_REQUEST_KEY];
-    const [user, dashboard] = await Promise.all([this.usersRepository.get(userId), this.dashboardOf(userId)]);
+    const userId = userIdOf(req);
+    const [user, dashboard, refusals, statuses] = await Promise.all([
+      this.usersRepository.get(userId),
+      this.dashboardOf(userId),
+      this.policyRefusals.listHolding(userId),
+      this.policyExemptions.latestStatusByTitle(userId),
+    ]);
 
     return userSpaceTemplate({
       serviceName: this.contextService.name,
       userName: user?.name ?? 'abonné',
       dashboard,
+      refused: new Map(refusals.map((refusal) => [refusal.imdbId, statuses.get(refusal.imdbId) ?? null])),
       activeTab: parseUserSpaceTab(tab),
       basePath: USER_SPACE_PATH,
       mediaServerUrl: this.contextService.mediaServerUrl,
       flashMessage: message,
     });
+  }
+
+  /** Why a title is refused to the subscriber, and the form to contest it or ask for an exemption. */
+  @Get('policy/:imdbId/appeal')
+  async getAppeal(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('imdbId') imdbId: string,
+    @Query('message') message?: string,
+  ): Promise<void> {
+    const userId = userIdOf(req);
+    const refusal = await this.policyRefusals.getHolding(userId, imdbId);
+    if (!refusal) {
+      res.redirect(`${USER_SPACE_PATH}?message=${encodeURIComponent(APPEAL_MESSAGES['not-refused'])}`);
+      return;
+    }
+    const [media, statuses] = await Promise.all([
+      this.medias.firstOf(imdbId),
+      this.policyExemptions.latestStatusByTitle(userId),
+    ]);
+    res.type('html').send(
+      userAppealTemplate({
+        serviceName: this.contextService.name,
+        basePath: USER_SPACE_PATH,
+        imdbId,
+        title: media ? displayTitle(media) : imdbId,
+        refusals: refusal.refusals,
+        status: statuses.get(imdbId) ?? null,
+        flashMessage: message,
+      }),
+    );
+  }
+
+  @Post('policy/:imdbId/appeal')
+  async postAppeal(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('imdbId') imdbId: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    const form = appealFormSchema.safeParse(body);
+    const back = `${USER_SPACE_PATH}/policy/${encodeURIComponent(imdbId)}/appeal`;
+    if (!form.success) {
+      const hint = `Choisissez une démarche et motivez-la (${MOTIVATION_MIN_LENGTH} à ${MOTIVATION_MAX_LENGTH} caractères).`;
+      res.redirect(`${back}?message=${encodeURIComponent(hint)}`);
+      return;
+    }
+    const user = await this.usersRepository.get(userIdOf(req));
+    if (!user) {
+      res.redirect(LOGIN_PATH);
+      return;
+    }
+    const outcome = await this.appeals.submit(user, imdbId, form.data.kind, form.data.motivation);
+    res.redirect(`${USER_SPACE_PATH}?tab=rejected&message=${encodeURIComponent(APPEAL_MESSAGES[outcome])}`);
   }
 
   /** Execution of the subscriber's own actions only: other members' downloads stay private. */
