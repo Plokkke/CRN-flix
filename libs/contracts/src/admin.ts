@@ -15,6 +15,8 @@ export type TicketOperation =
   | { kind: 'grantExemption' }
   /** Policy appeal: the rules no longer apply to this title, for everyone. */
   | { kind: 'excludeTitle' }
+  /** Policy anomaly: the title leaves the shared shelves, as the rules now want. */
+  | { kind: 'unpublish' }
   /** Manual download: where the title goes, whatever the rules say. */
   | { kind: 'shelveStandard' }
   | { kind: 'shelveKids' }
@@ -34,6 +36,7 @@ export const OPERATION_LABELS: Record<TicketOperationKind, string> = {
   grantExemption: 'Accorder la dérogation',
   excludeTitle: 'Exclure le titre de la règle (pour tous)',
   reply: 'Répondre à l’abonné',
+  unpublish: 'Retirer des étagères partagées',
   shelveStandard: 'Étagère standard',
   shelveKids: 'Étagère enfants',
   shelvePersonal: 'Ma collection',

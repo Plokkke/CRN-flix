@@ -9,6 +9,7 @@ export enum TicketButtonId {
   Resolve = 'ticket-resolve',
   GrantExemption = 'ticket-grant-exemption',
   ExcludeTitle = 'ticket-exclude-title',
+  Unpublish = 'ticket-unpublish',
   ShelveStandard = 'ticket-shelve-standard',
   ShelveKids = 'ticket-shelve-kids',
   ShelvePersonal = 'ticket-shelve-personal',
@@ -24,6 +25,7 @@ export const BUTTON_BY_OPERATION: Partial<Record<TicketOperationKind, TicketButt
   resolveManually: TicketButtonId.Resolve,
   grantExemption: TicketButtonId.GrantExemption,
   excludeTitle: TicketButtonId.ExcludeTitle,
+  unpublish: TicketButtonId.Unpublish,
   shelveStandard: TicketButtonId.ShelveStandard,
   shelveKids: TicketButtonId.ShelveKids,
   shelvePersonal: TicketButtonId.ShelvePersonal,
@@ -45,6 +47,8 @@ export function parseButtonOperation(customId: string): TicketOperation | null {
       return { kind: 'grantExemption' };
     case TicketButtonId.ExcludeTitle:
       return { kind: 'excludeTitle' };
+    case TicketButtonId.Unpublish:
+      return { kind: 'unpublish' };
     case TicketButtonId.ShelveStandard:
       return { kind: 'shelveStandard' };
     case TicketButtonId.ShelveKids:
