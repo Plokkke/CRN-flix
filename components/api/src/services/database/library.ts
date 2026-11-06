@@ -51,6 +51,13 @@ export class ShelfOverridesRepository {
     return new Map(result.rows.map((row) => [row.imdb_id, row.shelf]));
   }
 
+  async get(imdbId: string): Promise<string | null> {
+    const result = await this.pool.query<{ shelf: string }>(`SELECT shelf FROM shelf_overrides WHERE imdb_id = $1`, [
+      imdbId,
+    ]);
+    return result.rows[0]?.shelf ?? null;
+  }
+
   async set(override: ShelfOverride, decidedBy: string): Promise<void> {
     await this.pool.query(
       `INSERT INTO shelf_overrides (imdb_id, shelf, origin, decided_by) VALUES ($1, $2, $3, $4)

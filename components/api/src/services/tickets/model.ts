@@ -98,7 +98,7 @@ export type TicketEventEntity = {
 
 /** Which operations each category accepts — single source for every adapter. */
 export const OPERATIONS_BY_CATEGORY: Record<TicketCategory, TicketOperationKind[]> = {
-  [TicketCategory.UserApproval]: ['approve', 'reject'],
+  [TicketCategory.UserApproval]: ['approveAdult', 'approveKids', 'reject'],
   [TicketCategory.DownloadAction]: ['submitLink', 'reject', 'restore', 'resolveManually'],
   [TicketCategory.IdentificationFailure]: ['submitIdentity', 'resolveManually'],
   [TicketCategory.PipelineFailure]: ['resolveManually'],

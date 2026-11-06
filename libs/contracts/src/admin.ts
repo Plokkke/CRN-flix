@@ -5,7 +5,10 @@ export type IdentitySubmission = { imdbId: string | null; reference: string | nu
 export type TicketOperation =
   | ({ kind: 'submitIdentity' } & IdentitySubmission)
   | { kind: 'submitLink'; url: string }
+  /** Kept for buttons rendered before profiles existed: approves as an adult. */
   | { kind: 'approve' }
+  | { kind: 'approveAdult' }
+  | { kind: 'approveKids' }
   | { kind: 'reject' }
   | { kind: 'restore' }
   | { kind: 'resolveManually'; note: string };
@@ -14,6 +17,8 @@ export type TicketOperationKind = TicketOperation['kind'];
 
 export const OPERATION_LABELS: Record<TicketOperationKind, string> = {
   approve: 'Accepter',
+  approveAdult: 'Accepter (adulte)',
+  approveKids: 'Accepter (enfant)',
   reject: 'Rejeter',
   restore: 'Restaurer',
   submitIdentity: 'Identifier (IMDb / TMDB)',

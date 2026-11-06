@@ -22,6 +22,7 @@ import { MediaIdentifierService, SubmissionResolution } from '@/services/media-i
 import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/all';
 import { buildActionDownloadMetadata, PlannerService } from '@/services/planner/planner';
 import { PlayerAccountsService } from '@/services/player-accounts';
+import { Profile } from '@/services/policy/shelves';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { identificationFailureResolved } from '@/services/tickets/auto-resolve';
 import {
@@ -124,7 +125,15 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     if (!user) {
       return { status: 'resolved', message: 'Utilisateur déjà supprimé' };
     }
-    return operation.kind === 'reject' ? this.rejectUser(user) : this.approveUser(user);
+    if (operation.kind === 'reject') {
+      return this.rejectUser(user);
+    }
+    const profile: Profile = operation.kind === 'approveKids' ? 'kids' : 'adult';
+    if (user.profile !== profile) {
+      await this.usersRepository.setProfile(user.id, profile);
+      user.profile = profile;
+    }
+    return this.approveUser(user);
   }
 
   /** The user is only deleted once told: a refusal that could not be sent keeps the ticket open. */

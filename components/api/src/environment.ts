@@ -37,6 +37,7 @@ export const environmentVariablesSchema = z
     POLICY_MODE: z.enum(['off', 'dry-run', 'enforce']).default('off'),
     /** `shelves`: files go to the store and every library is a set of links (see knowledge/todo/filter.md). */
     LIBRARY_LAYOUT: z.enum(['legacy', 'shelves']).default('legacy'),
+    KIDS_MAX_PARENTAL_RATING: z.coerce.number().int().min(0).default(10),
     DATABASE_HOST: z.string(),
     DATABASE_PORT: z.coerce.number(),
     DATABASE_NAME: z.string(),
@@ -198,6 +199,7 @@ export const environmentVariablesSchema = z
       moviesFolder: env.MOVIES_FOLDER,
       seriesFolder: env.SERIES_FOLDER,
       playerRoot: env.JELLYFIN_LIBRARY_ROOT,
+      kidsMaxParentalRating: env.KIDS_MAX_PARENTAL_RATING,
     },
     namingAudit: {
       jellyfinLibraryRoot: env.JELLYFIN_LIBRARY_ROOT,

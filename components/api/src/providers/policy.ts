@@ -9,6 +9,7 @@ import { creditsPolicy } from '@crn-flix/policy-credits';
 import { titlesPolicy } from '@crn-flix/policy-titles';
 
 import { Config } from '@/app.module';
+import { ShelfOverridesRepository } from '@/services/database/library';
 import { MediasRepository } from '@/services/database/medias';
 import {
   PolicyAssessmentsRepository,
@@ -43,6 +44,7 @@ export const policyProviders: Provider[] = [
       PolicyExemptionsRepository,
       MediaFactsService,
       MediasRepository,
+      ShelfOverridesRepository,
     ],
     useFactory: (
       configService: ConfigService<Config, true>,
@@ -52,8 +54,11 @@ export const policyProviders: Provider[] = [
       exemptions: PolicyExemptionsRepository,
       facts: MediaFactsService,
       medias: MediasRepository,
+      overrides: ShelfOverridesRepository,
     ): PolicyService =>
-      new PolicyService(configService.get('policy'), kinds, rules, assessments, exemptions, facts, medias),
+      new PolicyService(configService.get('policy'), kinds, rules, assessments, exemptions, facts, medias, (imdbId) =>
+        overrides.get(imdbId),
+      ),
   },
   {
     provide: PolicyGate,

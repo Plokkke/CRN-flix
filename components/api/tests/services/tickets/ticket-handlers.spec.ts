@@ -60,6 +60,7 @@ function buildStubs() {
       }),
       setJellyfinId: jest.fn().mockResolvedValue(undefined),
       setStatus: jest.fn().mockResolvedValue(undefined),
+      setProfile: jest.fn().mockResolvedValue(undefined),
       remove: jest.fn().mockResolvedValue(undefined),
     },
     requestsRepository: {
@@ -140,7 +141,9 @@ describe('TicketHandlersService', () => {
       const stubs = buildStubs();
       const handle = handlerFor(stubs, TicketCategory.UserApproval);
 
-      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), { kind: 'approve' });
+      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), {
+        kind: 'approveAdult',
+      });
 
       expect(outcome.status).toBe('resolved');
       expect(stubs.usersRepository.setJellyfinId).toHaveBeenCalledWith('u1', 'jf-1');
@@ -148,12 +151,27 @@ describe('TicketHandlersService', () => {
       expect(stubs.messaging.registered).toHaveBeenCalled();
     });
 
+    it('records the profile the admin chose before creating the account', async () => {
+      const stubs = buildStubs();
+      const handle = handlerFor(stubs, TicketCategory.UserApproval);
+
+      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), { kind: 'approveKids' });
+
+      expect(outcome.status).toBe('resolved');
+      expect(stubs.usersRepository.setProfile).toHaveBeenCalledWith('u1', 'kids');
+      expect(stubs.usersRepository.setProfile.mock.invocationCallOrder[0]).toBeLessThan(
+        stubs.player.upsertAccount.mock.invocationCallOrder[0],
+      );
+    });
+
     it('keeps the ticket open when Jellyfin fails (no more zombie approvals)', async () => {
       const stubs = buildStubs();
       stubs.player.upsertAccount.mockRejectedValue(new Error('jellyfin down'));
       const handle = handlerFor(stubs, TicketCategory.UserApproval);
 
-      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), { kind: 'approve' });
+      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), {
+        kind: 'approveAdult',
+      });
 
       expect(outcome.status).toBe('failed');
       expect(outcome.message).toContain('jellyfin down');
@@ -165,7 +183,9 @@ describe('TicketHandlersService', () => {
       stubs.player.upsertAccount.mockRejectedValue(new AccountNameTakenError('antoine'));
       const handle = handlerFor(stubs, TicketCategory.UserApproval);
 
-      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), { kind: 'approve' });
+      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), {
+        kind: 'approveAdult',
+      });
 
       expect(outcome.status).toBe('failed');
       expect(outcome.message).toContain('existe déjà sur jellyfin');
@@ -187,7 +207,9 @@ describe('TicketHandlersService', () => {
       stubs.messaging.registered.mockRejectedValue(new Error('smtp down'));
       const handle = handlerFor(stubs, TicketCategory.UserApproval);
 
-      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), { kind: 'approve' });
+      const outcome = await handle(buildTicket(TicketCategory.UserApproval, { userId: 'u1' }), {
+        kind: 'approveAdult',
+      });
 
       expect(outcome.status).toBe('failed');
       expect(outcome.message).toContain('smtp down');
