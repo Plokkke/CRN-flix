@@ -78,7 +78,7 @@ export class PostDownloadPipeline {
         if (!identity) {
           throw new Error(`Identification failed for ${path.basename(videoFile)}`);
         }
-        await this.placement.move(videoFile, identity, job.metadata);
+        await this.placement.move(videoFile, identity);
       } catch (error) {
         await this.fail(job, pending.slice(index), describeError(error));
         return;
