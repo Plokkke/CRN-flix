@@ -19,6 +19,8 @@ import { isVideoFile } from '@/services/video-files';
 export const namingAuditConfigSchema = z.object({
   jellyfinLibraryRoot: z.string(),
   engineMediasPath: z.string(),
+  /** With shelves, the player's paths are links: renaming through them would move files out of the store. */
+  renamesAllowed: z.boolean().default(true),
 });
 
 export type NamingAuditConfig = z.infer<typeof namingAuditConfigSchema>;
@@ -98,6 +100,9 @@ export class NamingAuditService {
   async apply(itemIds: string[]): Promise<{ applied: number; failed: number }> {
     if (itemIds.length === 0) {
       return { applied: 0, failed: 0 };
+    }
+    if (!this.config.renamesAllowed) {
+      throw new Error('Renames are disabled with the shelves layout: the store is named by the placement itself');
     }
 
     const items = await this.auditRepo.getByIds(itemIds);

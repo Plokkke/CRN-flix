@@ -198,6 +198,10 @@ Le ticket se résout aussi tout seul quand le titre ne viole plus aucune règle 
 
 ## Migration vers stock + étagères
 
+**Changé à l'implémentation (à valider)** : l'étagère `standard` reste aux chemins historiques `movies/` et `series/`. L'engine adopte l'existant lui-même au démarrage (`LIBRARY_LAYOUT=shelves`) : chaque dossier de titre part dans `store/` et un lien du même nom le remplace. Jellyfin voit exactement les mêmes chemins : ni rescan d'identité, ni perte d'états lu / reprise, ni script à lancer sur le serveur (une modification manuelle du serveur est interdite par le cookbook). Prix : `movies/` et `series/` restent à la racine à côté de `store/` et `shelves/`. La procédure ci-dessous ne sert plus que si l'on tient à déplacer `standard` sous `shelves/` plus tard.
+
+### Procédure d'origine (abandonnée)
+
 Déplacer `movies/` et `series/` dans `store/` est un renommage sur le même système de fichiers (instantané). Le risque est côté Jellyfin : changer les chemins des bibliothèques lui fait voir des médias supprimés puis ajoutés (nouveaux ids, rescan complet, états lu / reprise potentiellement perdus selon la version). Procédure scriptée (`infrastructure/scripts/`), répétée sur une copie avant la production :
 
 1. Exporter depuis Jellyfin, pour chaque titre, son chemin et ses ids de fournisseur (remplit `library_titles`) ; pour chaque utilisateur, les états lu / position de reprise par id de fournisseur.
@@ -218,8 +222,9 @@ Préalable : épingler l'image Jellyfin (`jellyfin/jellyfin` sans tag aujourd'hu
 | 4. Contrat policy v2 + plugins | PR #30 (sur #29) |
 | 5a. Évaluation en dry-run : `libs/policy` (évaluation, classement, admission), tables, `PolicyService`, job `policy-assessment-job` | PR #31 (sur #30) |
 | 7a. `/admin/policies` : règles, paramètres et entrées (formulaires générés depuis les `FieldSpec`, sélecteur de personne TMDB), où vont les titres | PR #32 (sur #31) |
-| 5b. Application (`enforce`) : `PolicyGate` (planner, notification « disponible »), `policy_refusals` (00032), mail de refus groupé par utilisateur | en cours |
-| 2 + 6. Stock, étagères, profils, accès Jellyfin | à faire, **avant** l'étape 8 : une dérogation accordée sans étagère personnelle mettrait le titre dans la bibliothèque générale |
+| 5b. Application (`enforce`) : `PolicyGate` (planner, notification « disponible »), `policy_refusals` (00032), mail de refus groupé par utilisateur | PR #33 (sur #32) |
+| 2. Stock + étagère `standard` (`LIBRARY_LAYOUT=shelves`, défaut `legacy`) : `library_titles` + `shelf_overrides` (00033), placement dans le stock, adoption de l'existant au démarrage, réconciliateur | en cours |
+| 6. Étagères `kids` / personnelles depuis la policy, profils à l'acceptation, accès Jellyfin | à faire, **avant** l'étape 8 : une dérogation accordée sans étagère personnelle mettrait le titre dans la bibliothèque générale |
 | 8. Appel (contestation / dérogation) | à faire ; le mail de refus n'a pas encore de bouton d'appel (`appealUrl` null) |
 
 Écarts d'implémentation : la policy ne touche jamais `media_requests.status` (un refus n'est pas un rejet admin : pas de notification « refusé » générique, un autre demandeur peut être admis) ; les règles actuelles jugent toutes le contenu, donc l'évaluation se fait **une fois par titre** (`policy_assessments`, clé = empreinte des règles et de leurs entrées) et l'admission d'un demandeur s'en déduit avec son profil et ses dérogations. Les règles `requester` sont refusées comme invalides tant qu'aucune n'existe. Les étagères sont une constante de l'engine (`services/policy/shelves.ts`) jusqu'à l'étape 2.

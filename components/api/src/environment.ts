@@ -35,6 +35,8 @@ export const environmentVariablesSchema = z
     USER_MESSAGING_TIMEZONE: z.string().default('Europe/Paris'),
     /** `dry-run` assesses titles and shows the outcome to admins without refusing anyone. */
     POLICY_MODE: z.enum(['off', 'dry-run', 'enforce']).default('off'),
+    /** `shelves`: files go to the store and every library is a set of links (see knowledge/todo/filter.md). */
+    LIBRARY_LAYOUT: z.enum(['legacy', 'shelves']).default('legacy'),
     DATABASE_HOST: z.string(),
     DATABASE_PORT: z.coerce.number(),
     DATABASE_NAME: z.string(),
@@ -190,9 +192,17 @@ export const environmentVariablesSchema = z
       movies: path.join(env.MEDIAS_PATH, env.MOVIES_FOLDER),
       series: path.join(env.MEDIAS_PATH, env.SERIES_FOLDER),
     },
+    library: {
+      layout: env.LIBRARY_LAYOUT,
+      mediasPath: env.MEDIAS_PATH,
+      moviesFolder: env.MOVIES_FOLDER,
+      seriesFolder: env.SERIES_FOLDER,
+      playerRoot: env.JELLYFIN_LIBRARY_ROOT,
+    },
     namingAudit: {
       jellyfinLibraryRoot: env.JELLYFIN_LIBRARY_ROOT,
       engineMediasPath: env.MEDIAS_PATH,
+      renamesAllowed: env.LIBRARY_LAYOUT === 'legacy',
     },
   }));
 

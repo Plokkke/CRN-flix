@@ -34,6 +34,7 @@ import { repositoryProviders } from '@/providers/database';
 import { DiscordConnectionLifecycle, discordProvider } from '@/providers/discord';
 import { downloaderProviders } from '@/providers/downloader';
 import { jellyfinProvider } from '@/providers/jellyfin';
+import { libraryProviders } from '@/providers/library';
 import { mediaTitlesProviders } from '@/providers/media-titles';
 import { adminMessagingProviders } from '@/providers/messaging/admin';
 import {
@@ -58,6 +59,7 @@ import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { syncConfigSchema } from '@/services/catalog/sync';
 import { DownloadProgressService } from '@/services/download-progress';
 import { HealthChecksService } from '@/services/health-checks';
+import { libraryConfigSchema } from '@/services/library/paths';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
 import { quietHoursConfigSchema } from '@/services/messaging/user/quiet-hours';
 import { namingAuditConfigSchema } from '@/services/naming-audit';
@@ -76,6 +78,7 @@ export const configSchema = z.object({
   mailing: emailConfigSchema,
   userMessaging: z.object({ mode: z.enum(['send', 'dry-run']), quietHours: quietHoursConfigSchema }),
   policy: policyConfigSchema,
+  library: libraryConfigSchema,
   discord: discordConfigSchema,
   indexer: z.object({
     loadix: loadixConfigSchema.nullable(),
@@ -131,6 +134,7 @@ export function loadConfig(env: EnvironmentVariables): Config {
     mailing: env.mailing,
     userMessaging: env.userMessaging,
     policy: env.policy,
+    library: env.library,
   });
 }
 
@@ -178,6 +182,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       DownloadProgressService,
       tmdbProvider,
       ...mediaTitlesProviders,
+      ...libraryProviders,
       ...policyProviders,
       ...postDownloadProviders,
       ...namingAuditProviders,

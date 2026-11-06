@@ -73,3 +73,31 @@ describe('MediaLabelizerService.generateDestination', () => {
     expect(service.generateDestination(frenchMovie)[0]).toMatch(/^\/data\/medias\/movies\//);
   });
 });
+
+describe('MediaLabelizerService.move', () => {
+  it('announces the title folder it placed the file in, for the shelves', async () => {
+    const fs = await import('fs/promises');
+    const os = await import('os');
+    const path = await import('path');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'crn-flix-placement-'));
+    const source = path.join(root, 'downloads', 'Charlie.mkv');
+    await fs.mkdir(path.dirname(source), { recursive: true });
+    await fs.writeFile(source, 'video');
+    const onPlaced = jest.fn().mockResolvedValue(undefined);
+    const store = {
+      downloads: path.join(root, 'downloads'),
+      movies: path.join(root, 'store', 'movies'),
+      series: path.join(root, 'store', 'series'),
+    };
+    const service = new MediaLabelizerService(store, resolver('Charlie and the Chocolate Factory'), layout, onPlaced);
+
+    await service.move(source, { ...frenchMovie, confidence: 1 } as never);
+
+    expect(onPlaced).toHaveBeenCalledWith({
+      imdbId: 'tt0367594',
+      section: 'movies',
+      folder: 'Charlie.and.the.Chocolate.Factory.(2005).[imdbid-tt0367594]',
+    });
+    await fs.rm(root, { recursive: true, force: true });
+  });
+});
