@@ -13,9 +13,88 @@ type RuleRecord = {
   entries: unknown[];
 };
 
+export type PolicyRuleEntity = {
+  id: string;
+  name: string;
+  kind: string;
+  audience: string;
+  params: unknown;
+  enabled: boolean;
+  position: number;
+  entryCount: number;
+};
+
+export type PolicyRuleEntryEntity = { id: string; data: unknown };
+
+export type PolicyRuleInput = Pick<PolicyRuleEntity, 'name' | 'kind' | 'audience' | 'params' | 'enabled' | 'position'>;
+
+type RuleRowRecord = Omit<PolicyRuleEntity, 'entryCount'> & { entry_count: number };
+
+const fromRuleRow = ({ entry_count, ...rule }: RuleRowRecord): PolicyRuleEntity => ({
+  ...rule,
+  entryCount: entry_count,
+});
+
+const RULE_COLUMNS = `r.id, r.name, r.kind, r.audience, r.params, r.enabled, r.position,
+  (SELECT COUNT(*)::int FROM policy_rule_entries e WHERE e.rule_id = r.id) AS entry_count`;
+
 /** Concrete rules and their lists; the kinds' schemas validate them when they are assessed. */
 export class PolicyRulesRepository {
   constructor(private readonly pool: Pool) {}
+
+  async list(): Promise<PolicyRuleEntity[]> {
+    const result = await this.pool.query<RuleRowRecord>(
+      `SELECT ${RULE_COLUMNS} FROM policy_rules r ORDER BY r.position, r.created_at, r.id`,
+    );
+    return result.rows.map(fromRuleRow);
+  }
+
+  async get(id: string): Promise<PolicyRuleEntity | null> {
+    const result = await this.pool.query<RuleRowRecord>(`SELECT ${RULE_COLUMNS} FROM policy_rules r WHERE r.id = $1`, [
+      id,
+    ]);
+    return result.rows[0] ? fromRuleRow(result.rows[0]) : null;
+  }
+
+  async create(input: PolicyRuleInput): Promise<string> {
+    const result = await this.pool.query<{ id: string }>(
+      `INSERT INTO policy_rules (name, kind, audience, params, enabled, position)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [input.name, input.kind, input.audience, JSON.stringify(input.params), input.enabled, input.position],
+    );
+    return result.rows[0].id;
+  }
+
+  async update(id: string, input: Omit<PolicyRuleInput, 'kind'>): Promise<void> {
+    await this.pool.query(
+      `UPDATE policy_rules SET name = $2, audience = $3, params = $4, enabled = $5, position = $6, updated_at = NOW()
+       WHERE id = $1`,
+      [id, input.name, input.audience, JSON.stringify(input.params), input.enabled, input.position],
+    );
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.pool.query(`DELETE FROM policy_rules WHERE id = $1`, [id]);
+  }
+
+  async listEntries(ruleId: string): Promise<PolicyRuleEntryEntity[]> {
+    const result = await this.pool.query<PolicyRuleEntryEntity>(
+      `SELECT id, data FROM policy_rule_entries WHERE rule_id = $1 ORDER BY created_at, id`,
+      [ruleId],
+    );
+    return result.rows;
+  }
+
+  async addEntry(ruleId: string, data: unknown): Promise<void> {
+    await this.pool.query(`INSERT INTO policy_rule_entries (rule_id, data) VALUES ($1, $2)`, [
+      ruleId,
+      JSON.stringify(data),
+    ]);
+  }
+
+  async deleteEntry(ruleId: string, entryId: string): Promise<void> {
+    await this.pool.query(`DELETE FROM policy_rule_entries WHERE rule_id = $1 AND id = $2`, [ruleId, entryId]);
+  }
 
   /** Enabled rules in evaluation order, each with its entries in creation order. */
   async listEnabled(): Promise<PolicyRuleRecord[]> {
@@ -40,6 +119,17 @@ export class PolicyRulesRepository {
 export class PolicyExemptionsRepository {
   constructor(private readonly pool: Pool) {}
 
+  /** Every exemption granted for everyone, per title. */
+  async listGrantedGlobal(): Promise<Map<string, Exemption[]>> {
+    const result = await this.pool.query<{ imdb_id: string; rule_id: string | null }>(
+      `SELECT imdb_id, rule_id FROM policy_exemptions WHERE status = 'granted' AND user_id IS NULL`,
+    );
+    return result.rows.reduce((byTitle, row) => {
+      byTitle.set(row.imdb_id, [...(byTitle.get(row.imdb_id) ?? []), { userId: null, ruleId: row.rule_id }]);
+      return byTitle;
+    }, new Map<string, Exemption[]>());
+  }
+
   async listGranted(imdbId: string): Promise<Exemption[]> {
     const result = await withDbRetry(
       () =>
@@ -58,6 +148,8 @@ export type StoredAssessment = {
   fingerprint: string;
   assessedAt: Date;
 };
+
+export type TitledAssessment = { imdbId: string; outcomes: RuleOutcome[]; fingerprint: string; title: string };
 
 /** The latest assessment of each title, keyed by the rules it was computed with. */
 export class PolicyAssessmentsRepository {
@@ -87,6 +179,27 @@ export class PolicyAssessmentsRepository {
         ),
       { label: 'policyAssessments.save' },
     );
+  }
+
+  /** Every assessment, with the title's display names. */
+  async listWithTitles(): Promise<TitledAssessment[]> {
+    const result = await this.pool.query<{
+      imdb_id: string;
+      outcomes: RuleOutcome[];
+      fingerprint: string;
+      title: string | null;
+      french_title: string | null;
+    }>(
+      `SELECT a.imdb_id, a.outcomes, a.fingerprint, m.title, m.french_title
+       FROM policy_assessments a
+       LEFT JOIN LATERAL (SELECT title, french_title FROM medias WHERE imdb_id = a.imdb_id LIMIT 1) m ON TRUE`,
+    );
+    return result.rows.map((row) => ({
+      imdbId: row.imdb_id,
+      outcomes: row.outcomes,
+      fingerprint: row.fingerprint,
+      title: row.french_title ?? row.title ?? row.imdb_id,
+    }));
   }
 
   /** Titles never assessed, assessed with other rules, or whose facts changed since; oldest first. */
