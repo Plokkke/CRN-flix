@@ -25,6 +25,8 @@ const TONE_COLORS: Record<TicketTone, number> = {
 
 const BUTTON_STYLES: Partial<Record<string, ButtonStyle>> = {
   'ticket-approve': ButtonStyle.Success,
+  'ticket-approve-adult': ButtonStyle.Success,
+  'ticket-approve-kids': ButtonStyle.Primary,
   'ticket-reject': ButtonStyle.Danger,
   'ticket-restore': ButtonStyle.Secondary,
   'ticket-resolve': ButtonStyle.Secondary,

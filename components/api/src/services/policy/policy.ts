@@ -12,6 +12,7 @@ import {
   PolicyKinds,
   PolicyRuleRecord,
   RuleOutcome,
+  ShelfOverride,
 } from '@crn-flix/policy';
 
 import { MediasRepository } from '@/services/database/medias';
@@ -63,6 +64,7 @@ export class PolicyService {
     private readonly exemptions: PolicyExemptionsRepository,
     private readonly facts: MediaFactsService,
     private readonly medias: MediasRepository,
+    private readonly overrideOf: (imdbId: string) => Promise<ShelfOverride> = async () => null,
   ) {}
 
   get mode(): PolicyConfig['mode'] {
@@ -80,9 +82,9 @@ export class PolicyService {
     return this.assessAndStore(imdbId, rules, fingerprint);
   }
 
-  async placementOf(imdbId: string): Promise<Placement | null> {
+  async placementOf(imdbId: string, override: ShelfOverride = null): Promise<Placement | null> {
     const outcomes = await this.outcomesOf(imdbId);
-    return outcomes && this.classify(imdbId, outcomes);
+    return outcomes && this.classify(imdbId, outcomes, override);
   }
 
   async admissionOf(userId: string, profile: Profile, imdbId: string): Promise<Admission | null> {
@@ -99,11 +101,11 @@ export class PolicyService {
     if (!outcomes) {
       return null;
     }
-    const exemptions = await this.exemptions.listGranted(imdbId);
+    const [exemptions, override] = await Promise.all([this.exemptions.listGranted(imdbId), this.overrideOf(imdbId)]);
     return new Map(
       requesters.map(({ id, profile }) => {
         const theirs = exemptions.filter((exemption) => exemption.userId === null || exemption.userId === id);
-        return [id, admit(outcomes, SHELVES, profile, theirs, null)];
+        return [id, admit(outcomes, SHELVES, profile, theirs, override)];
       }),
     );
   }
@@ -145,9 +147,9 @@ export class PolicyService {
     return outcomes;
   }
 
-  private async classify(imdbId: string, outcomes: RuleOutcome[]): Promise<Placement> {
+  private async classify(imdbId: string, outcomes: RuleOutcome[], override: ShelfOverride = null): Promise<Placement> {
     const globals = (await this.exemptions.listGranted(imdbId)).filter((exemption) => exemption.userId === null);
-    return classify(outcomes, SHELVES, globals, null);
+    return classify(outcomes, SHELVES, globals, override);
   }
 
   /** Standard is where nearly everything goes: only the other placements are worth a line. */

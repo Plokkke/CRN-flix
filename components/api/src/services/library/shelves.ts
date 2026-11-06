@@ -50,6 +50,7 @@ export class LibraryShelves {
     private readonly titles: LibraryTitlesRepository,
     private readonly resolver: ShelfResolver,
     private readonly player: Player,
+    private readonly afterChange: () => Promise<void> = async () => {},
     private readonly fs: Fs = fsPromises,
   ) {}
 
@@ -90,6 +91,9 @@ export class LibraryShelves {
     LibraryShelves.logger.log(`Shelves: ${create.length} link(s) created, ${remove.length} removed`);
     await this.player.refreshLibrary().catch((error: unknown) => {
       LibraryShelves.logger.warn(`Player refresh after shelving failed: ${describeError(error)}`);
+    });
+    await this.afterChange().catch((error: unknown) => {
+      LibraryShelves.logger.warn(`After shelving: ${describeError(error)}`);
     });
   }
 

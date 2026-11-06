@@ -1,6 +1,9 @@
 import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
 
 import { UserEntity } from '@/services/database/users';
+import { Profile, PROFILES } from '@/services/policy/shelves';
+
+export const PROFILE_LABELS: Record<Profile, string> = { adult: 'adulte', kids: 'enfant' };
 
 interface AdminUsersParams {
   serviceName: string;
@@ -29,6 +32,11 @@ const USERS_CSS = `
     background-color: #1a1a2e; color: #e0e0e0; font-size: 15px;
   }
   .user-row button { width: auto; padding: 8px 16px; }
+  .user-row select {
+    padding: 8px; border: 1px solid #2a2a3e; border-radius: 4px; background-color: #1a1a2e; color: #e0e0e0;
+  }
+  .user-forms { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  .user-forms .user-row { margin-bottom: 0; }
 `;
 
 const streamsLabel = (user: UserEntity): string => {
@@ -38,7 +46,18 @@ const streamsLabel = (user: UserEntity): string => {
   return user.maxStreams === 0 ? 'illimité' : `${user.maxStreams}`;
 };
 
-const userRow = (user: UserEntity): string => `
+const profileForm = (user: UserEntity): string => `
+  <form class="user-row" method="POST" action="/admin/users/${escapeHtml(user.id)}/profile">
+    <span class="name hint">Profil (étagères visibles)</span>
+    <select name="profile" aria-label="Profil de ${escapeHtml(user.name)}">${PROFILES.map(
+      (profile) =>
+        `<option value="${profile}"${profile === user.profile ? ' selected' : ''}>${PROFILE_LABELS[profile]}</option>`,
+    ).join('')}</select>
+    <button type="submit">Enregistrer</button>
+  </form>
+`;
+
+const streamsForm = (user: UserEntity): string => `
   <form class="user-row" method="POST" action="/admin/users/${escapeHtml(user.id)}/max-streams">
     <span class="name">${escapeHtml(user.name)} <span class="hint">(${streamsLabel(user)})</span></span>
     <label class="hint" for="streams-${escapeHtml(user.id)}">Flux simultanés</label>
@@ -47,6 +66,8 @@ const userRow = (user: UserEntity): string => `
     <button type="submit">Enregistrer</button>
   </form>
 `;
+
+const userRow = (user: UserEntity): string => `<div class="user-forms">${streamsForm(user)}${profileForm(user)}</div>`;
 
 export const adminUsersTemplate = ({ serviceName, users, flashMessage }: AdminUsersParams): string => {
   const content = `

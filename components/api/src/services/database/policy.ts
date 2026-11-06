@@ -130,6 +130,15 @@ export class PolicyExemptionsRepository {
     }, new Map<string, Exemption[]>());
   }
 
+  /** Users with a personal exemption granted, per title (their personal shelf shows it). */
+  async listGrantedPersonal(): Promise<Map<string, string[]>> {
+    const result = await this.pool.query<{ imdb_id: string; user_ids: string[] }>(
+      `SELECT imdb_id, array_agg(DISTINCT user_id) AS user_ids FROM policy_exemptions
+       WHERE status = 'granted' AND user_id IS NOT NULL GROUP BY imdb_id`,
+    );
+    return new Map(result.rows.map((row) => [row.imdb_id, row.user_ids]));
+  }
+
   async listGranted(imdbId: string): Promise<Exemption[]> {
     const result = await withDbRetry(
       () =>
