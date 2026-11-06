@@ -15,6 +15,10 @@ export type TicketOperation =
   | { kind: 'grantExemption' }
   /** Policy appeal: the rules no longer apply to this title, for everyone. */
   | { kind: 'excludeTitle' }
+  /** Manual download: where the title goes, whatever the rules say. */
+  | { kind: 'shelveStandard' }
+  | { kind: 'shelveKids' }
+  | { kind: 'shelvePersonal' }
   /** A message to the user the ticket is about; the ticket stays open. */
   | { kind: 'reply'; message: string }
   | { kind: 'resolveManually'; note: string };
@@ -30,6 +34,9 @@ export const OPERATION_LABELS: Record<TicketOperationKind, string> = {
   grantExemption: 'Accorder la dérogation',
   excludeTitle: 'Exclure le titre de la règle (pour tous)',
   reply: 'Répondre à l’abonné',
+  shelveStandard: 'Étagère standard',
+  shelveKids: 'Étagère enfants',
+  shelvePersonal: 'Ma collection',
   submitIdentity: 'Identifier (IMDb / TMDB)',
   submitLink: 'Soumettre un lien',
   resolveManually: 'Marquer résolu',

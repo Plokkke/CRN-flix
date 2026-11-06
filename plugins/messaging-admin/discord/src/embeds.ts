@@ -32,6 +32,9 @@ const BUTTON_STYLES: Partial<Record<string, ButtonStyle>> = {
   'ticket-resolve': ButtonStyle.Secondary,
   'ticket-grant-exemption': ButtonStyle.Success,
   'ticket-exclude-title': ButtonStyle.Primary,
+  'ticket-shelve-standard': ButtonStyle.Secondary,
+  'ticket-shelve-kids': ButtonStyle.Secondary,
+  'ticket-shelve-personal': ButtonStyle.Secondary,
 };
 
 export function buildTicketEmbed(view: TicketView): EmbedBuilder {

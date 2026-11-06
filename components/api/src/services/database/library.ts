@@ -67,6 +67,15 @@ export class ShelfOverridesRepository {
     );
   }
 
+  /** A subscriber's admitted request publishes an admin's personal download; true when one was held. */
+  async releaseManualHold(imdbId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `DELETE FROM shelf_overrides WHERE imdb_id = $1 AND shelf = 'none' AND origin = 'manual-download'`,
+      [imdbId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   async clear(imdbId: string): Promise<void> {
     await this.pool.query(`DELETE FROM shelf_overrides WHERE imdb_id = $1`, [imdbId]);
   }

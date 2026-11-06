@@ -57,6 +57,8 @@ export type TicketPayloadMap = {
     requestId?: string;
     jobId?: string;
     lastError?: string;
+    /** The admin's choice of shelf; without one the rules place the title (restricted → the admin's collection). */
+    destination?: 'standard' | 'kids' | 'personal';
   } & IdentitySubmitted;
   [TicketCategory.MissingImdb]: {
     title: string;
@@ -114,7 +116,14 @@ export const OPERATIONS_BY_CATEGORY: Record<TicketCategory, TicketOperationKind[
   [TicketCategory.DownloadAction]: ['submitLink', 'reject', 'restore', 'resolveManually'],
   [TicketCategory.IdentificationFailure]: ['submitIdentity', 'resolveManually'],
   [TicketCategory.PipelineFailure]: ['resolveManually'],
-  [TicketCategory.ManualDownload]: ['submitIdentity', 'submitLink', 'resolveManually'],
+  [TicketCategory.ManualDownload]: [
+    'submitIdentity',
+    'submitLink',
+    'shelveStandard',
+    'shelveKids',
+    'shelvePersonal',
+    'resolveManually',
+  ],
   [TicketCategory.MissingImdb]: ['submitIdentity', 'resolveManually'],
   [TicketCategory.IntegrationFailure]: ['resolveManually'],
   [TicketCategory.PolicyAppeal]: ['grantExemption', 'excludeTitle', 'reject', 'reply'],
