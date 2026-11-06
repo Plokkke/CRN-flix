@@ -71,9 +71,13 @@ export const policyProviders: Provider[] = [
   },
   {
     provide: PolicyGate,
-    inject: [PolicyService, UsersRepository, PolicyRefusalsRepository],
-    useFactory: (policy: PolicyService, users: UsersRepository, refusals: PolicyRefusalsRepository): PolicyGate =>
-      new PolicyGate(policy, users, refusals),
+    inject: [PolicyService, UsersRepository, PolicyRefusalsRepository, ShelfOverridesRepository],
+    useFactory: (
+      policy: PolicyService,
+      users: UsersRepository,
+      refusals: PolicyRefusalsRepository,
+      overrides: ShelfOverridesRepository,
+    ): PolicyGate => new PolicyGate(policy, users, refusals, (imdbId) => overrides.releaseManualHold(imdbId)),
   },
   {
     provide: PolicyRefusalNotices,

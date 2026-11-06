@@ -225,8 +225,8 @@ Préalable : épingler l'image Jellyfin (`jellyfin/jellyfin` sans tag aujourd'hu
 | 5b. Application (`enforce`) : `PolicyGate` (planner, notification « disponible »), `policy_refusals` (00032), mail de refus groupé par utilisateur | PR #33 (sur #32) |
 | 2. Stock + étagère `standard` (`LIBRARY_LAYOUT=shelves`, défaut `legacy`) : `library_titles` + `shelf_overrides` (00033), placement dans le stock, adoption de l'existant au démarrage, réconciliateur | PR #34 (sur #33) |
 | 6. Étagères `kids` / personnelles depuis la policy (`PolicyShelfResolver`), bibliothèques Jellyfin et accès par profil (`LibraryAccess`, `MaxParentalRating`), profil à l'acceptation et sur `/admin/users` | PR #35 (sur #34) |
-| 8. Appel : onglet Refusé + page d'appel sur `/me`, ticket `policy-appeal` (00034 ; accorder / exclure / rejeter / répondre), mail de réponse (exempté des quiet hours, comme toute décision d'admin) | en cours |
-| 9. Destination des téléchargements manuels | à faire |
+| 8. Appel : onglet Refusé + page d'appel sur `/me`, ticket `policy-appeal` (00034 ; accorder / exclure / rejeter / répondre), mail de réponse (exempté des quiet hours, comme toute décision d'admin) | PR #36 (sur #35) |
+| 9. Destination des téléchargements manuels (`ManualDestinations`, boutons Standard / Enfants / Ma collection, `ADMIN_USER_NAME`) | en cours |
 | 10. Ticket d'anomalie (rétroactivité) | à faire |
 
 Écarts d'implémentation : la policy ne touche jamais `media_requests.status` (un refus n'est pas un rejet admin : pas de notification « refusé » générique, un autre demandeur peut être admis) ; les règles actuelles jugent toutes le contenu, donc l'évaluation se fait **une fois par titre** (`policy_assessments`, clé = empreinte des règles et de leurs entrées) et l'admission d'un demandeur s'en déduit avec son profil et ses dérogations. Les règles `requester` sont refusées comme invalides tant qu'aucune n'existe. Les étagères sont une constante de l'engine (`services/policy/shelves.ts`) jusqu'à l'étape 2.

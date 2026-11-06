@@ -45,6 +45,9 @@ function parseOperation(
     case 'restore':
     case 'grantExemption':
     case 'excludeTitle':
+    case 'shelveStandard':
+    case 'shelveKids':
+    case 'shelvePersonal':
       return { kind: op };
     case 'reply':
       return value?.trim() ? { kind: 'reply', message: value.trim() } : null;

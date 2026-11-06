@@ -9,6 +9,7 @@ import { LibraryTitlesRepository, ShelfOverridesRepository } from '@/services/da
 import { PolicyExemptionsRepository } from '@/services/database/policy';
 import { UsersRepository } from '@/services/database/users';
 import { LibraryAccess } from '@/services/library/access';
+import { ManualDestinations } from '@/services/library/manual-destination';
 import { LibraryPaths } from '@/services/library/paths';
 import { PolicyShelfResolver } from '@/services/library/resolver';
 import { LibraryShelves } from '@/services/library/shelves';
@@ -48,5 +49,25 @@ export const libraryProviders: Provider[] = [
       player: Player,
       accounts: PlayerAccountsService,
     ): LibraryShelves => new LibraryShelves(paths, titles, resolver, player, () => accounts.applyAll()),
+  },
+  {
+    provide: ManualDestinations,
+    inject: [
+      ConfigService,
+      ShelfOverridesRepository,
+      PolicyExemptionsRepository,
+      UsersRepository,
+      PolicyService,
+      LibraryShelves,
+    ],
+    useFactory: (
+      configService: ConfigService<Config, true>,
+      overrides: ShelfOverridesRepository,
+      exemptions: PolicyExemptionsRepository,
+      users: UsersRepository,
+      policy: PolicyService,
+      shelves: LibraryShelves,
+    ): ManualDestinations =>
+      new ManualDestinations(overrides, exemptions, users, policy, shelves, configService.get('library').adminUserName),
   },
 ];

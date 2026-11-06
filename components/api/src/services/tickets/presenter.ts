@@ -209,6 +209,13 @@ function pipelineFailureView(ticket: TicketEntity): TicketView {
   };
 }
 
+const DESTINATION_LABELS = {
+  rules: 'Selon les règles (restreint → ma collection)',
+  standard: 'Étagère standard',
+  kids: 'Étagère enfants',
+  personal: 'Ma collection',
+};
+
 function manualDownloadView(ticket: TicketEntity): TicketView {
   const payload = ticket.payload as TicketPayloadMap[TicketCategory.ManualDownload];
   const fields: TicketView['fields'] = [{ name: 'URL', value: payload.url.slice(0, 1024) }];
@@ -218,6 +225,7 @@ function manualDownloadView(ticket: TicketEntity): TicketView {
   if (payload.lastError) {
     fields.push({ name: 'Erreur', value: payload.lastError.slice(0, 1024) });
   }
+  fields.push({ name: 'Destination', value: DESTINATION_LABELS[payload.destination ?? 'rules'] });
   fields.push(...submittedFields(payload));
   return {
     title: ticket.title,

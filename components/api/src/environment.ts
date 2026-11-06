@@ -30,6 +30,7 @@ export const environmentVariablesSchema = z
     /** `shelves`: files go to the store and every library is a set of links (see knowledge/todo/filter.md). */
     LIBRARY_LAYOUT: z.enum(['legacy', 'shelves']).default('legacy'),
     KIDS_MAX_PARENTAL_RATING: z.coerce.number().int().min(0).default(10),
+    ADMIN_USER_NAME: z.string().optional(),
     DATABASE_HOST: z.string(),
     DATABASE_PORT: z.coerce.number(),
     DATABASE_NAME: z.string(),
@@ -133,6 +134,7 @@ export const environmentVariablesSchema = z
       seriesFolder: env.SERIES_FOLDER,
       playerRoot: env.JELLYFIN_LIBRARY_ROOT,
       kidsMaxParentalRating: env.KIDS_MAX_PARENTAL_RATING,
+      adminUserName: env.ADMIN_USER_NAME ?? null,
     },
     namingAudit: {
       jellyfinLibraryRoot: env.JELLYFIN_LIBRARY_ROOT,

@@ -9,6 +9,9 @@ export enum TicketButtonId {
   Resolve = 'ticket-resolve',
   GrantExemption = 'ticket-grant-exemption',
   ExcludeTitle = 'ticket-exclude-title',
+  ShelveStandard = 'ticket-shelve-standard',
+  ShelveKids = 'ticket-shelve-kids',
+  ShelvePersonal = 'ticket-shelve-personal',
 }
 
 /** Only button-shaped operations get a button; imdb/link submissions are replies. */
@@ -21,6 +24,9 @@ export const BUTTON_BY_OPERATION: Partial<Record<TicketOperationKind, TicketButt
   resolveManually: TicketButtonId.Resolve,
   grantExemption: TicketButtonId.GrantExemption,
   excludeTitle: TicketButtonId.ExcludeTitle,
+  shelveStandard: TicketButtonId.ShelveStandard,
+  shelveKids: TicketButtonId.ShelveKids,
+  shelvePersonal: TicketButtonId.ShelvePersonal,
 };
 
 export function parseButtonOperation(customId: string): TicketOperation | null {
@@ -39,6 +45,12 @@ export function parseButtonOperation(customId: string): TicketOperation | null {
       return { kind: 'grantExemption' };
     case TicketButtonId.ExcludeTitle:
       return { kind: 'excludeTitle' };
+    case TicketButtonId.ShelveStandard:
+      return { kind: 'shelveStandard' };
+    case TicketButtonId.ShelveKids:
+      return { kind: 'shelveKids' };
+    case TicketButtonId.ShelvePersonal:
+      return { kind: 'shelvePersonal' };
     case TicketButtonId.Resolve:
       return { kind: 'resolveManually', note: 'Résolu via Discord' };
     default:

@@ -8,6 +8,7 @@ const paths = new LibraryPaths({
   seriesFolder: 'series',
   playerRoot: '/medias',
   kidsMaxParentalRating: 10,
+  adminUserName: null,
 });
 
 describe('LibraryPaths', () => {

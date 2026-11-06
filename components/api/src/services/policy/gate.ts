@@ -15,7 +15,8 @@ const describeError = (error: unknown): string => (error instanceof Error ? erro
 /**
  * Lets every requester through until the policy is enforced. Enforced, it admits each
  * requester per their profile and exemptions, records the refusals (told by the refusal
- * notices job) and lifts the ones that no longer hold. A title that cannot be assessed
+ * notices job) and lifts the ones that no longer hold. An admitted request also publishes a
+ * title the admin downloaded for their own collection. A title that cannot be assessed
  * (metadata source down on a never-fetched title) admits nobody this time: the next pass retries.
  */
 export class PolicyGate implements RequesterGate {
@@ -25,15 +26,23 @@ export class PolicyGate implements RequesterGate {
     private readonly policy: PolicyService,
     private readonly users: UsersRepository,
     private readonly refusals: PolicyRefusalsRepository,
+    private readonly releaseManualHold: (imdbId: string) => Promise<unknown> = async () => false,
   ) {}
 
   async admittedUserIds(imdbId: string, userIds: string[]): Promise<Set<string>> {
-    const unique = [...new Set(userIds)];
-    if (this.policy.mode !== 'enforce' || unique.length === 0) {
-      return new Set(unique);
+    const admitted = await this.admitted(imdbId, [...new Set(userIds)]);
+    if (admitted.size > 0) {
+      await this.releaseManualHold(imdbId);
+    }
+    return admitted;
+  }
+
+  private async admitted(imdbId: string, userIds: string[]): Promise<Set<string>> {
+    if (this.policy.mode !== 'enforce' || userIds.length === 0) {
+      return new Set(userIds);
     }
     try {
-      return await this.decide(imdbId, unique);
+      return await this.decide(imdbId, userIds);
     } catch (error) {
       PolicyGate.logger.warn(`Cannot assess ${imdbId}, nobody admitted for now: ${describeError(error)}`);
       return new Set();
