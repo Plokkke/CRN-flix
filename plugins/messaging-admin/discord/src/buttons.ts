@@ -7,6 +7,8 @@ export enum TicketButtonId {
   Reject = 'ticket-reject',
   Restore = 'ticket-restore',
   Resolve = 'ticket-resolve',
+  GrantExemption = 'ticket-grant-exemption',
+  ExcludeTitle = 'ticket-exclude-title',
 }
 
 /** Only button-shaped operations get a button; imdb/link submissions are replies. */
@@ -17,6 +19,8 @@ export const BUTTON_BY_OPERATION: Partial<Record<TicketOperationKind, TicketButt
   reject: TicketButtonId.Reject,
   restore: TicketButtonId.Restore,
   resolveManually: TicketButtonId.Resolve,
+  grantExemption: TicketButtonId.GrantExemption,
+  excludeTitle: TicketButtonId.ExcludeTitle,
 };
 
 export function parseButtonOperation(customId: string): TicketOperation | null {
@@ -31,6 +35,10 @@ export function parseButtonOperation(customId: string): TicketOperation | null {
       return { kind: 'reject' };
     case TicketButtonId.Restore:
       return { kind: 'restore' };
+    case TicketButtonId.GrantExemption:
+      return { kind: 'grantExemption' };
+    case TicketButtonId.ExcludeTitle:
+      return { kind: 'excludeTitle' };
     case TicketButtonId.Resolve:
       return { kind: 'resolveManually', note: 'Résolu via Discord' };
     default:

@@ -31,6 +31,12 @@ function describeOperation(operation: TicketOperation): string {
       return 'Rejet';
     case 'restore':
       return 'Restauration';
+    case 'grantExemption':
+      return 'Dérogation accordée';
+    case 'excludeTitle':
+      return 'Titre exclu de la règle pour tous';
+    case 'reply':
+      return `Réponse : ${operation.message}`;
     case 'resolveManually':
       return `Résolution manuelle : ${operation.note}`;
   }
@@ -75,8 +81,11 @@ export class TicketService {
   /** Single entry point for every adapter (Discord reply/button, dashboard form). */
   async applyOperation(ticketId: string, requested: TicketOperation, actor: string): Promise<OperationOutcome> {
     // A button rendered before profiles existed approves as an adult.
-    const operation: TicketOperation = requested.kind === 'approve' ? { kind: 'approveAdult' } : requested;
     const ticket = await this.tickets.get(ticketId);
+    const operation: TicketOperation =
+      requested.kind === 'approve' && ticket?.category === TicketCategory.UserApproval
+        ? { kind: 'approveAdult' }
+        : requested;
     if (!ticket) {
       return { status: 'failed', message: 'Ticket introuvable' };
     }

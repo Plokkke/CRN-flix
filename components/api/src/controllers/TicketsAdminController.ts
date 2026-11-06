@@ -43,7 +43,11 @@ function parseOperation(
     case 'approveKids':
     case 'reject':
     case 'restore':
+    case 'grantExemption':
+    case 'excludeTitle':
       return { kind: op };
+    case 'reply':
+      return value?.trim() ? { kind: 'reply', message: value.trim() } : null;
     case 'submitIdentity':
       return value ? parseMessageOperation(value, ['submitIdentity'], findReference) : null;
     case 'submitLink':

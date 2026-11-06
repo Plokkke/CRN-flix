@@ -5,3 +5,4 @@ export * from './request-update';
 export * from './service-notice';
 export * from './catalog-relink';
 export * from './policy-refusal';
+export * from './appeal-answer';

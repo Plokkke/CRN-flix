@@ -34,6 +34,7 @@ export class PolicyRefusalNotices {
     private readonly users: UsersRepository,
     private readonly medias: MediasRepository,
     private readonly messaging: AllUserMessaging,
+    private readonly appealUrlOf: (imdbId: string) => string | null = () => null,
   ) {}
 
   async notify(): Promise<void> {
@@ -74,7 +75,7 @@ export class PolicyRefusalNotices {
       year: titles?.year ?? null,
       posterUrl: null,
       policies: refusal.refusals.map((item) => ({ name: item.ruleName, notices: item.notices })),
-      appealUrl: null,
+      appealUrl: this.appealUrlOf(refusal.imdbId),
     };
   }
 }

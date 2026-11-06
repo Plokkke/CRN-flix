@@ -22,6 +22,8 @@ export enum TicketCategory {
   MissingImdb = 'missing-imdb',
   /** An integration (catalog, indexer) stopped matching its API; resolves itself once calls work again. */
   IntegrationFailure = 'integration-failure',
+  /** A subscriber contests a policy refusal or asks for an exemption. */
+  PolicyAppeal = 'policy-appeal',
 }
 
 export enum TicketStatus {
@@ -31,7 +33,7 @@ export enum TicketStatus {
 }
 
 export type TicketSubject = {
-  type: 'user' | 'planned_download' | 'download_job' | 'show' | 'media' | 'integration';
+  type: 'user' | 'planned_download' | 'download_job' | 'show' | 'media' | 'integration' | 'policy_refusal';
   id: string;
 } | null;
 
@@ -67,6 +69,16 @@ export type TicketPayloadMap = {
     operation: string;
     errorMessage: string;
     firstSeenAt: string;
+  };
+  [TicketCategory.PolicyAppeal]: {
+    userId: string;
+    userName: string;
+    imdbId: string;
+    title: string;
+    /** `contest`: the rule applies wrongly; `exemption`: it applies, an exception is asked. */
+    kind: 'contest' | 'exemption';
+    motivation: string;
+    refusals: { ruleId: string | null; ruleName: string; summary: string }[];
   };
 };
 
@@ -105,6 +117,7 @@ export const OPERATIONS_BY_CATEGORY: Record<TicketCategory, TicketOperationKind[
   [TicketCategory.ManualDownload]: ['submitIdentity', 'submitLink', 'resolveManually'],
   [TicketCategory.MissingImdb]: ['submitIdentity', 'resolveManually'],
   [TicketCategory.IntegrationFailure]: ['resolveManually'],
+  [TicketCategory.PolicyAppeal]: ['grantExemption', 'excludeTitle', 'reject', 'reply'],
 };
 
 export type OperationOutcome =
