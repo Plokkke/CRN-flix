@@ -4,7 +4,7 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
-import { LibraryLayout, LibrarySection, MetadataSource } from '@crn-flix/contracts';
+import { LibraryLayout, LibraryPlacement, LibrarySection, MetadataSource } from '@crn-flix/contracts';
 
 import { IdentificationResult } from './media-identifier';
 
@@ -21,6 +21,9 @@ export const mediaPathsConfigSchema = z.object({
 
 export type MediaPathsConfig = z.infer<typeof mediaPathsConfigSchema>;
 
+/** The store folder a file was placed in (its title's top folder). */
+export type PlacedTitle = { imdbId: string; section: LibrarySection; folder: string };
+
 export type PlacementResult = {
   destinationPath: string;
 };
@@ -32,6 +35,7 @@ export class MediaLabelizerService {
     private readonly config: MediaPathsConfig,
     private readonly titles: MetadataSource,
     private readonly layout: LibraryLayout,
+    private readonly onPlaced: (title: PlacedTitle) => Promise<void> = async () => {},
   ) {}
 
   async toCanonicalIdentity<T extends MediaIdentity>(identity: T): Promise<T> {
@@ -44,9 +48,13 @@ export class MediaLabelizerService {
 
   /** The layout names the file; the engine picks the section root on its own volume. */
   generateDestination(identity: MediaIdentity): [string, string] {
-    const { mediaType, ...rest } = identity;
-    const { section, folders, fileName } = this.layout.place({ ...rest, type: mediaType });
+    const { section, folders, fileName } = this.placementOf(identity);
     return [path.join(this.rootOf(section), ...folders), fileName];
+  }
+
+  private placementOf(identity: MediaIdentity): LibraryPlacement {
+    const { mediaType, ...rest } = identity;
+    return this.layout.place({ ...rest, type: mediaType });
   }
 
   private rootOf(section: LibrarySection): string {
@@ -86,6 +94,18 @@ export class MediaLabelizerService {
 
     await this.cleanupEmptyParents(path.dirname(sourcePath), this.config.downloads);
     MediaLabelizerService.logger.log(`Placed: ${path.basename(sourcePath)} → ${destinationPath}`);
+    await this.announcePlaced(canonical);
+  }
+
+  /** The file is in place whatever happens next: a failing hook is logged, never a failed placement. */
+  private async announcePlaced(identity: MediaIdentity): Promise<void> {
+    const { section, folders } = this.placementOf(identity);
+    if (!identity.imdbId || !folders[0]) {
+      return;
+    }
+    await this.onPlaced({ imdbId: identity.imdbId, section, folder: folders[0] }).catch((error: unknown) => {
+      MediaLabelizerService.logger.error(`After placing ${identity.imdbId}: ${(error as Error).message}`);
+    });
   }
 
   private async cleanupEmptyParents(dir: string, stopAt: string): Promise<void> {

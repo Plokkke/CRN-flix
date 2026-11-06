@@ -5,6 +5,7 @@ import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
 import { AdminSessionsRepository } from '@/services/database/admin-sessions';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
+import { LibraryTitlesRepository, ShelfOverridesRepository } from '@/services/database/library';
 import { MediaFactsRepository } from '@/services/database/media-facts';
 import { MediasRepository } from '@/services/database/medias';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
@@ -48,6 +49,8 @@ const REPOSITORIES = [
   PolicyExemptionsRepository,
   PolicyAssessmentsRepository,
   PolicyRefusalsRepository,
+  LibraryTitlesRepository,
+  ShelfOverridesRepository,
 ];
 
 export const repositoryProviders: Provider[] = [
