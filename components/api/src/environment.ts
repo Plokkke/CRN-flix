@@ -33,6 +33,8 @@ export const environmentVariablesSchema = z
     /** Subscribers are only messaged outside this window (login codes excepted). */
     USER_MESSAGING_QUIET_HOURS: z.string().default('00:00-07:00'),
     USER_MESSAGING_TIMEZONE: z.string().default('Europe/Paris'),
+    /** `dry-run` assesses titles and shows the outcome to admins without refusing anyone. */
+    POLICY_MODE: z.enum(['off', 'dry-run', 'enforce']).default('off'),
     DATABASE_HOST: z.string(),
     DATABASE_PORT: z.coerce.number(),
     DATABASE_NAME: z.string(),
@@ -149,6 +151,9 @@ export const environmentVariablesSchema = z
     userMessaging: {
       mode: env.USER_MESSAGING,
       quietHours: { window: env.USER_MESSAGING_QUIET_HOURS, timeZone: env.USER_MESSAGING_TIMEZONE },
+    },
+    policy: {
+      mode: env.POLICY_MODE,
     },
     mailing: {
       serviceName: env.SERVICE_NAME,

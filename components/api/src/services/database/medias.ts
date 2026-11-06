@@ -161,6 +161,24 @@ export class MediasRepository {
     );
   }
 
+  /** The titles of an imdb id (the same on every row of a show), null when no row carries it. */
+  async titlesOf(imdbId: string): Promise<MediaTitles | null> {
+    const { rows } = await this.pool.query<MediaRecord>(
+      `SELECT * FROM medias WHERE imdb_id = $1 ORDER BY season_number NULLS FIRST, episode_number NULLS FIRST LIMIT 1`,
+      [imdbId],
+    );
+    const media = rows[0] && fromMediaRecord(rows[0]);
+    return media
+      ? {
+          title: media.title,
+          originalTitle: media.originalTitle,
+          frenchTitle: media.frenchTitle,
+          originalLanguage: media.originalLanguage,
+          year: media.year,
+        }
+      : null;
+  }
+
   async listImdbIdsWithoutFrenchTitle(limit: number): Promise<string[]> {
     const { rows } = await this.pool.query<{ imdb_id: string }>(
       `SELECT DISTINCT imdb_id FROM medias

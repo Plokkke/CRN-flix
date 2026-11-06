@@ -72,6 +72,10 @@ Each lib/plugin has the same scripts (`build`, `lint`, `typecheck`, `test`); tes
 
 **Web adapter** (`controllers/TicketsAdminController.ts`, `/admin/tickets`): list (open / dead-letter / recently closed), detail with timeline, and forms driven by `OPERATIONS_BY_CATEGORY` — full parity with Discord. Uses the existing OTP admin auth (codes sent through `AdminChannel.notifyAdmin`); `AdminAuthService.validateSession` returns `{subjectId}` (the admin's Discord id) so operations are attributed (`dashboard:<id>` vs `discord:<id>` actors). The requests dashboard is `controllers/AdminController.ts` — requests are **grouped per show/movie** (`services/request-groups.ts`).
 
+### Policy (design and progress: `knowledge/todo/filter.md`)
+
+A rule kind is a plugin (`plugins/policies/*`), a concrete rule is a row (`policy_rules` + `policy_rule_entries`, 00031) with an `audience`: `everyone` (refused on every shelf) or a shelf key (what that shelf admits). `libs/policy` is the pure core: `assess` (every enabled rule against a title's content → `RuleOutcome`: passed / refused / undetermined / invalid), `classify` (restricted, or the first shelf of `SHELVES` whose rules it surely passes — `kids` then `standard`; the admin's override prevails), `admit` (a requester gets the title if it passes the `everyone` rules and lands on a shelf their `users.profile` sees, failing rules lifted by `policy_exemptions` granted to them or to everyone). **`everyone` rules fail open, shelf rules fail closed.** `services/policy/policy.ts:PolicyService` assesses once per title and rule set (`policy_assessments`, keyed by `rulesFingerprint`; stale when the rules or the title's facts change), job `policy-assessment-job` (`*/10`, unless `POLICY_MODE=off`, the default). Only dry-run so far: nothing is refused yet.
+
 ### Subscriber space (`controllers/MeController.ts`, `/me`)
 
 Read-only view of the logged-in user's own requests, grouped per show. Auth is **OTP + magic link** delivered through the user's own messaging channel (`users.messaging_key`, email today) — deliberately **not** the Jellyfin password (it would transit in clear through the engine). Shared session machinery in `services/auth/` (`SessionAuthService` base, `otp.ts` helpers) + `services/database/sessions.ts` (generic repo; `admin_sessions` and `user_sessions` are subclasses); guards/filters generic in `guards/session.guard.ts` + `filters/session-auth-redirect.filter.ts`. Pending challenge lives in the memory cache keyed per user (6-digit code + link token, 10 min, 5 attempts); the `crn_user_login` cookie remembers which user is mid-challenge. Login by **pseudo** (`users.name`), active users only.
@@ -109,7 +113,7 @@ Notices to subscribers (outage, restoration, new features), **always scheduled**
 - Correlation metadata: `buildDownloadMetadata` in `services/downloads/metadata.ts` (`crn-flix-request-id`, imdbid, type, title, ...), echoed back by Fetchr.
 - `StartupRecoveryService` re-drains stuck jobs on boot and on LISTEN reconnect.
 
-### Database schema (per SQL migrations, currently through `00030`)
+### Database schema (per SQL migrations, currently through `00031`)
 
 - `medias` — one row **per episode** (or movie): `imdb_id` (the show's id, repeated per episode), `type IN ('movie','episode')`, `season_number`, `episode_number`, `runtime_minutes`. No show/season-level rows.
 - `media_requests` — **PK is `media_id`** (no own id, exactly one request per media). `status IN ('missing','pending','fulfilled','rejected')` (`pending` = covered by at least one live action), `download_job_id`. The intent store — never truncated.
