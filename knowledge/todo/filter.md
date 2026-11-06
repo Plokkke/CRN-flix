@@ -217,10 +217,12 @@ Préalable : épingler l'image Jellyfin (`jellyfin/jellyfin` sans tag aujourd'hu
 | 3. Faits enrichis | PR #29 (sur #27) |
 | 4. Contrat policy v2 + plugins | PR #30 (sur #29) |
 | 5a. Évaluation en dry-run : `libs/policy` (évaluation, classement, admission), tables, `PolicyService`, job `policy-assessment-job` | PR #31 (sur #30) |
-| 7a. `/admin/policies` : règles, paramètres et entrées (formulaires générés depuis les `FieldSpec`, sélecteur de personne TMDB), où vont les titres | en cours |
-| 5b. Application : planner, notifications, refus | à faire |
+| 7a. `/admin/policies` : règles, paramètres et entrées (formulaires générés depuis les `FieldSpec`, sélecteur de personne TMDB), où vont les titres | PR #32 (sur #31) |
+| 5b. Application (`enforce`) : `PolicyGate` (planner, notification « disponible »), `policy_refusals` (00032), mail de refus groupé par utilisateur | en cours |
+| 2 + 6. Stock, étagères, profils, accès Jellyfin | à faire, **avant** l'étape 8 : une dérogation accordée sans étagère personnelle mettrait le titre dans la bibliothèque générale |
+| 8. Appel (contestation / dérogation) | à faire ; le mail de refus n'a pas encore de bouton d'appel (`appealUrl` null) |
 
-Écarts d'implémentation : les règles actuelles jugent toutes le contenu, donc l'évaluation se fait **une fois par titre** (`policy_assessments`, clé = empreinte des règles et de leurs entrées) et l'admission d'un demandeur s'en déduit avec son profil et ses dérogations. Les règles `requester` sont refusées comme invalides tant qu'aucune n'existe. Les étagères sont une constante de l'engine (`services/policy/shelves.ts`) jusqu'à l'étape 2.
+Écarts d'implémentation : la policy ne touche jamais `media_requests.status` (un refus n'est pas un rejet admin : pas de notification « refusé » générique, un autre demandeur peut être admis) ; les règles actuelles jugent toutes le contenu, donc l'évaluation se fait **une fois par titre** (`policy_assessments`, clé = empreinte des règles et de leurs entrées) et l'admission d'un demandeur s'en déduit avec son profil et ses dérogations. Les règles `requester` sont refusées comme invalides tant qu'aucune n'existe. Les étagères sont une constante de l'engine (`services/policy/shelves.ts`) jusqu'à l'étape 2.
 
 ## Étapes (une PR chacune)
 

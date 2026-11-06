@@ -13,6 +13,7 @@ import { PlannerFindingsRepository } from '@/services/database/planner-findings'
 import {
   PolicyAssessmentsRepository,
   PolicyExemptionsRepository,
+  PolicyRefusalsRepository,
   PolicyRulesRepository,
 } from '@/services/database/policy';
 import { RequestStatesRepository } from '@/services/database/request-states';
@@ -46,6 +47,7 @@ const REPOSITORIES = [
   PolicyRulesRepository,
   PolicyExemptionsRepository,
   PolicyAssessmentsRepository,
+  PolicyRefusalsRepository,
 ];
 
 export const repositoryProviders: Provider[] = [
