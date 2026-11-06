@@ -13,7 +13,7 @@ export type LibraryIdentity = {
 
 export type LibrarySection = 'movies' | 'series';
 
-/** Where a file belongs, relative to the section root the engine chooses (shared or private). */
+/** Where a file belongs, relative to the section root the engine chooses. */
 export type LibraryPlacement = {
   section: LibrarySection;
   folders: string[];

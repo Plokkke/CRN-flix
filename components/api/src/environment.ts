@@ -49,7 +49,6 @@ export const environmentVariablesSchema = z
     MEDIAS_PATH: z.string(),
     MOVIES_FOLDER: z.string().default('movies'),
     SERIES_FOLDER: z.string().default('series'),
-    PRIVATE_FOLDER: z.string().default('private'),
     JELLYFIN_LIBRARY_ROOT: z.string().default('/medias'),
   })
   .transform((env) => ({
@@ -118,8 +117,6 @@ export const environmentVariablesSchema = z
       downloads: env.DOWNLOADS_PATH,
       movies: path.join(env.MEDIAS_PATH, env.MOVIES_FOLDER),
       series: path.join(env.MEDIAS_PATH, env.SERIES_FOLDER),
-      privateMovies: path.join(env.MEDIAS_PATH, env.PRIVATE_FOLDER, env.MOVIES_FOLDER),
-      privateSeries: path.join(env.MEDIAS_PATH, env.PRIVATE_FOLDER, env.SERIES_FOLDER),
     },
     namingAudit: {
       jellyfinLibraryRoot: env.JELLYFIN_LIBRARY_ROOT,
