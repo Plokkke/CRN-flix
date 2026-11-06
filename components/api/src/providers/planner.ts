@@ -15,6 +15,7 @@ import { RequestsRepository } from '@/services/database/requests';
 import { IntegrationMonitor } from '@/services/integrations/monitor';
 import { MediaTitlesService } from '@/services/media-titles';
 import { PlannerService } from '@/services/planner/planner';
+import { PolicyGate } from '@/services/policy/gate';
 
 export const indexersRegistryProvider = {
   provide: INDEXERS,
@@ -40,6 +41,7 @@ export const plannerProvider = {
     PlannerFindingsRepository,
     MediaTitlesService,
     IntegrationMonitor,
+    PolicyGate,
   ],
   useFactory: (
     configService: ConfigService<Config, true>,
@@ -54,6 +56,7 @@ export const plannerProvider = {
     findings: PlannerFindingsRepository,
     mediaTitles: MediaTitlesService,
     integrations: IntegrationMonitor,
+    gate: PolicyGate,
   ): PlannerService => {
     const { needWindowHours, maxWindowHours } = configService.get('sync', { infer: true });
     const { preferences } = configService.get('indexer', { infer: true });
@@ -71,6 +74,7 @@ export const plannerProvider = {
       findings,
       mediaTitles,
       integrations,
+      gate,
     );
   },
 };

@@ -15,6 +15,7 @@ const KIND_LABELS: Record<UserMessageKind, string> = {
   error: 'Erreur',
   announce: 'Annonce',
   'catalog-relink': 'Reconnexion Trakt',
+  'policy-refusal': 'Refus (politique)',
 };
 
 const MESSAGES_CSS = `

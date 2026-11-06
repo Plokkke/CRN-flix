@@ -3,10 +3,12 @@ import { Controller, Get, Header, Inject, NotFoundException, Param } from '@nest
 import { MetadataSource, RequestNotice, RequestOutcome, ShowcaseItem } from '@crn-flix/contracts';
 import {
   catalogRelinkTemplate,
+  policyRefusalTemplate,
   registeredTemplate,
   requestUpdateTemplate,
   serviceNoticeTemplate,
 } from '@crn-flix/messaging-user-email';
+import { creditsPolicy, personEntrySchema } from '@crn-flix/policy-credits';
 
 import { METADATA } from '@/providers/media-titles';
 import { buildPresetNotice, isNoticePreset } from '@/services/announcements/presets';
@@ -49,6 +51,62 @@ export class MailingController {
       catalogName: 'Trakt',
       linkUrl: this.contextService.getTraktLinkUrl('978ab97f-817d-4e9a-86b4-637b12dfc34c'),
     }).html;
+  }
+
+  /** A fictional person and title: the wording is the credits kind's own. */
+  @Get('policy-refusal')
+  @Header('content-type', 'text/html')
+  previewPolicyRefusalEmail(): string {
+    const person = personEntrySchema.parse({
+      ref: 'tmdb:person:0',
+      name: 'Camille Exemple',
+      allegations: 'harcèlement moral (accusations publiques, enquête en cours)',
+      sources: [{ label: 'Article de presse (2026-01-15)', url: 'https://example.org/article' }],
+    });
+    const credit = {
+      person,
+      department: 'Directing',
+      job: 'Director',
+      character: null,
+      billingOrder: null,
+      episodeCount: null,
+    };
+    const matches = creditsPolicy.evaluate(
+      {
+        imdbId: 'tt0000000',
+        titles: { title: 'Example', originalTitle: null, frenchTitle: 'Exemple', originalLanguage: 'fr', year: 2020 },
+        facts: {
+          kind: 'movie',
+          adult: false,
+          year: 2020,
+          runtimeMinutes: 100,
+          originalLanguage: 'fr',
+          originCountries: [],
+          genres: [],
+          keywords: [],
+          certifications: [],
+          credits: [credit],
+        },
+        requester: null,
+      },
+      {
+        params: {
+          departments: [],
+          jobs: [],
+          message: 'Le service ne diffuse pas les œuvres de personnes mises en cause pour des violences.',
+        },
+        entries: [person],
+      },
+    );
+    return policyRefusalTemplate(this.contextService.identity, 'UserName', [
+      {
+        title: 'Exemple',
+        year: 2020,
+        posterUrl: null,
+        policies: [{ name: 'Violences sexistes et sexuelles', notices: (matches ?? []).map((match) => match.notice) }],
+        appealUrl: `${this.contextService.userSpaceUrl}`,
+      },
+    ]).html;
   }
 
   @Get('service-notice/:preset')

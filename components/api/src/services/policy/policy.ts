@@ -86,14 +86,26 @@ export class PolicyService {
   }
 
   async admissionOf(userId: string, profile: Profile, imdbId: string): Promise<Admission | null> {
+    const admissions = await this.admissionsOf(imdbId, [{ id: userId, profile }]);
+    return admissions?.get(userId) ?? null;
+  }
+
+  /** Each requester's admission, from one assessment; null when the title is unknown. */
+  async admissionsOf(
+    imdbId: string,
+    requesters: { id: string; profile: Profile }[],
+  ): Promise<Map<string, Admission> | null> {
     const outcomes = await this.outcomesOf(imdbId);
     if (!outcomes) {
       return null;
     }
-    const exemptions = (await this.exemptions.listGranted(imdbId)).filter(
-      (exemption) => exemption.userId === null || exemption.userId === userId,
+    const exemptions = await this.exemptions.listGranted(imdbId);
+    return new Map(
+      requesters.map(({ id, profile }) => {
+        const theirs = exemptions.filter((exemption) => exemption.userId === null || exemption.userId === id);
+        return [id, admit(outcomes, SHELVES, profile, theirs, null)];
+      }),
     );
-    return admit(outcomes, SHELVES, profile, exemptions, null);
   }
 
   /** Hourly-ish pass: assesses the stale titles, logging where each one goes. */

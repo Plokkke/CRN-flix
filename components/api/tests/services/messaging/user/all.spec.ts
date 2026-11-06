@@ -45,6 +45,7 @@ function build(mode: UserMessagingMode = 'send', clock = { now: NOON }) {
     loginChallenge: jest.fn().mockResolvedValue(undefined),
     announce: jest.fn().mockResolvedValue(undefined),
     catalogRelink: jest.fn().mockResolvedValue(undefined),
+    policyRefused: jest.fn().mockResolvedValue(undefined),
   };
   const context = {
     userGuideUrl: 'https://crn.test/user-guide',

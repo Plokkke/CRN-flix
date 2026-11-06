@@ -40,6 +40,7 @@ import { NewRequestState, RequestStatesRepository } from '@/services/database/re
 import { PlannerStateRow, RequestsRepository, RequestStatus } from '@/services/database/requests';
 import { IntegrationTracker } from '@/services/integrations/monitor';
 import { MediaTitlesService } from '@/services/media-titles';
+import { RequesterGate } from '@/services/policy/gate';
 import { truthy } from '@/utils';
 
 import { findAcrossIndexers } from './bookmarks';
@@ -135,6 +136,7 @@ export class PlannerService implements OnModuleDestroy {
     private readonly findings: PlannerFindingsRepository,
     private readonly mediaTitles: MediaTitlesService,
     private readonly integrations: IntegrationTracker,
+    private readonly gate: RequesterGate = { admittedUserIds: async (_imdbId, userIds) => new Set(userIds) },
   ) {
     this.downloader.onLiveChanged(() => void this.onDownloadsChanged());
   }
@@ -229,10 +231,12 @@ export class PlannerService implements OnModuleDestroy {
 
   private async pass(target: PlanTarget): Promise<void> {
     const key = targetKey(target);
-    const state =
+    const state = await keepAdmittedRequesters(
+      this.gate,
       target.kind === 'show'
         ? await this.requests.getShowPlannerState(target.imdbId)
-        : [await this.requests.getMoviePlannerState(target.mediaId)].filter(truthy);
+        : [await this.requests.getMoviePlannerState(target.mediaId)].filter(truthy),
+    );
 
     const liveActions = (await this.plannedDownloads.listLive()).filter((action) =>
       this.actionMatchesTarget(action, target),
@@ -545,6 +549,22 @@ export class PlannerService implements OnModuleDestroy {
       PlannerService.logger.error(`Downloader reconciliation failed: ${(err as Error).message}`);
     }
   }
+}
+
+/** Requesters the policies refuse are no intent: their episodes are not planned, their playheads not read. */
+export async function keepAdmittedRequesters(
+  gate: RequesterGate,
+  state: PlannerStateRow[],
+): Promise<PlannerStateRow[]> {
+  const imdbId = state[0]?.imdbId;
+  if (!imdbId) {
+    return state;
+  }
+  const admitted = await gate.admittedUserIds(
+    imdbId,
+    state.flatMap((row) => row.userIds),
+  );
+  return state.map((row) => ({ ...row, userIds: row.userIds.filter((userId) => admitted.has(userId)) }));
 }
 
 function toPlannerEpisode(row: PlannerStateRow): PlannerEpisode {

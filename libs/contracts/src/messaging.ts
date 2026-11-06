@@ -1,5 +1,6 @@
 import { MediaType } from './media';
 import { ShowcaseItem } from './player';
+import { RejectionNotice } from './policy';
 
 /** A subscriber as a channel sees them: `address` is the channel's own (an email address…). */
 export type Recipient = {
@@ -34,6 +35,16 @@ export type Welcome = {
 export type CatalogRelink = {
   catalogName: string;
   linkUrl: string;
+};
+
+/** A title the service's policies refuse to a subscriber, each policy with its own wording. */
+export type PolicyRefusal = {
+  title: string;
+  year: number | null;
+  posterUrl: string | null;
+  policies: { name: string; notices: RejectionNotice[] }[];
+  /** Where the subscriber contests the refusal or asks for an exemption; null while not offered. */
+  appealUrl: string | null;
 };
 
 /** Fixed facts every channel words its messages with. */
@@ -80,4 +91,5 @@ export interface UserChannel {
   loginChallenge(to: Recipient, challenge: LoginChallenge): Promise<void>;
   announce(to: Recipient, notice: ServiceNotice): Promise<void>;
   catalogRelink(to: Recipient, relink: CatalogRelink): Promise<void>;
+  policyRefused(to: Recipient, refusals: PolicyRefusal[]): Promise<void>;
 }

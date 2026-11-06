@@ -44,6 +44,7 @@ function request(spec: MediaSpec, status: RequestStatus, users: string[] = ['ali
         jellyfinId: null,
         maxStreams: 1,
         catalogRelinkRequestedAt: null,
+        profile: 'adult',
         messagingKey: 'email',
         messagingId: name,
         status: 'active' as never,
