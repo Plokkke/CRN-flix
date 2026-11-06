@@ -1,6 +1,7 @@
 export * from './admin';
 export * from './catalog';
 export * from './downloader';
+export * from './facts';
 export * from './indexer';
 export * from './layout';
 export * from './media';

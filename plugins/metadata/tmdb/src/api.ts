@@ -4,6 +4,18 @@ import { z } from 'zod';
 import { createLogger } from '@crn-flix/contracts';
 import { applyAxiosRetry, logAxiosError, logAxiosRequest, logAxiosResponse } from '@crn-flix/http';
 
+import {
+  TmdbMovieDetails,
+  tmdbMovieDetailsSchema,
+  TmdbPeopleSearch,
+  tmdbPeopleSearchSchema,
+  TmdbTvDetails,
+  tmdbTvDetailsSchema,
+} from './facts';
+
+/** Facts are read in English: genres and keywords are matched by name. */
+const FACTS_LANGUAGE = 'en-US';
+
 export const tmdbConfigSchema = z.object({
   apiKey: z.string(),
 });
@@ -151,5 +163,28 @@ export class TmdbApiService {
     } catch {
       return null;
     }
+  }
+
+  /** Movie page with everything policies look at, in one call. */
+  async getMovieDetails(tmdbId: number): Promise<TmdbMovieDetails> {
+    const response = await this.client.get<unknown>(`/movie/${tmdbId}`, {
+      params: { language: FACTS_LANGUAGE, append_to_response: 'credits,release_dates,keywords' },
+    });
+    return tmdbMovieDetailsSchema.parse(response.data);
+  }
+
+  /** Show page with credits aggregated over every episode, in one call. */
+  async getTvDetails(tmdbId: number): Promise<TmdbTvDetails> {
+    const response = await this.client.get<unknown>(`/tv/${tmdbId}`, {
+      params: { language: FACTS_LANGUAGE, append_to_response: 'aggregate_credits,content_ratings,keywords' },
+    });
+    return tmdbTvDetailsSchema.parse(response.data);
+  }
+
+  async searchPeople(name: string): Promise<TmdbPeopleSearch> {
+    const response = await this.client.get<unknown>('/search/person', {
+      params: { query: name, language: FACTS_LANGUAGE },
+    });
+    return tmdbPeopleSearchSchema.parse(response.data);
   }
 }

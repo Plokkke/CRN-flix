@@ -30,6 +30,7 @@ import {
 } from '@/services/database/requests';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UsersRepository } from '@/services/database/users';
+import { MediaFactsService } from '@/services/media-facts';
 import { MediaTitlesService } from '@/services/media-titles';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/all';
@@ -71,6 +72,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly mediaTitles: MediaTitlesService,
+    private readonly mediaFacts: MediaFactsService,
     private readonly redelivery: NotificationRedeliveryService,
     private readonly scheduledAnnouncements: ScheduledAnnouncementsService,
   ) {}
@@ -88,6 +90,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('player-sync-job', '*/15 * * * *', () => this.playerSync.sync());
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
       this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
+      this.registerCronJob('media-facts-job', '40 * * * *', () => this.mediaFacts.refresh());
       this.registerCronJob('notification-redelivery-job', '*/5 * * * *', () => this.redelivery.redeliver());
       this.registerCronJob('scheduled-announcements-job', '* * * * *', () => this.scheduledAnnouncements.sendDue());
     }

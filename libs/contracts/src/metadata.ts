@@ -1,3 +1,4 @@
+import type { MediaFacts, PersonCandidate } from './facts';
 import { MediaTitles } from './media';
 
 /** A title as a metadata source classifies it: one movie, or a show (whose episodes are requested). */
@@ -49,4 +50,8 @@ export interface MetadataSource {
   findReference(text: string): string | null;
   /** Null when the reference points to nothing; throws when the source fails. */
   describeReference(reference: string): Promise<ReferencedMedia | null>;
+  /** Credits, genres, ratings… of a title; null when the source does not know it, throws when it fails. Never cached. */
+  facts(imdbId: string): Promise<MediaFacts | null>;
+  /** People matching a name, best match first; throws when the source fails. */
+  searchPeople(name: string): Promise<PersonCandidate[]>;
 }
