@@ -1,6 +1,6 @@
 import { PolicyRefusal } from '@crn-flix/contracts';
 
-import { policyRefusalTemplate } from '../src/templates';
+import { appealAnswerTemplate, policyRefusalTemplate } from '../src/templates';
 
 const identity = { serviceName: 'CRN-Flix', playerUrl: 'https://player', userSpaceUrl: 'https://flix/me' };
 
@@ -49,5 +49,22 @@ describe('policyRefusalTemplate', () => {
 
     expect(subject).toBe('🚫 2 demandes refusées sur CRN-Flix');
     expect(html).not.toContain('Contester');
+  });
+});
+
+describe('appealAnswerTemplate', () => {
+  it('words each outcome with the admin message', () => {
+    const granted = appealAnswerTemplate(identity, 'Alex', {
+      title: 'Film',
+      outcome: 'granted',
+      message: 'Pour ton exposé.',
+    });
+
+    expect(granted.subject).toBe('✅ Dérogation accordée : Film');
+    expect(granted.html).toContain('collection personnelle');
+    expect(granted.text).toContain('Pour ton exposé.');
+    expect(appealAnswerTemplate(identity, 'Alex', { title: 'Film', outcome: 'denied', message: null }).subject).toBe(
+      '❌ Demande refusée : Film',
+    );
   });
 });

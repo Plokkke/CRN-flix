@@ -1,6 +1,7 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 
 import {
+  AppealAnswer,
   LoginChallenge,
   PolicyRefusal,
   Recipient,
@@ -48,9 +49,14 @@ export class UserMessagingDisabledError extends Error {
 
 /**
  * Never held by quiet hours: a login code is awaited on screen, and an admin's decision on a
- * registration (welcome with credentials, refusal or registration error) is told at once.
+ * registration (welcome with credentials, refusal or registration error) or on an appeal is told at once.
  */
-export const QUIET_HOURS_EXEMPT_KINDS: ReadonlySet<UserMessageKind> = new Set(['login', 'welcome', 'error']);
+export const QUIET_HOURS_EXEMPT_KINDS: ReadonlySet<UserMessageKind> = new Set([
+  'login',
+  'welcome',
+  'error',
+  'appeal-answered',
+]);
 
 const SHOWCASE_SIZE = 5;
 const VERIFY_RETRY_MS = 60_000;
@@ -201,6 +207,13 @@ export class AllUserMessaging implements OnModuleInit, OnModuleDestroy {
   async policyRefused(ctxt: UserMessagingCtxt, userName: string, refusals: PolicyRefusal[]): Promise<void> {
     await this.deliver(ctxt, 'policy-refusal', `policy refusal of ${refusals.length} title(s)`, (channel) =>
       channel.policyRefused(recipientOf(ctxt, userName), refusals),
+    );
+  }
+
+  /** An admin's answer to an appeal, told at once like any admin decision; throws when not delivered. */
+  async appealAnswered(ctxt: UserMessagingCtxt, userName: string, answer: AppealAnswer): Promise<void> {
+    await this.deliver(ctxt, 'appeal-answered', `appeal answer (${answer.outcome})`, (channel) =>
+      channel.appealAnswered(recipientOf(ctxt, userName), answer),
     );
   }
 

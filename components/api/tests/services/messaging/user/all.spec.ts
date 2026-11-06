@@ -46,6 +46,7 @@ function build(mode: UserMessagingMode = 'send', clock = { now: NOON }) {
     announce: jest.fn().mockResolvedValue(undefined),
     catalogRelink: jest.fn().mockResolvedValue(undefined),
     policyRefused: jest.fn().mockResolvedValue(undefined),
+    appealAnswered: jest.fn().mockResolvedValue(undefined),
   };
   const context = {
     userGuideUrl: 'https://crn.test/user-guide',
@@ -170,8 +171,8 @@ describe('AllUserMessaging', () => {
   });
 
   describe('quiet hours', () => {
-    it('exempts exactly the login code, the welcome and the registration refusal/error', () => {
-      expect([...QUIET_HOURS_EXEMPT_KINDS].sort()).toEqual(['error', 'login', 'welcome']);
+    it('exempts exactly the login code and the admin decisions (welcome, registration refusal/error, appeal answer)', () => {
+      expect([...QUIET_HOURS_EXEMPT_KINDS].sort()).toEqual(['appeal-answered', 'error', 'login', 'welcome']);
     });
 
     it('still sends exempt messages at night', async () => {

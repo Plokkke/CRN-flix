@@ -115,6 +115,18 @@ export class PolicyRulesRepository {
   }
 }
 
+export type ExemptionStatus = 'pending' | 'granted' | 'denied';
+export type ExemptionOrigin = 'contest' | 'exemption' | 'manual-download' | 'admin';
+
+export type ExemptionRequest = {
+  userId: string;
+  imdbId: string;
+  ruleIds: (string | null)[];
+  origin: ExemptionOrigin;
+  motivation: string;
+  ticketId: string;
+};
+
 /** Exemptions granted on titles; pending and denied ones are the appeal's history. */
 export class PolicyExemptionsRepository {
   constructor(private readonly pool: Pool) {}
@@ -128,6 +140,53 @@ export class PolicyExemptionsRepository {
       byTitle.set(row.imdb_id, [...(byTitle.get(row.imdb_id) ?? []), { userId: null, ruleId: row.rule_id }]);
       return byTitle;
     }, new Map<string, Exemption[]>());
+  }
+
+  /** One pending exemption per refusing rule (`ruleId` null: the admin's choice is what refuses). */
+  async createPending(request: ExemptionRequest): Promise<void> {
+    for (const ruleId of request.ruleIds) {
+      await this.pool.query(
+        `INSERT INTO policy_exemptions (user_id, imdb_id, rule_id, origin, status, motivation, ticket_id)
+         VALUES ($1, $2, $3, $4, 'pending', $5, $6)`,
+        [request.userId, request.imdbId, ruleId, request.origin, request.motivation, request.ticketId],
+      );
+    }
+  }
+
+  /** Settles the user's pending exemptions on the title; returns how many were pending. */
+  async decidePending(
+    userId: string,
+    imdbId: string,
+    status: 'granted' | 'denied',
+    decidedBy: string,
+  ): Promise<number> {
+    const result = await this.pool.query(
+      `UPDATE policy_exemptions SET status = $3, decided_by = $4, decided_at = NOW()
+       WHERE user_id = $1 AND imdb_id = $2 AND status = 'pending'`,
+      [userId, imdbId, status, decidedBy],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  /** Lets the title through for everyone, from the given rules. */
+  async grantGlobal(imdbId: string, ruleIds: string[], origin: ExemptionOrigin, decidedBy: string): Promise<void> {
+    for (const ruleId of ruleIds) {
+      await this.pool.query(
+        `INSERT INTO policy_exemptions (user_id, imdb_id, rule_id, origin, status, decided_by, decided_at)
+         VALUES (NULL, $1, $2, $3, 'granted', $4, NOW())`,
+        [imdbId, ruleId, origin, decidedBy],
+      );
+    }
+  }
+
+  /** The latest appeal status of each title for one user. */
+  async latestStatusByTitle(userId: string): Promise<Map<string, ExemptionStatus>> {
+    const result = await this.pool.query<{ imdb_id: string; status: ExemptionStatus }>(
+      `SELECT DISTINCT ON (imdb_id) imdb_id, status FROM policy_exemptions
+       WHERE user_id = $1 ORDER BY imdb_id, created_at DESC`,
+      [userId],
+    );
+    return new Map(result.rows.map((row) => [row.imdb_id, row.status]));
   }
 
   /** Users with a personal exemption granted, per title (their personal shelf shows it). */
@@ -275,6 +334,15 @@ export class PolicyRefusalsRepository {
         ),
       { label: 'policyRefusals.record' },
     );
+  }
+
+  async getHolding(userId: string, imdbId: string): Promise<PolicyRefusalEntity | null> {
+    const result = await this.pool.query<PolicyRefusalRecord>(
+      `SELECT user_id, imdb_id, refusals, refused_at, notified_at FROM policy_refusals
+       WHERE user_id = $1 AND imdb_id = $2 AND lifted_at IS NULL`,
+      [userId, imdbId],
+    );
+    return result.rows[0] ? fromRefusalRecord(result.rows[0]) : null;
   }
 
   async lift(userId: string, imdbId: string): Promise<void> {

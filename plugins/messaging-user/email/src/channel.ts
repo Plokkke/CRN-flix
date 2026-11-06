@@ -2,6 +2,7 @@ import * as nodemailer from 'nodemailer';
 import { z } from 'zod';
 
 import {
+  AppealAnswer,
   CatalogRelink,
   createLogger,
   LoginChallenge,
@@ -15,6 +16,7 @@ import {
 } from '@crn-flix/contracts';
 
 import {
+  appealAnswerTemplate,
   catalogRelinkTemplate,
   errorTemplate,
   loginChallengeTemplate,
@@ -100,6 +102,10 @@ export class EmailChannel implements UserChannel {
 
   policyRefused(to: Recipient, refusals: PolicyRefusal[]): Promise<void> {
     return this.send(to, 'policy refusal', policyRefusalTemplate(this.identity, to.name, refusals));
+  }
+
+  appealAnswered(to: Recipient, answer: AppealAnswer): Promise<void> {
+    return this.send(to, 'appeal answer', appealAnswerTemplate(this.identity, to.name, answer));
   }
 
   private async send(to: Recipient, purpose: string, rendered: Rendered): Promise<void> {
