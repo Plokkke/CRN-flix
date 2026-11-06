@@ -7,8 +7,6 @@ const config = {
   downloads: '/data/downloads',
   movies: '/data/medias/movies',
   series: '/data/medias/series',
-  privateMovies: '/data/medias/private/movies',
-  privateSeries: '/data/medias/private/series',
 };
 
 const layout = new JellyfinLayout();
@@ -68,15 +66,10 @@ describe('MediaLabelizerService.generateDestination', () => {
     episodeNumber: 3,
   };
 
-  it('roots the layout placement in the shared or private section', () => {
+  it('roots the layout placement in its section', () => {
     expect(service.generateDestination(episode)[0]).toBe(
       '/data/medias/series/Silo.(2023).[imdbid-tt14688458]/Season01',
     );
-    expect(service.generateDestination(episode, { isPrivate: true })[0]).toBe(
-      '/data/medias/private/series/Silo.(2023).[imdbid-tt14688458]/Season01',
-    );
-    expect(service.generateDestination(frenchMovie, { isPrivate: true })[0]).toMatch(
-      /^\/data\/medias\/private\/movies\//,
-    );
+    expect(service.generateDestination(frenchMovie)[0]).toMatch(/^\/data\/medias\/movies\//);
   });
 });

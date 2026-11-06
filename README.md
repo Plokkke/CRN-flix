@@ -142,7 +142,7 @@ Validated at boot by `components/api/src/environment.ts`.
 |---|---|
 | Server | `PORT`, `SERVER_URL` (public URL used in links), `SERVICE_NAME`, `LOG_LEVEL` |
 | Database | `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` |
-| Paths | `DOWNLOADS_PATH`, `MEDIAS_PATH`, `MOVIES_FOLDER` / `SERIES_FOLDER` / `PRIVATE_FOLDER` (defaults `movies` / `series` / `private`) |
+| Paths | `DOWNLOADS_PATH`, `MEDIAS_PATH`, `MOVIES_FOLDER` / `SERIES_FOLDER` (defaults `movies` / `series`) |
 | Release preferences | `INDEXER_ALLOWED_QUALITIES`, `INDEXER_ALLOWED_LANGUAGES`, `INDEXER_ALLOWED_HOSTS` (comma-separated, empty = any), `INDEXER_SIZE_TOLERANCE`, `INDEXER_BYTES_PER_MIN_JSON` |
 | Planner tuning | `SYNC_RATING_THRESHOLD`, `SYNC_NEED_WINDOW_HOURS`, `SYNC_MAX_WINDOW_HOURS`, `SYNC_FULL_INTERVAL_HOURS` (all optional) |
 
