@@ -45,6 +45,7 @@ function parseOperation(
     case 'restore':
     case 'grantExemption':
     case 'excludeTitle':
+    case 'unpublish':
     case 'shelveStandard':
     case 'shelveKids':
     case 'shelvePersonal':

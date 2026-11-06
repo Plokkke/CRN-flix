@@ -290,6 +290,24 @@ function policyAppealView(ticket: TicketEntity): TicketView {
   };
 }
 
+function policyAnomalyView(ticket: TicketEntity): TicketView {
+  const payload = ticket.payload as TicketPayloadMap[TicketCategory.PolicyAnomaly];
+  return {
+    title: ticket.title,
+    tone: 'warning',
+    fields: [
+      { name: 'Titre', value: `${payload.title} (${payload.imdbId})` },
+      { name: 'Étagère', value: payload.shelf },
+      ...payload.refusals.map((refusal) => ({
+        name: `Règle : ${refusal.ruleName}`,
+        value: refusal.summary.slice(0, 1024),
+      })),
+    ],
+    footer: 'Le titre reste sur son étagère tant que ce ticket est ouvert · se résout seul si la règle ne le vise plus',
+    operations: OPERATIONS_BY_CATEGORY[TicketCategory.PolicyAnomaly],
+  };
+}
+
 export function buildTicketView(ticket: TicketEntity, context: TicketContext = {}): TicketView {
   if (ticket.status !== TicketStatus.Open) {
     return closedView(ticket);
@@ -310,6 +328,8 @@ export function buildTicketView(ticket: TicketEntity, context: TicketContext = {
       return missingImdbView(ticket);
     case TicketCategory.PolicyAppeal:
       return policyAppealView(ticket);
+    case TicketCategory.PolicyAnomaly:
+      return policyAnomalyView(ticket);
     case TicketCategory.IntegrationFailure:
       return integrationFailureView(ticket);
   }

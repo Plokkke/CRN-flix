@@ -226,8 +226,16 @@ Préalable : épingler l'image Jellyfin (`jellyfin/jellyfin` sans tag aujourd'hu
 | 2. Stock + étagère `standard` (`LIBRARY_LAYOUT=shelves`, défaut `legacy`) : `library_titles` + `shelf_overrides` (00033), placement dans le stock, adoption de l'existant au démarrage, réconciliateur | PR #34 (sur #33) |
 | 6. Étagères `kids` / personnelles depuis la policy (`PolicyShelfResolver`), bibliothèques Jellyfin et accès par profil (`LibraryAccess`, `MaxParentalRating`), profil à l'acceptation et sur `/admin/users` | PR #35 (sur #34) |
 | 8. Appel : onglet Refusé + page d'appel sur `/me`, ticket `policy-appeal` (00034 ; accorder / exclure / rejeter / répondre), mail de réponse (exempté des quiet hours, comme toute décision d'admin) | PR #36 (sur #35) |
-| 9. Destination des téléchargements manuels (`ManualDestinations`, boutons Standard / Enfants / Ma collection, `ADMIN_USER_NAME`) | en cours |
-| 10. Ticket d'anomalie (rétroactivité) | à faire |
+| 9. Destination des téléchargements manuels (`ManualDestinations`, boutons Standard / Enfants / Ma collection, `ADMIN_USER_NAME`) | PR #37 (sur #36) |
+| 10. Ticket d'anomalie (`PolicyAnomalies`, override d'origin `anomaly`, 00035) : exclure / retirer, résolution automatique | en cours |
+
+**Pas encore fait** :
+- `/admin/library` (tableau titre × étagère, changer l'étagère d'un titre déjà rangé) : aujourd'hui, l'étagère se choisit sur le ticket de téléchargement manuel, et une dérogation globale se donne par l'appel ou l'anomalie.
+- Variables Terraform `policy_mode`, `library_layout`, `admin_user_name` (les défauts du code sont `off`, `legacy`, aucun) : changement d'infrastructure laissé à l'admin.
+- Job Wikidata qui propose des entrées `credits` (optionnel).
+- Retour sur la page d'appel après connexion (aujourd'hui : connexion puis `/me`, où le titre refusé a son lien « Motif et recours »).
+
+**Mise en service** (dans l'ordre) : `ADMIN_USER_NAME` ; `LIBRARY_LAYOUT=shelves` (adoption de l'existant au démarrage, accès Jellyfin par profil) ; créer les règles sur `/admin/policies` ; `POLICY_MODE=dry-run` et relire « Où vont les titres » ; `POLICY_MODE=enforce` (mails de refus, étagère `kids`, anomalies).
 
 Écarts d'implémentation : la policy ne touche jamais `media_requests.status` (un refus n'est pas un rejet admin : pas de notification « refusé » générique, un autre demandeur peut être admis) ; les règles actuelles jugent toutes le contenu, donc l'évaluation se fait **une fois par titre** (`policy_assessments`, clé = empreinte des règles et de leurs entrées) et l'admission d'un demandeur s'en déduit avec son profil et ses dérogations. Les règles `requester` sont refusées comme invalides tant qu'aucune n'existe. Les étagères sont une constante de l'engine (`services/policy/shelves.ts`) jusqu'à l'étape 2.
 

@@ -38,7 +38,9 @@ export class LibraryTitlesRepository {
   }
 }
 
-export type ShelfOverride = { imdbId: string; shelf: string; origin: 'admin' | 'manual-download' };
+export type ShelfOverrideOrigin = 'admin' | 'manual-download' | 'anomaly';
+
+export type ShelfOverride = { imdbId: string; shelf: string; origin: ShelfOverrideOrigin };
 
 /** The admin's choice of shared shelf, per title. */
 export class ShelfOverridesRepository {
@@ -74,6 +76,14 @@ export class ShelfOverridesRepository {
       [imdbId],
     );
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async listByOrigin(origin: ShelfOverrideOrigin): Promise<ShelfOverride[]> {
+    const result = await this.pool.query<{ imdb_id: string; shelf: string }>(
+      `SELECT imdb_id, shelf FROM shelf_overrides WHERE origin = $1`,
+      [origin],
+    );
+    return result.rows.map((row) => ({ imdbId: row.imdb_id, shelf: row.shelf, origin }));
   }
 
   async clear(imdbId: string): Promise<void> {

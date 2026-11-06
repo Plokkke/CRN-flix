@@ -37,6 +37,8 @@ function describeOperation(operation: TicketOperation): string {
       return 'Titre exclu de la règle pour tous';
     case 'reply':
       return `Réponse : ${operation.message}`;
+    case 'unpublish':
+      return 'Retiré des étagères partagées';
     case 'shelveStandard':
       return 'Destination : étagère standard';
     case 'shelveKids':
