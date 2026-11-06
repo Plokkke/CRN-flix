@@ -37,6 +37,7 @@ import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/
 import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { PlannerService } from '@/services/planner/planner';
 import { PlayerSyncService } from '@/services/player-sync';
+import { PolicyService } from '@/services/policy/policy';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { downloadActionResolution, isIdentificationError } from '@/services/tickets/auto-resolve';
 import { TICKET_ID_METADATA_KEY, TicketCategory } from '@/services/tickets/model';
@@ -73,6 +74,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly mediaTitles: MediaTitlesService,
     private readonly mediaFacts: MediaFactsService,
+    private readonly policy: PolicyService,
     private readonly redelivery: NotificationRedeliveryService,
     private readonly scheduledAnnouncements: ScheduledAnnouncementsService,
   ) {}
@@ -91,6 +93,9 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
       this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
       this.registerCronJob('media-facts-job', '40 * * * *', () => this.mediaFacts.refresh());
+      if (this.policy.mode !== 'off') {
+        this.registerCronJob('policy-assessment-job', '*/10 * * * *', () => this.policy.refresh());
+      }
       this.registerCronJob('notification-redelivery-job', '*/5 * * * *', () => this.redelivery.redeliver());
       this.registerCronJob('scheduled-announcements-job', '* * * * *', () => this.scheduledAnnouncements.sendDue());
     }
