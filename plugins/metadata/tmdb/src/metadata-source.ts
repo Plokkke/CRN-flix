@@ -2,13 +2,16 @@ import {
   createLogger,
   IdentificationQuery,
   IdentifiedMedia,
+  MediaFacts,
   MediaKind,
   MediaMetadata,
   MetadataSource,
+  PersonCandidate,
   ReferencedMedia,
 } from '@crn-flix/contracts';
 
 import { TmdbApiService, TmdbMovie, TmdbPageKind, TmdbTvShow } from './api';
+import { movieFacts, personCandidates, tvFacts } from './facts';
 import { identifyMovie, identifyShow } from './identify';
 
 /** TMDB serves posters anonymously in fixed widths; w342 suits emails and cards. */
@@ -152,6 +155,20 @@ export class TmdbMetadataSource implements MetadataSource {
     }
     const show = kind === 'tv' ? await this.tmdb.getPage('tv', tmdbId, language) : null;
     return show ? { localized: fromTvShow(show), imdbId: show.external_ids.imdb_id || null } : null;
+  }
+
+  async facts(imdbId: string): Promise<MediaFacts | null> {
+    const { movies, tvShows } = await this.tmdb.findByImdbId(imdbId);
+    const movie = movies[0];
+    if (movie) {
+      return movieFacts(await this.tmdb.getMovieDetails(movie.id));
+    }
+    const show = tvShows[0];
+    return show ? tvFacts(await this.tmdb.getTvDetails(show.id)) : null;
+  }
+
+  async searchPeople(name: string): Promise<PersonCandidate[]> {
+    return personCandidates(await this.tmdb.searchPeople(name));
   }
 
   identify(query: IdentificationQuery): Promise<IdentifiedMedia | null> {
