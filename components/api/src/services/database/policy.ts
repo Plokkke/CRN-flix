@@ -168,8 +168,22 @@ export class PolicyExemptionsRepository {
     return result.rowCount ?? 0;
   }
 
-  /** Lets the title through for everyone, from the given rules. */
-  async grantGlobal(imdbId: string, ruleIds: string[], origin: ExemptionOrigin, decidedBy: string): Promise<void> {
+  /** Puts the title on the user's personal shelf, whatever the rules say. */
+  async grantPersonal(userId: string, imdbId: string, origin: ExemptionOrigin, decidedBy: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO policy_exemptions (user_id, imdb_id, rule_id, origin, status, decided_by, decided_at)
+       VALUES ($1, $2, NULL, $3, 'granted', $4, NOW())`,
+      [userId, imdbId, origin, decidedBy],
+    );
+  }
+
+  /** Lets the title through for everyone, from the given rules (null: every rule). */
+  async grantGlobal(
+    imdbId: string,
+    ruleIds: (string | null)[],
+    origin: ExemptionOrigin,
+    decidedBy: string,
+  ): Promise<void> {
     for (const ruleId of ruleIds) {
       await this.pool.query(
         `INSERT INTO policy_exemptions (user_id, imdb_id, rule_id, origin, status, decided_by, decided_at)

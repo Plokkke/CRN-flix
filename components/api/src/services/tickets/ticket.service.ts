@@ -37,6 +37,12 @@ function describeOperation(operation: TicketOperation): string {
       return 'Titre exclu de la règle pour tous';
     case 'reply':
       return `Réponse : ${operation.message}`;
+    case 'shelveStandard':
+      return 'Destination : étagère standard';
+    case 'shelveKids':
+      return 'Destination : étagère enfants';
+    case 'shelvePersonal':
+      return 'Destination : collection de l’admin';
     case 'resolveManually':
       return `Résolution manuelle : ${operation.note}`;
   }

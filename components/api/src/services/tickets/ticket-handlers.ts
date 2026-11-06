@@ -18,6 +18,7 @@ import { RequestsRepository, RequestStatus } from '@/services/database/requests'
 import { TicketNotifyEvents, TicketsRepository } from '@/services/database/tickets';
 import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
 import { buildDownloadMetadata } from '@/services/downloads/metadata';
+import { DESTINATION_BY_OPERATION, ManualDestination, ManualDestinations } from '@/services/library/manual-destination';
 import { MediaIdentifierService, SubmissionResolution } from '@/services/media-identifier';
 import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/all';
 import { buildActionDownloadMetadata, PlannerService } from '@/services/planner/planner';
@@ -88,6 +89,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     private readonly planner: PlannerService,
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly playerAccounts: PlayerAccountsService,
+    private readonly destinations: ManualDestinations | null = null,
   ) {}
 
   onModuleInit(): void {
@@ -96,7 +98,9 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     this.ticketService.registerHandler(TicketCategory.IdentificationFailure, (t, op) =>
       this.handleIdentificationFailure(t, op),
     );
-    this.ticketService.registerHandler(TicketCategory.ManualDownload, (t, op) => this.handleManualDownload(t, op));
+    this.ticketService.registerHandler(TicketCategory.ManualDownload, (t, op, actor) =>
+      this.handleManualDownload(t, op, actor),
+    );
     this.ticketService.registerHandler(TicketCategory.MissingImdb, (t, op) => this.handleMissingImdb(t, op));
 
     // A manual download fires its first attempt as soon as the ticket exists.
@@ -260,8 +264,16 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
 
   // --- manual-download ---
 
-  private async handleManualDownload(ticket: TicketEntity, operation: TicketOperation): Promise<OperationOutcome> {
+  private async handleManualDownload(
+    ticket: TicketEntity,
+    operation: TicketOperation,
+    actor: string,
+  ): Promise<OperationOutcome> {
     const payload = ticket.payload as TicketPayloadMap[TicketCategory.ManualDownload];
+    const destination = DESTINATION_BY_OPERATION[operation.kind];
+    if (destination) {
+      return this.chooseDestination(payload, destination, actor);
+    }
 
     if (operation.kind === 'submitIdentity') {
       const { submitted, resolution } = await this.designate(ticket, operation);
@@ -302,6 +314,34 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     return this.launchIdentifiedDownload(ticket, url, identification);
   }
 
+  /** Applied now when the title is known, otherwise as soon as it is identified. */
+  private async chooseDestination(
+    payload: ManualDownloadPayload,
+    destination: ManualDestination,
+    actor: string,
+  ): Promise<OperationOutcome> {
+    if (!payload.imdbId) {
+      return {
+        status: 'progress',
+        message: 'Destination notée : appliquée dès l’identification',
+        payloadPatch: { destination },
+      };
+    }
+    const problem = await this.destinations?.apply(payload.imdbId, destination, actor);
+    return problem
+      ? failed(problem)
+      : { status: 'progress', message: 'Destination appliquée', payloadPatch: { destination } };
+  }
+
+  private async placeIdentified(payload: ManualDownloadPayload, imdbId: string): Promise<void> {
+    const outcome = payload.destination
+      ? this.destinations?.apply(imdbId, payload.destination, SYSTEM_ACTOR)
+      : this.destinations?.applyDefault(imdbId, SYSTEM_ACTOR);
+    await Promise.resolve(outcome).catch((error: unknown) => {
+      TicketHandlersService.logger.warn(`Destination of ${imdbId} not applied: ${describeError(error)}`);
+    });
+  }
+
   private findInFlightDownload(ticketId: string): LiveDownload | undefined {
     return this.downloader
       .liveDownloads()
@@ -331,6 +371,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     identification: Identification,
   ): Promise<OperationOutcome> {
     const media = await this.ensurePendingRequest(identification);
+    await this.placeIdentified(ticket.payload as ManualDownloadPayload, identification.imdbId);
 
     this.downloader.download(url, this.downloadMetadata(ticket, media));
 
@@ -355,6 +396,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     identification: Identification,
   ): Promise<OperationOutcome> {
     const media = await this.ensurePendingRequest(identification);
+    await this.placeIdentified(payload, identification.imdbId);
     this.downloader.updateMetadata(inFlight.id, this.downloadMetadata(ticket, media));
 
     if (payload.requestId && payload.requestId !== media.id) {

@@ -11,6 +11,7 @@ import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
 import { UsersRepository } from '@/services/database/users';
 import { IntegrationMonitor } from '@/services/integrations/monitor';
+import { ManualDestinations } from '@/services/library/manual-destination';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { AdminTicketRelay } from '@/services/messaging/admin/relay';
 import { AllUserMessaging } from '@/services/messaging/user/all';
@@ -57,6 +58,7 @@ export const ticketProviders: Provider[] = [
       PlannerService,
       DownloadJobsRepository,
       PlayerAccountsService,
+      ManualDestinations,
     ],
     useFactory: (
       ticketService: TicketService,
@@ -73,6 +75,7 @@ export const ticketProviders: Provider[] = [
       planner: PlannerService,
       downloadJobs: DownloadJobsRepository,
       playerAccounts: PlayerAccountsService,
+      destinations: ManualDestinations,
     ): TicketHandlersService =>
       new TicketHandlersService(
         ticketService,
@@ -89,6 +92,7 @@ export const ticketProviders: Provider[] = [
         planner,
         downloadJobs,
         playerAccounts,
+        destinations,
       ),
   },
   {
