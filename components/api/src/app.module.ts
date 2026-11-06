@@ -21,6 +21,7 @@ import { HealthVersionController } from '@/controllers/HealthController';
 import { MailingController } from '@/controllers/MailingController';
 import { MeController } from '@/controllers/MeController';
 import { MessagesAdminController } from '@/controllers/MessagesAdminController';
+import { PoliciesAdminController } from '@/controllers/PoliciesAdminController';
 import { TicketsAdminController } from '@/controllers/TicketsAdminController';
 import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersAdminController } from '@/controllers/UsersAdminController';
@@ -146,6 +147,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       TicketsAdminController,
       AnnounceAdminController,
       UsersAdminController,
+      PoliciesAdminController,
       MessagesAdminController,
       MeController,
     ],
