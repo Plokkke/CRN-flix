@@ -53,3 +53,8 @@ export type PersonCandidate = PersonRef & {
   knownFor: string[];
   pageUrl: string;
 };
+
+/** `FR:12`, `US:PG-13`: how rules name a certification. */
+export function certificationKey(certification: Certification): string {
+  return `${certification.country}:${certification.rating}`.toUpperCase();
+}
