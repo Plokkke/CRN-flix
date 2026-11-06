@@ -31,6 +31,7 @@ import {
 } from '@/services/database/requests';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UsersRepository } from '@/services/database/users';
+import { LibraryShelves } from '@/services/library/shelves';
 import { MediaFactsService } from '@/services/media-facts';
 import { MediaTitlesService } from '@/services/media-titles';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
@@ -80,6 +81,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly policy: PolicyService,
     private readonly policyGate: PolicyGate,
     private readonly policyRefusalNotices: PolicyRefusalNotices,
+    private readonly libraryShelves: LibraryShelves,
     private readonly redelivery: NotificationRedeliveryService,
     private readonly scheduledAnnouncements: ScheduledAnnouncementsService,
   ) {}
@@ -91,7 +93,14 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.listenPlannedDownloadEvents(),
     );
 
+    if (this.config.get('library').layout === 'shelves') {
+      void this.shelveLibrary();
+    }
+
     if (process.env.NODE_ENV === 'production') {
+      if (this.config.get('library').layout === 'shelves') {
+        this.registerCronJob('library-shelves-job', '*/15 * * * *', () => this.libraryShelves.reconcile());
+      }
       this.registerCronJob('catalog-sync-job', '*/5 * * * *', () => this.runSync());
       this.registerCronJob('planner-job', '0 * * * *', () => this.planner.runAll());
       this.registerCronJob('player-sync-job', '*/15 * * * *', () => this.playerSync.sync());
@@ -120,6 +129,16 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     while (this.pendingEvents.size > 0) {
       AppService.logger.log(`Waiting for ${this.pendingEvents.size} pending events to complete...`);
       await Promise.allSettled(Array.from(this.pendingEvents));
+    }
+  }
+
+  /** Off the boot path: the historical library moves into the store, then the shelves catch up. */
+  private async shelveLibrary(): Promise<void> {
+    try {
+      await this.libraryShelves.adopt();
+      await this.libraryShelves.reconcile();
+    } catch (error) {
+      AppService.logger.error(`Shelving the library failed: ${error instanceof Error ? error.message : error}`);
     }
   }
 
