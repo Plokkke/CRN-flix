@@ -106,3 +106,38 @@ describe('environment: catalog', () => {
     expect(result.error?.issues[0].message).toMatch(/refused in production/);
   });
 });
+
+describe('environment: downloader', () => {
+  const nodeEnv = process.env.NODE_ENV;
+  const valid = { ...BASE, ...GMAIL, DISCORD_CHANNEL_ID: 'c', DISCORD_BOT_TOKEN: 't' };
+
+  afterEach(() => {
+    process.env.NODE_ENV = nodeEnv;
+  });
+
+  it('uses Fetchr by default, and the fake one only with a sample to copy', () => {
+    expect(environmentVariablesSchema.parse(valid).downloader).toEqual({ kind: 'fetchr' });
+    expect(environmentVariablesSchema.safeParse({ ...valid, FETCHR_URL: '' }).success).toBe(false);
+    expect(environmentVariablesSchema.safeParse({ ...valid, DOWNLOADER: 'fake' }).success).toBe(false);
+    expect(
+      environmentVariablesSchema.parse({
+        ...valid,
+        FETCHR_URL: '',
+        DOWNLOADER: 'fake',
+        FAKE_DOWNLOADER_SAMPLE: '/s.mkv',
+      }).downloader,
+    ).toEqual({ kind: 'fake', samplePath: '/s.mkv', durationMs: 10_000 });
+  });
+
+  it('refuses the fake downloader in production: nothing would ever be downloaded', () => {
+    process.env.NODE_ENV = 'production';
+
+    const result = environmentVariablesSchema.safeParse({
+      ...valid,
+      DOWNLOADER: 'fake',
+      FAKE_DOWNLOADER_SAMPLE: '/s.mkv',
+    });
+
+    expect(result.error?.issues[0].message).toMatch(/refused in production/);
+  });
+});

@@ -33,6 +33,7 @@
     "@crn-flix/contracts": "workspace:*",
     "@crn-flix/design-system": "workspace:*",
     "@crn-flix/discord": "workspace:*",
+    "@crn-flix/downloader-fake": "workspace:*",
     "@crn-flix/downloader-fetchr": "workspace:*",
     "@crn-flix/http": "workspace:*",
     "@crn-flix/indexer-loadix": "workspace:*",

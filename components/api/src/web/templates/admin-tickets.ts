@@ -56,6 +56,10 @@ export const adminTicketsTemplate = (params: AdminTicketsParams): string => {
     ${flashMessage ? `<div class="flash-message">${escapeHtml(flashMessage)}</div>` : ''}
     <p><a href="/admin">← Dashboard</a></p>
     <h2>🎫 Tickets</h2>
+    <form class="manual-download" method="POST" action="/admin/tickets/manual-download">
+      <input type="url" name="url" placeholder="Lien à télécharger (comme un lien posté dans le salon admin)" required />
+      <button type="submit">📥 Téléchargement manuel</button>
+    </form>
     <div class="filter-tabs">${tabs}</div>
     <div class="tickets-list">${list}</div>
   `;
@@ -66,6 +70,9 @@ export const adminTicketsTemplate = (params: AdminTicketsParams): string => {
     .header { background-color: #16162a; }
     h2 { color: #e0e0e0; margin: 20px 0 15px 0; font-size: 20px; }
     a { color: ${COLORS.info}; }
+    .manual-download { display: flex; gap: 8px; margin-bottom: 16px; }
+    .manual-download input { flex: 1; padding: 8px; border: 1px solid #2a2a3e; border-radius: 4px; background: #1a1a2e; color: #e0e0e0; }
+    .manual-download button { width: auto; padding: 8px 16px; }
 
     .flash-message {
       background-color: #1e2a3a; padding: 12px 16px; border-left: 4px solid ${COLORS.info};

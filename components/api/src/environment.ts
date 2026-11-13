@@ -49,7 +49,11 @@ export const environmentVariablesSchema = z
     INDEXER_ALLOWED_HOSTS: z.string().default(''),
     INDEXER_SIZE_TOLERANCE: z.coerce.number().default(1),
     INDEXER_BYTES_PER_MIN_JSON: z.string().default(''),
-    FETCHR_URL: z.string(),
+    /** `fake`: downloads are copies of FAKE_DOWNLOADER_SAMPLE (local sandbox only, refused in production). */
+    DOWNLOADER: z.enum(['fetchr', 'fake']).default('fetchr'),
+    FAKE_DOWNLOADER_SAMPLE: z.string().optional(),
+    FAKE_DOWNLOADER_DURATION_MS: z.coerce.number().int().min(0).default(10_000),
+    FETCHR_URL: z.string().default(''),
     FETCHR_API_KEY: z.string().optional(),
     FETCHR_DOWNLOADS_PREFIX: z.string().default('/downloads'),
     TMDB_API_KEY: z.string(),
@@ -79,6 +83,15 @@ export const environmentVariablesSchema = z
         message: 'USER_MESSAGING_OUTBOX keeps every email on disk: refused in production',
       });
     }
+    if (env.DOWNLOADER === 'fetchr' && !env.FETCHR_URL) {
+      ctx.addIssue({ code: 'custom', message: 'FETCHR_URL is required with DOWNLOADER=fetchr' });
+    }
+    if (env.DOWNLOADER === 'fake' && !env.FAKE_DOWNLOADER_SAMPLE) {
+      ctx.addIssue({ code: 'custom', message: 'FAKE_DOWNLOADER_SAMPLE is required with DOWNLOADER=fake' });
+    }
+    if (env.DOWNLOADER === 'fake' && process.env.NODE_ENV === 'production') {
+      ctx.addIssue({ code: 'custom', message: 'DOWNLOADER=fake downloads nothing: refused in production' });
+    }
     if (env.CATALOG === 'file' && !env.CATALOG_FILE) {
       ctx.addIssue({ code: 'custom', message: 'CATALOG_FILE is required with CATALOG=file' });
     }
@@ -98,6 +111,14 @@ export const environmentVariablesSchema = z
   .transform((env) => ({
     name: env.SERVICE_NAME,
     adminChannel: env.ADMIN_CHANNEL,
+    downloader:
+      env.DOWNLOADER === 'fake'
+        ? {
+            kind: 'fake' as const,
+            samplePath: env.FAKE_DOWNLOADER_SAMPLE!,
+            durationMs: env.FAKE_DOWNLOADER_DURATION_MS,
+          }
+        : { kind: 'fetchr' as const },
     catalog: env.CATALOG === 'file' ? { kind: 'file' as const, file: env.CATALOG_FILE! } : { kind: 'trakt' as const },
     server: {
       url: env.SERVER_URL,
