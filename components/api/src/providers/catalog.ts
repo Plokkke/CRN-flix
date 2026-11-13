@@ -1,6 +1,7 @@
 import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { FileCatalog } from '@crn-flix/catalog-file';
 import { TraktApi, TraktCatalog } from '@crn-flix/catalog-trakt';
 import { Catalog, CatalogAccountSource } from '@crn-flix/contracts';
 import { TraktPlugin } from '@crn-flix/player-jellyfin';
@@ -25,17 +26,30 @@ export const CATALOG = Symbol('Catalog');
 const displayName = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1);
 export const CATALOG_ACCOUNT_SOURCE = Symbol('CatalogAccountSource');
 
-export const catalogProviders: Provider[] = [
-  {
-    provide: CATALOG,
-    inject: [TraktApi, ConfigService],
-    useFactory: (api: TraktApi, configService: ConfigService<Config, true>): Catalog =>
-      new TraktCatalog(api, { ratingThreshold: configService.get('sync', { infer: true }).ratingThreshold }),
-  },
-  {
-    provide: CATALOG_ACCOUNT_SOURCE,
-    useExisting: TraktPlugin,
-  },
+export type CatalogChoice = { kind: 'trakt' } | { kind: 'file'; file: string };
+
+/** Trakt, its accounts held by the player's Trakt plugin; or one file playing both roles (sandbox). */
+function sourceProviders(choice: CatalogChoice): Provider[] {
+  if (choice.kind === 'file') {
+    const catalog = new FileCatalog(choice.file);
+    return [
+      { provide: CATALOG, useValue: catalog },
+      { provide: CATALOG_ACCOUNT_SOURCE, useValue: catalog },
+    ];
+  }
+  return [
+    {
+      provide: CATALOG,
+      inject: [TraktApi, ConfigService],
+      useFactory: (api: TraktApi, configService: ConfigService<Config, true>): Catalog =>
+        new TraktCatalog(api, { ratingThreshold: configService.get('sync', { infer: true }).ratingThreshold }),
+    },
+    { provide: CATALOG_ACCOUNT_SOURCE, useExisting: TraktPlugin },
+  ];
+}
+
+export const catalogProviders = (choice: CatalogChoice): Provider[] => [
+  ...sourceProviders(choice),
   {
     provide: CatalogRelinkService,
     inject: [UsersRepository, AllUserMessaging, CATALOG],

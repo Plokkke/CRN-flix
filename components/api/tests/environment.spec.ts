@@ -78,3 +78,31 @@ describe('environment: admin channel', () => {
     expect(result.error?.issues[0].message).toMatch(/refused in production/);
   });
 });
+
+describe('environment: catalog', () => {
+  const nodeEnv = process.env.NODE_ENV;
+  const valid = { ...BASE, ...GMAIL, DISCORD_CHANNEL_ID: 'c', DISCORD_BOT_TOKEN: 't' };
+
+  afterEach(() => {
+    process.env.NODE_ENV = nodeEnv;
+  });
+
+  it('reads Trakt by default, and a file only when one is given', () => {
+    expect(environmentVariablesSchema.parse(valid).catalog).toEqual({ kind: 'trakt' });
+    expect(environmentVariablesSchema.safeParse({ ...valid, CATALOG: 'file' }).success).toBe(false);
+    expect(
+      environmentVariablesSchema.parse({ ...valid, CATALOG: 'file', CATALOG_FILE: '/tmp/c.json' }).catalog,
+    ).toEqual({
+      kind: 'file',
+      file: '/tmp/c.json',
+    });
+  });
+
+  it('refuses the file catalog in production: it would replace every user’s requests', () => {
+    process.env.NODE_ENV = 'production';
+
+    const result = environmentVariablesSchema.safeParse({ ...valid, CATALOG: 'file', CATALOG_FILE: '/tmp/c.json' });
+
+    expect(result.error?.issues[0].message).toMatch(/refused in production/);
+  });
+});

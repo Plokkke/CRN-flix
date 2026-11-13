@@ -154,7 +154,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       traktProvider,
       syncDataSourceProvider,
       ...repositoryProviders,
-      ...catalogProviders,
+      ...catalogProviders(env.catalog),
       ...playerProviders,
       indexersRegistryProvider,
       plannerProvider,

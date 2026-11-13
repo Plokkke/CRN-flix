@@ -1,34 +1,13 @@
 #!/usr/bin/env node
 // Sets up the sandbox Jellyfin once: first-run wizard, a local admin account, the Films / Séries
 // libraries on the fake library, and an API key for the engine (printed for .env.local).
-// Idempotent. Local only: the admin password below protects nothing but this sandbox.
-const BASE_URL = 'http://127.0.0.1:8096';
-const ADMIN = { Name: 'admin', Password: 'sandbox' };
-const APP = 'crn-flix-sandbox';
-const CLIENT = `MediaBrowser Client="${APP}", Device="sandbox", DeviceId="${APP}", Version="1.0.0"`;
+// Idempotent.
+import { ADMIN, adminToken, APP, BASE_URL, call } from './jellyfin.mjs';
 
 const LIBRARIES = [
   { name: 'Films', collectionType: 'movies', path: '/medias/movies' },
   { name: 'Séries', collectionType: 'tvshows', path: '/medias/series' },
 ];
-
-async function call(method, route, { token, body, query } = {}) {
-  const url = new URL(route, BASE_URL);
-  Object.entries(query ?? {}).forEach(([key, value]) => url.searchParams.set(key, String(value)));
-  const response = await fetch(url, {
-    method,
-    headers: {
-      Authorization: token ? `${CLIENT}, Token="${token}"` : CLIENT,
-      ...(body && { 'Content-Type': 'application/json' }),
-    },
-    body: body && JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error(`${method} ${route}: ${response.status} ${await response.text()}`);
-  }
-  const text = await response.text();
-  return text ? JSON.parse(text) : null;
-}
 
 async function completeWizard() {
   const info = await call('GET', '/System/Info/Public');
@@ -41,7 +20,7 @@ async function completeWizard() {
   await call('GET', '/Startup/User');
   await call('POST', '/Startup/User', { body: ADMIN });
   await call('POST', '/Startup/Complete');
-  console.log('First-run wizard completed (admin / sandbox)');
+  console.log(`First-run wizard completed (${ADMIN.Name} / ${ADMIN.Password})`);
 }
 
 async function ensureLibraries(token) {
@@ -68,10 +47,8 @@ async function apiKey(token) {
 }
 
 await completeWizard();
-const { AccessToken } = await call('POST', '/Users/AuthenticateByName', {
-  body: { Username: ADMIN.Name, Pw: ADMIN.Password },
-});
-await ensureLibraries(AccessToken);
-console.log(`\nJellyfin ready on ${BASE_URL} (admin / sandbox). For components/api/.env.local:`);
+const token = await adminToken();
+await ensureLibraries(token);
+console.log(`\nJellyfin ready on ${BASE_URL} (${ADMIN.Name} / ${ADMIN.Password}). For components/api/.env.local:`);
 console.log(`JELLYFIN_URL=${BASE_URL}`);
-console.log(`JELLYFIN_TOKEN=${await apiKey(AccessToken)}`);
+console.log(`JELLYFIN_TOKEN=${await apiKey(token)}`);

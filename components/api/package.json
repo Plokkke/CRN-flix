@@ -28,6 +28,7 @@
     "test:mut": "stryker run"
   },
   "dependencies": {
+    "@crn-flix/catalog-file": "workspace:*",
     "@crn-flix/catalog-trakt": "workspace:*",
     "@crn-flix/contracts": "workspace:*",
     "@crn-flix/design-system": "workspace:*",
