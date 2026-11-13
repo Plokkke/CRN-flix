@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Sets up the sandbox Jellyfin once: first-run wizard, a local admin account, the Films / Séries
-// libraries on the fake library, and an API key for the engine (printed for .env.local).
+// libraries on the fake library, and an API key for the engine (`pnpm dev:local` fetches it itself).
 // Idempotent.
-import { ADMIN, adminToken, APP, BASE_URL, call } from './jellyfin.mjs';
+import { ADMIN, adminToken, BASE_URL, call, engineApiKey } from './jellyfin.mjs';
 
 const LIBRARIES = [
   { name: 'Films', collectionType: 'movies', path: '/medias/movies' },
@@ -38,17 +38,8 @@ async function ensureLibraries(token) {
   }
 }
 
-async function apiKey(token) {
-  const find = async () => (await call('GET', '/Auth/Keys', { token })).Items.find((key) => key.AppName === APP);
-  if (!(await find())) {
-    await call('POST', '/Auth/Keys', { token, query: { app: APP } });
-  }
-  return (await find()).AccessToken;
-}
-
 await completeWizard();
 const token = await adminToken();
 await ensureLibraries(token);
-console.log(`\nJellyfin ready on ${BASE_URL} (${ADMIN.Name} / ${ADMIN.Password}). For components/api/.env.local:`);
-console.log(`JELLYFIN_URL=${BASE_URL}`);
-console.log(`JELLYFIN_TOKEN=${await apiKey(token)}`);
+await engineApiKey(token);
+console.log(`Jellyfin ready on ${BASE_URL} (${ADMIN.Name} / ${ADMIN.Password})`);

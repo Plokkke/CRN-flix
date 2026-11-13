@@ -17,7 +17,7 @@
     "validate": "turbo run lint typecheck test build",
     "infra:up": "docker compose -f infrastructure/docker/compose.dev.yaml up -d --wait postgres jellyfin && docker compose -f infrastructure/docker/compose.dev.yaml run --rm --build migrations",
     "infra:down": "docker compose -f infrastructure/docker/compose.dev.yaml down",
-    "dev:local": "turbo run build --filter=@crn-flix/api^... && pnpm --filter @crn-flix/api dev:local",
+    "dev:local": "turbo run build --filter=@crn-flix/api^... && node infrastructure/docker/sandbox/dev.mjs",
     "sandbox:library": "turbo run build --filter=@crn-flix/layout-jellyfin && node infrastructure/docker/sandbox/library.mjs",
     "sandbox:jellyfin": "node infrastructure/docker/sandbox/jellyfin-setup.mjs",
     "sandbox:users": "node infrastructure/docker/sandbox/users.mjs"

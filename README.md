@@ -122,41 +122,13 @@ A local instance with no external service and no real library: Postgres and Jell
 pnpm install
 pnpm infra:up          # Postgres (127.0.0.1:55432) + migrations, Jellyfin (127.0.0.1:8096, same release as production)
 pnpm sandbox:library   # fake library in .sandbox/medias: real titles and imdb ids, 2 KB per file
-pnpm sandbox:jellyfin  # first-run wizard (admin / sandbox), Films + Séries libraries, prints JELLYFIN_TOKEN
+pnpm sandbox:jellyfin  # first-run wizard (admin / sandbox), Films + Séries libraries, the engine's API key
 pnpm sandbox:users     # subscribers papa and leo (engine + Jellyfin accounts) and .sandbox/catalog.json, their requests
-pnpm dev:local         # engine on http://localhost:3000, reads components/api/.env.local
+pnpm dev:local         # engine on http://localhost:3000 (Touch ID for the TMDB key)
 pnpm infra:down        # stop (database and Jellyfin volumes are kept)
 ```
 
-`components/api/.env.local` (ignored by git; no real secret):
-
-```dotenv
-SERVICE_NAME=CRN-Flix (local)
-SERVER_URL=http://localhost:3000
-PORT=3000
-LOG_LEVEL=debug
-ADMIN_CHANNEL=console
-DISCORD_ADMIN_IDS=local-admin
-USER_MESSAGING=send
-USER_MESSAGING_OUTBOX=../../.sandbox/outbox
-DATABASE_HOST=localhost
-DATABASE_PORT=55432
-DATABASE_NAME=crn_flix
-DATABASE_USERNAME=crn_flix
-DATABASE_PASSWORD=crn_flix_local
-CATALOG=file
-CATALOG_FILE=../../.sandbox/catalog.json
-TRAKT_HOST=https://api.trakt.tv
-TRAKT_CLIENT_ID=placeholder
-TRAKT_CLIENT_SECRET=placeholder
-JELLYFIN_URL=http://127.0.0.1:8096
-JELLYFIN_TOKEN=<printed by pnpm sandbox:jellyfin>
-DOWNLOADER=fake
-FAKE_DOWNLOADER_SAMPLE=../../.sandbox/sample.mkv
-TMDB_API_KEY=<your read-only TMDB key, or any value>
-DOWNLOADS_PATH=../../.sandbox/downloads
-MEDIAS_PATH=../../.sandbox/medias
-```
+`pnpm dev:local` reads its settings from `components/api/sandbox.env` (versioned, no secret) and fetches the only two values that are not local, passed to the engine through its environment, never written nor printed: the Jellyfin API key from the sandbox Jellyfin, the read-only TMDB key from `infrastructure/secrets/production.sops.yaml` (Touch ID; without it the engine runs with a placeholder and TMDB calls fail). No `.env` file is needed. A variable set in the shell wins, e.g. `FAKE_DOWNLOADER_DURATION_MS=2000 pnpm dev:local`.
 
 With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. With `USER_MESSAGING_OUTBOX`, every email to a subscriber is written to `.sandbox/outbox/` (`.html` to open in a browser, `.txt` with the login code) instead of being sent. The engine refuses both when `NODE_ENV=production`. With `CATALOG=file`, the subscribers' requests and playheads come from `.sandbox/catalog.json` (re-read on every sync: edit it, then run `catalog-sync` from `/admin`). With `DOWNLOADER=fake`, every download takes `FAKE_DOWNLOADER_DURATION_MS` (default 10 s) and drops a copy of the sample video named after the link into `.sandbox/downloads/`; start one from the « Téléchargement manuel » form on `/admin/tickets`, e.g. `https://example.invalid/Inception.2010.1080p.mkv`. Both are refused in production too. Identifying what was downloaded needs a real TMDB key. A real TMDB key (read-only) makes titles and posters work.
 

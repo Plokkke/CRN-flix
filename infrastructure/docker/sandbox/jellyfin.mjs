@@ -31,3 +31,12 @@ export async function adminToken() {
   });
   return AccessToken;
 }
+
+/** The engine's API key on the sandbox Jellyfin, created on first use. */
+export async function engineApiKey(token) {
+  const find = async () => (await call('GET', '/Auth/Keys', { token })).Items.find((key) => key.AppName === APP);
+  if (!(await find())) {
+    await call('POST', '/Auth/Keys', { token, query: { app: APP } });
+  }
+  return (await find()).AccessToken;
+}
