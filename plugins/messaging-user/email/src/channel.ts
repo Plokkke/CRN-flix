@@ -1,4 +1,3 @@
-import * as nodemailer from 'nodemailer';
 import { z } from 'zod';
 
 import {
@@ -13,6 +12,7 @@ import {
   Welcome,
 } from '@crn-flix/contracts';
 
+import { GmailSender, MailSender, OutboxSender } from './senders';
 import {
   catalogRelinkTemplate,
   errorTemplate,
@@ -26,39 +26,39 @@ export const emailConfigSchema = z.object({
   serviceName: z.string(),
   gmailUser: z.string(),
   gmailPassword: z.string(),
+  /** Local sandbox: emails are written to this folder instead of being sent. */
+  outbox: z.string().nullable().default(null),
 });
 
-export type EmailConfig = z.infer<typeof emailConfigSchema>;
+/** The outbox is optional: without it, emails go through SMTP. */
+export type EmailConfig = z.input<typeof emailConfigSchema>;
 
 type Rendered = { subject: string; html: string; text: string };
 
-/** Nodemailer waits 2 minutes by default before giving up on an unresponsive server. */
-const SMTP_TIMEOUT_MS = 15_000;
-
-/** Sends through Gmail's SMTP; `users.messaging_key = 'email'`, the address is the messaging id. */
+/**
+ * Sends through Gmail's SMTP (or into a local outbox in the sandbox);
+ * `users.messaging_key = 'email'`, the address is the messaging id.
+ */
 export class EmailChannel implements UserChannel {
   private static readonly logger = createLogger(EmailChannel.name);
 
   readonly kind = 'email';
 
-  private readonly transporter: nodemailer.Transporter;
+  private readonly sender: MailSender;
 
   constructor(
     private readonly config: EmailConfig,
     private readonly identity: ServiceIdentity,
+    sender?: MailSender,
   ) {
-    EmailChannel.logger.log(`Configuring email transport (user: ${config.gmailUser})`);
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: config.gmailUser, pass: config.gmailPassword },
-      connectionTimeout: SMTP_TIMEOUT_MS,
-      greetingTimeout: SMTP_TIMEOUT_MS,
-      socketTimeout: SMTP_TIMEOUT_MS,
-    });
+    this.sender =
+      sender ??
+      (config.outbox ? new OutboxSender(config.outbox) : new GmailSender(config.gmailUser, config.gmailPassword));
+    EmailChannel.logger.log(`Email transport: ${this.sender.description}`);
   }
 
   async verify(): Promise<void> {
-    await this.transporter.verify();
+    await this.sender.verify();
   }
 
   error(to: Recipient, message: string): Promise<void> {
@@ -98,7 +98,7 @@ export class EmailChannel implements UserChannel {
 
   private async send(to: Recipient, purpose: string, rendered: Rendered): Promise<void> {
     try {
-      await this.transporter.sendMail({
+      await this.sender.send({
         from: `${this.config.serviceName} <${this.config.gmailUser}>`,
         to: to.address,
         ...rendered,

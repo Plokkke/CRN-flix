@@ -31,7 +31,7 @@ import { parseUserSpaceTab, userSpaceTemplate } from '@/web/templates/user-space
 const LOGIN_PATH = `${USER_SPACE_PATH}/login`;
 
 const CODE_REQUEST_MESSAGES: Record<UserCodeRequestOutcome, string> = {
-  sent: 'Code envoyé. Vérifiez vos emails ou vos messages privés Discord.',
+  sent: 'Code envoyé. Vérifiez vos emails.',
   throttled: 'Un code vient déjà d’être envoyé, patientez 30 secondes.',
   'delivery-failed': 'Impossible d’envoyer le code. Contactez l’administrateur.',
   'unknown-user': 'Pseudo inconnu ou compte pas encore activé.',
