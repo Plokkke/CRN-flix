@@ -63,9 +63,9 @@ const parseTab = (tab: string | undefined): DashboardTab =>
   TABS.some((t) => t.key === tab) ? (tab as DashboardTab) : 'download';
 
 const CODE_REQUEST_MESSAGES: Record<CodeRequestOutcome, string> = {
-  sent: 'Code envoyé sur Discord.',
+  sent: 'Code envoyé sur le canal admin.',
   throttled: 'Un code vient déjà d’être envoyé, patientez 30 secondes.',
-  'delivery-failed': 'Impossible d’envoyer le code sur Discord.',
+  'delivery-failed': 'Impossible d’envoyer le code sur le canal admin.',
 };
 
 @Controller('admin')

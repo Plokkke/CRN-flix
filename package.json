@@ -14,7 +14,10 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "clean": "turbo run clean",
-    "validate": "turbo run lint typecheck test build"
+    "validate": "turbo run lint typecheck test build",
+    "infra:up": "docker compose -f infrastructure/docker/compose.dev.yaml up -d --wait postgres && docker compose -f infrastructure/docker/compose.dev.yaml run --rm --build migrations",
+    "infra:down": "docker compose -f infrastructure/docker/compose.dev.yaml down",
+    "dev:local": "turbo run build --filter=@crn-flix/api^... && pnpm --filter @crn-flix/api dev:local"
   },
   "devDependencies": {
     "turbo": "2.11.9"

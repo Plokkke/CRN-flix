@@ -15,8 +15,11 @@ export const environmentVariablesSchema = z
     TRAKT_CLIENT_SECRET: z.string(),
     JELLYFIN_URL: z.string(),
     JELLYFIN_TOKEN: z.string().optional(),
-    DISCORD_CHANNEL_ID: z.string(),
-    DISCORD_BOT_TOKEN: z.string(),
+    /** `console`: tickets and admin login codes go to the logs (local sandbox only, refused in production). */
+    ADMIN_CHANNEL: z.enum(['discord', 'console']).default('discord'),
+    DISCORD_CHANNEL_ID: z.string().default(''),
+    DISCORD_BOT_TOKEN: z.string().default(''),
+    /** The admins' ids on the admin channel (Discord user ids; any name with the console channel). */
     DISCORD_ADMIN_IDS: z.string(),
     GMAIL_USER: z.string(),
     GMAIL_PASSWORD: z.string(),
@@ -52,8 +55,23 @@ export const environmentVariablesSchema = z
     PRIVATE_FOLDER: z.string().default('private'),
     JELLYFIN_LIBRARY_ROOT: z.string().default('/medias'),
   })
+  .superRefine((env, ctx) => {
+    if (env.ADMIN_CHANNEL === 'discord' && (!env.DISCORD_CHANNEL_ID || !env.DISCORD_BOT_TOKEN)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'DISCORD_CHANNEL_ID and DISCORD_BOT_TOKEN are required with ADMIN_CHANNEL=discord',
+      });
+    }
+    if (env.ADMIN_CHANNEL === 'console' && process.env.NODE_ENV === 'production') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'ADMIN_CHANNEL=console prints admin login codes to the logs: refused in production',
+      });
+    }
+  })
   .transform((env) => ({
     name: env.SERVICE_NAME,
+    adminChannel: env.ADMIN_CHANNEL,
     server: {
       url: env.SERVER_URL,
       port: env.PORT,

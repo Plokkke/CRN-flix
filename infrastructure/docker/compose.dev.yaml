@@ -1,0 +1,39 @@
+# Local sandbox dependencies only (COOKBOOK §2): the engine itself runs with `pnpm dev:local`.
+# Nothing here is reachable from outside the machine.
+name: crn-flix-dev
+
+services:
+  postgres:
+    # renovate: datasource=docker depName=postgres
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: crn_flix
+      POSTGRES_PASSWORD: crn_flix_local
+      POSTGRES_DB: crn_flix
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crn_flix -d crn_flix"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # One-shot: applies components/database/src/scripts like in production.
+  migrations:
+    build:
+      context: ../..
+      dockerfile: components/database/migration/Dockerfile
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: crn_flix
+      DATABASE_URL: postgresql://crn_flix:crn_flix_local@postgres:5432/crn_flix
+
+volumes:
+  postgres-data:
