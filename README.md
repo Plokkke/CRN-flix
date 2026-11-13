@@ -134,9 +134,8 @@ PORT=3000
 LOG_LEVEL=debug
 ADMIN_CHANNEL=console
 DISCORD_ADMIN_IDS=local-admin
-USER_MESSAGING=dry-run
-GMAIL_USER=sandbox@example.invalid
-GMAIL_PASSWORD=placeholder
+USER_MESSAGING=send
+USER_MESSAGING_OUTBOX=../../.sandbox/outbox
 DATABASE_HOST=localhost
 DATABASE_PORT=55432
 DATABASE_NAME=crn_flix
@@ -153,7 +152,7 @@ DOWNLOADS_PATH=../../.sandbox/downloads
 MEDIAS_PATH=../../.sandbox/medias
 ```
 
-With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. The engine refuses this channel when `NODE_ENV=production`. Trakt, Jellyfin and Fetchr are unreachable: the engine boots anyway and logs the failed calls. A real TMDB key (read-only) makes titles and posters work.
+With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. With `USER_MESSAGING_OUTBOX`, every email to a subscriber is written to `.sandbox/outbox/` (`.html` to open in a browser, `.txt` with the login code) instead of being sent. The engine refuses both when `NODE_ENV=production`. Trakt, Jellyfin and Fetchr are unreachable: the engine boots anyway and logs the failed calls. A real TMDB key (read-only) makes titles and posters work.
 
 ### Configuration
 
@@ -179,7 +178,7 @@ Validated at boot by `components/api/src/environment.ts`.
 | Fetchr | `FETCHR_URL` (`ws://…`), `FETCHR_API_KEY`, `FETCHR_DOWNLOADS_PREFIX` (its download path, mapped onto `DOWNLOADS_PATH`) |
 | Jellyfin | `JELLYFIN_URL`, `JELLYFIN_TOKEN`, `JELLYFIN_LIBRARY_ROOT` (default `/medias`) |
 | Admin channel | `ADMIN_CHANNEL` (`discord` default, or `console` for the local sandbox), `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` (required with `discord`), `DISCORD_ADMIN_IDS` (comma-separated admin ids) |
-| Email | `GMAIL_USER`, `GMAIL_PASSWORD` (app password) |
+| Email | `GMAIL_USER`, `GMAIL_PASSWORD` (app password; not needed with `USER_MESSAGING_OUTBOX`, the local sandbox's folder for emails) |
 
 ## Deployment
 
