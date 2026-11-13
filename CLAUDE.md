@@ -27,7 +27,7 @@ From the repo root (Turborepo builds libs/plugins before dependents):
 ```bash
 pnpm build | lint | typecheck | test   # every package
 pnpm validate                          # all of the above
-pnpm dev                               # engine in watch mode
+pnpm dev                               # engine in watch mode on the local sandbox (README › Local sandbox; no .env file)
 ```
 
 From `components/api/` (run `pnpm build` at the root first, the engine consumes libs/plugins from their `dist/`):
@@ -35,9 +35,8 @@ From `components/api/` (run `pnpm build` at the root first, the engine consumes 
 ```bash
 pnpm test                        # Jest (jest.config.js, preset from @crn-flix/tooling)
 pnpm test:mut                    # Stryker mutation tests
-pnpm once                        # single run (nest start -- --once)
 pnpm indexer:find [indexer] --imdb tt... --title "..." [--type movie|show|--episodes "1:1-10"|--runtime|--verbose]
-                                 # standalone indexer harness (no Nest/DB/Discord boot, raw env)
+                                 # standalone indexer harness (no Nest/DB/Discord boot), settings in indexer.env
 ```
 
 Each lib/plugin has the same scripts (`build`, `lint`, `typecheck`, `test`); tests live in `tests/`.

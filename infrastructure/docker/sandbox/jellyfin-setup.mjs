@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Sets up the sandbox Jellyfin once: first-run wizard, a local admin account, the Films / Séries
-// libraries on the fake library, and an API key for the engine (`pnpm dev:local` fetches it itself).
+// libraries on the fake library, and an API key for the engine (`pnpm dev` fetches it itself).
 // Idempotent.
 import { ADMIN, adminToken, BASE_URL, call, engineApiKey } from './jellyfin.mjs';
 

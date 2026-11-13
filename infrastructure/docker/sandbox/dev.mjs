@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Starts the engine on the sandbox (`pnpm dev:local`). Settings come from components/api/sandbox.env;
+// Starts the engine on the sandbox (`pnpm dev`). Settings come from components/api/sandbox.env;
 // the two values that are not local are fetched here and passed through the environment only, never
 // written nor printed: the Jellyfin API key from the sandbox Jellyfin, the TMDB key from sops (Touch ID).
-// Any variable already set in the shell wins, e.g. `FAKE_DOWNLOADER_DURATION_MS=2000 pnpm dev:local`.
+// Any variable already set in the shell wins, e.g. `FAKE_DOWNLOADER_DURATION_MS=2000 pnpm dev`.
 import { execFileSync, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,6 +41,6 @@ const env = {
   TMDB_API_KEY: process.env.TMDB_API_KEY ?? tmdbKey(),
   ...process.env,
 };
-spawn('pnpm', ['--filter', '@crn-flix/api', 'dev:local'], { cwd: ROOT, env, stdio: 'inherit' }).on('exit', (code) =>
+spawn('pnpm', ['--filter', '@crn-flix/api', 'dev'], { cwd: ROOT, env, stdio: 'inherit' }).on('exit', (code) =>
   process.exit(code ?? 1),
 );

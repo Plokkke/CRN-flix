@@ -96,11 +96,11 @@ The SQL migrations and the TypeScript code are the source of truth for the schem
 
 ## Getting started
 
-Requirements: Node 26 (`.nvmrc`), pnpm 12 and a PostgreSQL database with the migrations applied, plus credentials for the implementations you enable.
+Requirements: Node 26 (`.nvmrc`), pnpm 12, Docker. The engine runs locally only on the sandbox below (no `.env` file); production is configured by `infrastructure/terraform`.
 
 ```bash
 pnpm install
-# write components/api/.env, see Configuration below
+pnpm infra:up
 pnpm dev
 ```
 
@@ -110,9 +110,9 @@ pnpm dev
 |---|---|
 | `pnpm build` / `lint` / `typecheck` / `test` | Turborepo tasks over every package |
 | `pnpm validate` | All of the above |
-| `pnpm dev` | Engine in watch mode (libs and plugins are built first) |
+| `pnpm dev` | Engine in watch mode on the local sandbox (libs and plugins are built first) |
 | `pnpm -F @crn-flix/api test:mut` | Stryker mutation tests |
-| `pnpm -F @crn-flix/api indexer:find <indexer> --imdb tt… --title "…" [--type show --episodes "1:1-10"] [--verbose]` | Query an indexer standalone (no Nest, database or admin channel), handy to debug a search; run `pnpm build` first |
+| `pnpm -F @crn-flix/api indexer:find <indexer> --imdb tt… --title "…" [--type show --episodes "1:1-10"] [--verbose]` | Query an indexer standalone (no Nest, database or admin channel), handy to debug a search; settings in `components/api/indexer.env` (production preferences, no secret); run `pnpm build` first |
 
 ### Local sandbox
 
@@ -124,11 +124,11 @@ pnpm infra:up          # Postgres (127.0.0.1:55432) + migrations, Jellyfin (127.
 pnpm sandbox:library   # fake library in .sandbox/medias: real titles and imdb ids, 2 KB per file
 pnpm sandbox:jellyfin  # first-run wizard (admin / sandbox), Films + Séries libraries, the engine's API key
 pnpm sandbox:users     # subscribers papa and leo (engine + Jellyfin accounts) and .sandbox/catalog.json, their requests
-pnpm dev:local         # engine on http://localhost:3000 (Touch ID for the TMDB key)
+pnpm dev              # engine on http://localhost:3000 (Touch ID for the TMDB key)
 pnpm infra:down        # stop (database and Jellyfin volumes are kept)
 ```
 
-`pnpm dev:local` reads its settings from `components/api/sandbox.env` (versioned, no secret) and fetches the only two values that are not local, passed to the engine through its environment, never written nor printed: the Jellyfin API key from the sandbox Jellyfin, the read-only TMDB key from `infrastructure/secrets/production.sops.yaml` (Touch ID; without it the engine runs with a placeholder and TMDB calls fail). No `.env` file is needed. A variable set in the shell wins, e.g. `FAKE_DOWNLOADER_DURATION_MS=2000 pnpm dev:local`.
+`pnpm dev` reads its settings from `components/api/sandbox.env` (versioned, no secret) and fetches the only two values that are not local, passed to the engine through its environment, never written nor printed: the Jellyfin API key from the sandbox Jellyfin, the read-only TMDB key from `infrastructure/secrets/production.sops.yaml` (Touch ID; without it the engine runs with a placeholder and TMDB calls fail). No `.env` file is needed. A variable set in the shell wins, e.g. `FAKE_DOWNLOADER_DURATION_MS=2000 pnpm dev`.
 
 With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. With `USER_MESSAGING_OUTBOX`, every email to a subscriber is written to `.sandbox/outbox/` (`.html` to open in a browser, `.txt` with the login code) instead of being sent. The engine refuses both when `NODE_ENV=production`. With `CATALOG=file`, the subscribers' requests and playheads come from `.sandbox/catalog.json` (re-read on every sync: edit it, then run `catalog-sync` from `/admin`). With `DOWNLOADER=fake`, every download takes `FAKE_DOWNLOADER_DURATION_MS` (default 10 s) and drops a copy of the sample video named after the link into `.sandbox/downloads/`; start one from the « Téléchargement manuel » form on `/admin/tickets`, e.g. `https://example.invalid/Inception.2010.1080p.mkv`. Both are refused in production too. Identifying what was downloaded needs a real TMDB key. A real TMDB key (read-only) makes titles and posters work.
 

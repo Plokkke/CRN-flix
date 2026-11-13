@@ -13,16 +13,12 @@
   "scripts": {
     "build": "nest build",
     "clean": "rm -rf dist reports",
-    "dev": "nest start --env-file .env --watch",
-    "dev:local": "nest start --env-file sandbox.env --watch",
+    "dev": "nest start --env-file sandbox.env --watch",
     "lint": "eslint \"{src,tests}/**/*.ts\"",
     "lint:fix": "pnpm run lint --fix",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "start": "nest start --env-file .env",
-    "start:debug": "pnpm run dev --debug",
     "start:prod": "node dist/main",
-    "once": "nest start --env-file .env -- --once",
-    "indexer:find": "node --env-file .env -r ts-node/register/transpile-only -r tsconfig-paths/register src/modules/indexer/dev-cli.ts",
+    "indexer:find": "node --env-file indexer.env -r ts-node/register/transpile-only -r tsconfig-paths/register src/modules/indexer/dev-cli.ts",
     "test": "jest",
     "test:cov": "jest --coverage && stryker run",
     "test:mut": "stryker run"
