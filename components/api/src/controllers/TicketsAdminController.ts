@@ -19,7 +19,7 @@ import { AdminSessionGuard } from '@/guards/admin-session.guard';
 import { ContextService } from '@/services/context';
 import { TicketsRepository } from '@/services/database/tickets';
 import { TicketContextLoader } from '@/services/tickets/context';
-import { isDeadLetter, TicketEntity, TicketOperation } from '@/services/tickets/model';
+import { isDeadLetter, TicketCategory, TicketEntity, TicketOperation } from '@/services/tickets/model';
 import { buildTicketView } from '@/services/tickets/presenter';
 import { TicketService } from '@/services/tickets/ticket.service';
 import { adminTicketDetailTemplate } from '@/web/templates/admin-ticket-detail';
@@ -92,6 +92,23 @@ export class TicketsAdminController {
       events: await this.tickets.listEvents(id),
       flashMessage: message,
     });
+  }
+
+  /** Same as posting a link in the admin channel: the ticket's first attempt starts on its own. */
+  @Post('manual-download')
+  async startManualDownload(@Body('url') url: string | undefined, @Res() res: Response): Promise<void> {
+    const link = url?.trim() ?? '';
+    if (!/^https?:\/\//.test(link)) {
+      res.redirect(`/admin/tickets?message=${encodeURIComponent('Lien invalide : http(s) attendu')}`);
+      return;
+    }
+    const ticket = await this.ticketService.open(
+      TicketCategory.ManualDownload,
+      null,
+      { url: link },
+      { title: `Téléchargement manuel — ${link.slice(0, 80)}` },
+    );
+    res.redirect(`/admin/tickets/${ticket.id}`);
   }
 
   @Post(':id/op')

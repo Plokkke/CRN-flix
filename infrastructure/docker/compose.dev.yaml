@@ -1,4 +1,4 @@
-# Local sandbox dependencies only (COOKBOOK §2): the engine itself runs with `pnpm dev:local`.
+# Local sandbox dependencies only (COOKBOOK §2): the engine itself runs with `pnpm dev`.
 # Nothing here is reachable from outside the machine.
 name: crn-flix-dev
 
@@ -35,5 +35,24 @@ services:
       DATABASE_USER: crn_flix
       DATABASE_URL: postgresql://crn_flix:crn_flix_local@postgres:5432/crn_flix
 
+  # The player, on the fake library of .sandbox/medias (pnpm sandbox:library), same version as production.
+  jellyfin:
+    # renovate: datasource=docker depName=jellyfin/jellyfin
+    # Same release as production (12.1.0).
+    image: jellyfin/jellyfin:12.1.20260915-010956
+    ports:
+      - "127.0.0.1:8096:8096"
+    volumes:
+      - jellyfin-config:/config
+      - jellyfin-cache:/cache
+      - ../../.sandbox/medias:/medias
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8096/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
 volumes:
   postgres-data:
+  jellyfin-config:
+  jellyfin-cache:

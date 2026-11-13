@@ -10,6 +10,9 @@ export const environmentVariablesSchema = z
     SERVER_URL: z.string(),
     PORT: z.coerce.number(),
     SERVICE_NAME: z.string(),
+    /** `file`: requests and playheads read from CATALOG_FILE (local sandbox only, refused in production). */
+    CATALOG: z.enum(['trakt', 'file']).default('trakt'),
+    CATALOG_FILE: z.string().optional(),
     TRAKT_HOST: z.string(),
     TRAKT_CLIENT_ID: z.string(),
     TRAKT_CLIENT_SECRET: z.string(),
@@ -21,8 +24,10 @@ export const environmentVariablesSchema = z
     DISCORD_BOT_TOKEN: z.string().default(''),
     /** The admins' ids on the admin channel (Discord user ids; any name with the console channel). */
     DISCORD_ADMIN_IDS: z.string(),
-    GMAIL_USER: z.string(),
-    GMAIL_PASSWORD: z.string(),
+    GMAIL_USER: z.string().default(''),
+    GMAIL_PASSWORD: z.string().default(''),
+    /** Local sandbox: emails are written to this folder instead of being sent (refused in production). */
+    USER_MESSAGING_OUTBOX: z.string().optional(),
     /** `dry-run` logs what would reach users without sending nor recording anything. */
     USER_MESSAGING: z.enum(['send', 'dry-run']),
     /** Subscribers are only messaged outside this window (login codes excepted). */
@@ -44,7 +49,11 @@ export const environmentVariablesSchema = z
     INDEXER_ALLOWED_HOSTS: z.string().default(''),
     INDEXER_SIZE_TOLERANCE: z.coerce.number().default(1),
     INDEXER_BYTES_PER_MIN_JSON: z.string().default(''),
-    FETCHR_URL: z.string(),
+    /** `fake`: downloads are copies of FAKE_DOWNLOADER_SAMPLE (local sandbox only, refused in production). */
+    DOWNLOADER: z.enum(['fetchr', 'fake']).default('fetchr'),
+    FAKE_DOWNLOADER_SAMPLE: z.string().optional(),
+    FAKE_DOWNLOADER_DURATION_MS: z.coerce.number().int().min(0).default(10_000),
+    FETCHR_URL: z.string().default(''),
     FETCHR_API_KEY: z.string().optional(),
     FETCHR_DOWNLOADS_PREFIX: z.string().default('/downloads'),
     TMDB_API_KEY: z.string(),
@@ -62,6 +71,36 @@ export const environmentVariablesSchema = z
         message: 'DISCORD_CHANNEL_ID and DISCORD_BOT_TOKEN are required with ADMIN_CHANNEL=discord',
       });
     }
+    if (!env.USER_MESSAGING_OUTBOX && (!env.GMAIL_USER || !env.GMAIL_PASSWORD)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'GMAIL_USER and GMAIL_PASSWORD are required without USER_MESSAGING_OUTBOX',
+      });
+    }
+    if (env.USER_MESSAGING_OUTBOX && process.env.NODE_ENV === 'production') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'USER_MESSAGING_OUTBOX keeps every email on disk: refused in production',
+      });
+    }
+    if (env.DOWNLOADER === 'fetchr' && !env.FETCHR_URL) {
+      ctx.addIssue({ code: 'custom', message: 'FETCHR_URL is required with DOWNLOADER=fetchr' });
+    }
+    if (env.DOWNLOADER === 'fake' && !env.FAKE_DOWNLOADER_SAMPLE) {
+      ctx.addIssue({ code: 'custom', message: 'FAKE_DOWNLOADER_SAMPLE is required with DOWNLOADER=fake' });
+    }
+    if (env.DOWNLOADER === 'fake' && process.env.NODE_ENV === 'production') {
+      ctx.addIssue({ code: 'custom', message: 'DOWNLOADER=fake downloads nothing: refused in production' });
+    }
+    if (env.CATALOG === 'file' && !env.CATALOG_FILE) {
+      ctx.addIssue({ code: 'custom', message: 'CATALOG_FILE is required with CATALOG=file' });
+    }
+    if (env.CATALOG === 'file' && process.env.NODE_ENV === 'production') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'CATALOG=file would replace every user’s requests with a file: refused in production',
+      });
+    }
     if (env.ADMIN_CHANNEL === 'console' && process.env.NODE_ENV === 'production') {
       ctx.addIssue({
         code: 'custom',
@@ -72,6 +111,15 @@ export const environmentVariablesSchema = z
   .transform((env) => ({
     name: env.SERVICE_NAME,
     adminChannel: env.ADMIN_CHANNEL,
+    downloader:
+      env.DOWNLOADER === 'fake'
+        ? {
+            kind: 'fake' as const,
+            samplePath: env.FAKE_DOWNLOADER_SAMPLE!,
+            durationMs: env.FAKE_DOWNLOADER_DURATION_MS,
+          }
+        : { kind: 'fetchr' as const },
+    catalog: env.CATALOG === 'file' ? { kind: 'file' as const, file: env.CATALOG_FILE! } : { kind: 'trakt' as const },
     server: {
       url: env.SERVER_URL,
       port: env.PORT,
@@ -106,6 +154,7 @@ export const environmentVariablesSchema = z
       serviceName: env.SERVICE_NAME,
       gmailUser: env.GMAIL_USER,
       gmailPassword: env.GMAIL_PASSWORD,
+      outbox: env.USER_MESSAGING_OUTBOX ?? null,
     },
     database: {
       host: env.DATABASE_HOST,
