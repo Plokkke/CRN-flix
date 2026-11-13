@@ -116,13 +116,15 @@ pnpm dev
 
 ### Local sandbox
 
-A local instance with no external service and no real library: Postgres in Docker, the admin channel in the terminal.
+A local instance with no external service and no real library: Postgres and Jellyfin in Docker, a fake library of one-second videos, the admin channel in the terminal.
 
 ```bash
 pnpm install
-pnpm infra:up          # Postgres on 127.0.0.1:55432 + migrations
+pnpm infra:up          # Postgres (127.0.0.1:55432) + migrations, Jellyfin (127.0.0.1:8096, same release as production)
+pnpm sandbox:library   # fake library in .sandbox/medias: real titles and imdb ids, 2 KB per file
+pnpm sandbox:jellyfin  # first-run wizard (admin / sandbox), Films + Séries libraries, prints JELLYFIN_TOKEN
 pnpm dev:local         # engine on http://localhost:3000, reads components/api/.env.local
-pnpm infra:down        # stop (the database volume is kept)
+pnpm infra:down        # stop (database and Jellyfin volumes are kept)
 ```
 
 `components/api/.env.local` (ignored by git; no real secret):
@@ -144,15 +146,15 @@ DATABASE_PASSWORD=crn_flix_local
 TRAKT_HOST=https://api.trakt.tv
 TRAKT_CLIENT_ID=placeholder
 TRAKT_CLIENT_SECRET=placeholder
-JELLYFIN_URL=http://localhost:8096
-JELLYFIN_TOKEN=placeholder
+JELLYFIN_URL=http://127.0.0.1:8096
+JELLYFIN_TOKEN=<printed by pnpm sandbox:jellyfin>
 FETCHR_URL=ws://localhost:1
 TMDB_API_KEY=placeholder
 DOWNLOADS_PATH=../../.sandbox/downloads
 MEDIAS_PATH=../../.sandbox/medias
 ```
 
-With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. With `USER_MESSAGING_OUTBOX`, every email to a subscriber is written to `.sandbox/outbox/` (`.html` to open in a browser, `.txt` with the login code) instead of being sent. The engine refuses both when `NODE_ENV=production`. Trakt, Jellyfin and Fetchr are unreachable: the engine boots anyway and logs the failed calls. A real TMDB key (read-only) makes titles and posters work.
+With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. With `USER_MESSAGING_OUTBOX`, every email to a subscriber is written to `.sandbox/outbox/` (`.html` to open in a browser, `.txt` with the login code) instead of being sent. The engine refuses both when `NODE_ENV=production`. Trakt and Fetchr are unreachable: the engine boots anyway and logs the failed calls (and Jellyfin has no Trakt plugin, so the end of `player-sync` fails on it). A real TMDB key (read-only) makes titles and posters work.
 
 ### Configuration
 
