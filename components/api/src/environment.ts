@@ -10,6 +10,9 @@ export const environmentVariablesSchema = z
     SERVER_URL: z.string(),
     PORT: z.coerce.number(),
     SERVICE_NAME: z.string(),
+    /** `file`: requests and playheads read from CATALOG_FILE (local sandbox only, refused in production). */
+    CATALOG: z.enum(['trakt', 'file']).default('trakt'),
+    CATALOG_FILE: z.string().optional(),
     TRAKT_HOST: z.string(),
     TRAKT_CLIENT_ID: z.string(),
     TRAKT_CLIENT_SECRET: z.string(),
@@ -76,6 +79,15 @@ export const environmentVariablesSchema = z
         message: 'USER_MESSAGING_OUTBOX keeps every email on disk: refused in production',
       });
     }
+    if (env.CATALOG === 'file' && !env.CATALOG_FILE) {
+      ctx.addIssue({ code: 'custom', message: 'CATALOG_FILE is required with CATALOG=file' });
+    }
+    if (env.CATALOG === 'file' && process.env.NODE_ENV === 'production') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'CATALOG=file would replace every user’s requests with a file: refused in production',
+      });
+    }
     if (env.ADMIN_CHANNEL === 'console' && process.env.NODE_ENV === 'production') {
       ctx.addIssue({
         code: 'custom',
@@ -86,6 +98,7 @@ export const environmentVariablesSchema = z
   .transform((env) => ({
     name: env.SERVICE_NAME,
     adminChannel: env.ADMIN_CHANNEL,
+    catalog: env.CATALOG === 'file' ? { kind: 'file' as const, file: env.CATALOG_FILE! } : { kind: 'trakt' as const },
     server: {
       url: env.SERVER_URL,
       port: env.PORT,

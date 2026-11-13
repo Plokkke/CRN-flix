@@ -123,6 +123,7 @@ pnpm install
 pnpm infra:up          # Postgres (127.0.0.1:55432) + migrations, Jellyfin (127.0.0.1:8096, same release as production)
 pnpm sandbox:library   # fake library in .sandbox/medias: real titles and imdb ids, 2 KB per file
 pnpm sandbox:jellyfin  # first-run wizard (admin / sandbox), Films + Séries libraries, prints JELLYFIN_TOKEN
+pnpm sandbox:users     # subscribers papa and leo (engine + Jellyfin accounts) and .sandbox/catalog.json, their requests
 pnpm dev:local         # engine on http://localhost:3000, reads components/api/.env.local
 pnpm infra:down        # stop (database and Jellyfin volumes are kept)
 ```
@@ -143,6 +144,8 @@ DATABASE_PORT=55432
 DATABASE_NAME=crn_flix
 DATABASE_USERNAME=crn_flix
 DATABASE_PASSWORD=crn_flix_local
+CATALOG=file
+CATALOG_FILE=../../.sandbox/catalog.json
 TRAKT_HOST=https://api.trakt.tv
 TRAKT_CLIENT_ID=placeholder
 TRAKT_CLIENT_SECRET=placeholder
@@ -154,7 +157,7 @@ DOWNLOADS_PATH=../../.sandbox/downloads
 MEDIAS_PATH=../../.sandbox/medias
 ```
 
-With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. With `USER_MESSAGING_OUTBOX`, every email to a subscriber is written to `.sandbox/outbox/` (`.html` to open in a browser, `.txt` with the login code) instead of being sent. The engine refuses both when `NODE_ENV=production`. Trakt and Fetchr are unreachable: the engine boots anyway and logs the failed calls (and Jellyfin has no Trakt plugin, so the end of `player-sync` fails on it). A real TMDB key (read-only) makes titles and posters work.
+With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. With `USER_MESSAGING_OUTBOX`, every email to a subscriber is written to `.sandbox/outbox/` (`.html` to open in a browser, `.txt` with the login code) instead of being sent. The engine refuses both when `NODE_ENV=production`. With `CATALOG=file`, the subscribers' requests and playheads come from `.sandbox/catalog.json` (re-read on every sync: edit it, then run `catalog-sync` from `/admin`); refused in production too. Fetchr is unreachable: the engine boots anyway and logs the failed calls. A real TMDB key (read-only) makes titles and posters work.
 
 ### Configuration
 
