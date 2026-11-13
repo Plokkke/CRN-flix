@@ -114,6 +114,47 @@ pnpm dev
 | `pnpm -F @crn-flix/api test:mut` | Stryker mutation tests |
 | `pnpm -F @crn-flix/api indexer:find <indexer> --imdb tt… --title "…" [--type show --episodes "1:1-10"] [--verbose]` | Query an indexer standalone (no Nest, database or admin channel), handy to debug a search; run `pnpm build` first |
 
+### Local sandbox
+
+A local instance with no external service and no real library: Postgres in Docker, the admin channel in the terminal.
+
+```bash
+pnpm install
+pnpm infra:up          # Postgres on 127.0.0.1:55432 + migrations
+pnpm dev:local         # engine on http://localhost:3000, reads components/api/.env.local
+pnpm infra:down        # stop (the database volume is kept)
+```
+
+`components/api/.env.local` (ignored by git; no real secret):
+
+```dotenv
+SERVICE_NAME=CRN-Flix (local)
+SERVER_URL=http://localhost:3000
+PORT=3000
+LOG_LEVEL=debug
+ADMIN_CHANNEL=console
+DISCORD_ADMIN_IDS=local-admin
+USER_MESSAGING=dry-run
+GMAIL_USER=sandbox@example.invalid
+GMAIL_PASSWORD=placeholder
+DATABASE_HOST=localhost
+DATABASE_PORT=55432
+DATABASE_NAME=crn_flix
+DATABASE_USERNAME=crn_flix
+DATABASE_PASSWORD=crn_flix_local
+TRAKT_HOST=https://api.trakt.tv
+TRAKT_CLIENT_ID=placeholder
+TRAKT_CLIENT_SECRET=placeholder
+JELLYFIN_URL=http://localhost:8096
+JELLYFIN_TOKEN=placeholder
+FETCHR_URL=ws://localhost:1
+TMDB_API_KEY=placeholder
+DOWNLOADS_PATH=../../.sandbox/downloads
+MEDIAS_PATH=../../.sandbox/medias
+```
+
+With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. The engine refuses this channel when `NODE_ENV=production`. Trakt, Jellyfin and Fetchr are unreachable: the engine boots anyway and logs the failed calls. A real TMDB key (read-only) makes titles and posters work.
+
 ### Configuration
 
 Validated at boot by `components/api/src/environment.ts`.
@@ -137,7 +178,7 @@ Validated at boot by `components/api/src/environment.ts`.
 | Loadix | `LOADIX_API_HOST`, `LOADIX_SITE_HOST` (disabled when unset) |
 | Fetchr | `FETCHR_URL` (`ws://…`), `FETCHR_API_KEY`, `FETCHR_DOWNLOADS_PREFIX` (its download path, mapped onto `DOWNLOADS_PATH`) |
 | Jellyfin | `JELLYFIN_URL`, `JELLYFIN_TOKEN`, `JELLYFIN_LIBRARY_ROOT` (default `/medias`) |
-| Discord | `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` (admin channel), `DISCORD_ADMIN_IDS` (comma-separated) |
+| Admin channel | `ADMIN_CHANNEL` (`discord` default, or `console` for the local sandbox), `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` (required with `discord`), `DISCORD_ADMIN_IDS` (comma-separated admin ids) |
 | Email | `GMAIL_USER`, `GMAIL_PASSWORD` (app password) |
 
 ## Deployment

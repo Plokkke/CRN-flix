@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { AdminChannel } from '@crn-flix/contracts';
 import { DiscordService } from '@crn-flix/discord';
+import { ConsoleAdminChannel } from '@crn-flix/messaging-admin-console';
 import { DiscordAdminChannel } from '@crn-flix/messaging-admin-discord';
 
 import { Config } from '@/app.module';
@@ -13,8 +14,10 @@ import { TicketService } from '@/services/tickets/ticket.service';
 
 export const ADMIN_CHANNEL = Symbol('AdminChannel');
 
-export const adminMessagingProviders: Provider[] = [
-  {
+export type AdminChannelKind = 'discord' | 'console';
+
+const channelProviders: Record<AdminChannelKind, Provider> = {
+  discord: {
     provide: ADMIN_CHANNEL,
     inject: [ConfigService, DiscordService],
     useFactory: (configService: ConfigService<Config, true>, discord: DiscordService): AdminChannel => {
@@ -22,6 +25,19 @@ export const adminMessagingProviders: Provider[] = [
       return new DiscordAdminChannel({ channelId: discordChannelId, adminIds }, discord);
     },
   },
+  /** No Discord connection at all: the shared DiscordService is not even provided. */
+  console: {
+    provide: ADMIN_CHANNEL,
+    inject: [ConfigService],
+    useFactory: (configService: ConfigService<Config, true>): AdminChannel => {
+      const { adminIds } = configService.get<Config['administration']>('administration');
+      return new ConsoleAdminChannel({ adminIds });
+    },
+  },
+};
+
+export const adminMessagingProviders = (kind: AdminChannelKind): Provider[] => [
+  channelProviders[kind],
   {
     provide: AdminTicketRelay,
     inject: [ADMIN_CHANNEL, TicketsRepository, TicketService, TicketContextLoader],

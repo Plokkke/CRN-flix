@@ -34,3 +34,7 @@ terraform.tfstate.backup
 *.tfvars
 !terraform.tfvars.example
 .claude/worktrees/
+
+# Local sandbox (COOKBOOK: never a .env in git)
+.env.local
+.sandbox/
