@@ -168,7 +168,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       scheduledAnnouncementsProvider,
       ...adminMessagingProviders(env.adminChannel),
       ...ticketProviders,
-      ...downloaderProviders,
+      ...downloaderProviders(env.downloader),
       DownloadProgressService,
       tmdbProvider,
       ...mediaTitlesProviders,

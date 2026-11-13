@@ -151,13 +151,14 @@ TRAKT_CLIENT_ID=placeholder
 TRAKT_CLIENT_SECRET=placeholder
 JELLYFIN_URL=http://127.0.0.1:8096
 JELLYFIN_TOKEN=<printed by pnpm sandbox:jellyfin>
-FETCHR_URL=ws://localhost:1
-TMDB_API_KEY=placeholder
+DOWNLOADER=fake
+FAKE_DOWNLOADER_SAMPLE=../../.sandbox/sample.mkv
+TMDB_API_KEY=<your read-only TMDB key, or any value>
 DOWNLOADS_PATH=../../.sandbox/downloads
 MEDIAS_PATH=../../.sandbox/medias
 ```
 
-With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. With `USER_MESSAGING_OUTBOX`, every email to a subscriber is written to `.sandbox/outbox/` (`.html` to open in a browser, `.txt` with the login code) instead of being sent. The engine refuses both when `NODE_ENV=production`. With `CATALOG=file`, the subscribers' requests and playheads come from `.sandbox/catalog.json` (re-read on every sync: edit it, then run `catalog-sync` from `/admin`); refused in production too. Fetchr is unreachable: the engine boots anyway and logs the failed calls. A real TMDB key (read-only) makes titles and posters work.
+With `ADMIN_CHANNEL=console`, the admin login code and every ticket are printed in the engine's terminal (log line `To admin local-admin: …`); tickets are answered on `/admin/tickets`. With `USER_MESSAGING_OUTBOX`, every email to a subscriber is written to `.sandbox/outbox/` (`.html` to open in a browser, `.txt` with the login code) instead of being sent. The engine refuses both when `NODE_ENV=production`. With `CATALOG=file`, the subscribers' requests and playheads come from `.sandbox/catalog.json` (re-read on every sync: edit it, then run `catalog-sync` from `/admin`). With `DOWNLOADER=fake`, every download takes `FAKE_DOWNLOADER_DURATION_MS` (default 10 s) and drops a copy of the sample video named after the link into `.sandbox/downloads/`; start one from the « Téléchargement manuel » form on `/admin/tickets`, e.g. `https://example.invalid/Inception.2010.1080p.mkv`. Both are refused in production too. Identifying what was downloaded needs a real TMDB key. A real TMDB key (read-only) makes titles and posters work.
 
 ### Configuration
 
