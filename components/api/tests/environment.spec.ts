@@ -12,8 +12,6 @@ const BASE = {
   TRAKT_CLIENT_SECRET: 'x',
   JELLYFIN_URL: 'http://localhost:8096',
   DISCORD_ADMIN_IDS: 'local-admin',
-  GMAIL_USER: 'x',
-  GMAIL_PASSWORD: 'x',
   USER_MESSAGING: 'dry-run',
   DATABASE_HOST: 'localhost',
   DATABASE_PORT: '55432',
@@ -26,6 +24,33 @@ const BASE = {
   MEDIAS_PATH: '/tmp/medias',
 };
 
+const GMAIL = { GMAIL_USER: 'x', GMAIL_PASSWORD: 'x' };
+
+describe('environment: user messaging', () => {
+  const nodeEnv = process.env.NODE_ENV;
+
+  afterEach(() => {
+    process.env.NODE_ENV = nodeEnv;
+  });
+
+  const discord = { DISCORD_CHANNEL_ID: 'c', DISCORD_BOT_TOKEN: 't' };
+
+  it('needs the Gmail credentials only without a local outbox', () => {
+    expect(environmentVariablesSchema.safeParse({ ...BASE, ...discord }).success).toBe(false);
+    const sandbox = environmentVariablesSchema.parse({ ...BASE, ...discord, USER_MESSAGING_OUTBOX: '/tmp/outbox' });
+    expect(sandbox.mailing.outbox).toBe('/tmp/outbox');
+    expect(environmentVariablesSchema.parse({ ...BASE, ...discord, ...GMAIL }).mailing.outbox).toBeNull();
+  });
+
+  it('refuses the outbox in production: nobody would receive anything', () => {
+    process.env.NODE_ENV = 'production';
+
+    const result = environmentVariablesSchema.safeParse({ ...BASE, ...discord, USER_MESSAGING_OUTBOX: '/tmp/outbox' });
+
+    expect(result.error?.issues[0].message).toMatch(/refused in production/);
+  });
+});
+
 describe('environment: admin channel', () => {
   const nodeEnv = process.env.NODE_ENV;
 
@@ -34,17 +59,20 @@ describe('environment: admin channel', () => {
   });
 
   it('needs the Discord credentials only with the Discord channel', () => {
-    expect(environmentVariablesSchema.safeParse(BASE).success).toBe(false);
+    expect(environmentVariablesSchema.safeParse({ ...BASE, ...GMAIL }).success).toBe(false);
     expect(
-      environmentVariablesSchema.safeParse({ ...BASE, DISCORD_CHANNEL_ID: 'c', DISCORD_BOT_TOKEN: 't' }).success,
+      environmentVariablesSchema.safeParse({ ...BASE, ...GMAIL, DISCORD_CHANNEL_ID: 'c', DISCORD_BOT_TOKEN: 't' })
+        .success,
     ).toBe(true);
-    expect(environmentVariablesSchema.parse({ ...BASE, ADMIN_CHANNEL: 'console' }).adminChannel).toBe('console');
+    expect(environmentVariablesSchema.parse({ ...BASE, ...GMAIL, ADMIN_CHANNEL: 'console' }).adminChannel).toBe(
+      'console',
+    );
   });
 
   it('refuses the console channel in production: it prints the login codes', () => {
     process.env.NODE_ENV = 'production';
 
-    const result = environmentVariablesSchema.safeParse({ ...BASE, ADMIN_CHANNEL: 'console' });
+    const result = environmentVariablesSchema.safeParse({ ...BASE, ...GMAIL, ADMIN_CHANNEL: 'console' });
 
     expect(result.success).toBe(false);
     expect(result.error?.issues[0].message).toMatch(/refused in production/);

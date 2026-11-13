@@ -21,8 +21,10 @@ export const environmentVariablesSchema = z
     DISCORD_BOT_TOKEN: z.string().default(''),
     /** The admins' ids on the admin channel (Discord user ids; any name with the console channel). */
     DISCORD_ADMIN_IDS: z.string(),
-    GMAIL_USER: z.string(),
-    GMAIL_PASSWORD: z.string(),
+    GMAIL_USER: z.string().default(''),
+    GMAIL_PASSWORD: z.string().default(''),
+    /** Local sandbox: emails are written to this folder instead of being sent (refused in production). */
+    USER_MESSAGING_OUTBOX: z.string().optional(),
     /** `dry-run` logs what would reach users without sending nor recording anything. */
     USER_MESSAGING: z.enum(['send', 'dry-run']),
     /** Subscribers are only messaged outside this window (login codes excepted). */
@@ -60,6 +62,18 @@ export const environmentVariablesSchema = z
       ctx.addIssue({
         code: 'custom',
         message: 'DISCORD_CHANNEL_ID and DISCORD_BOT_TOKEN are required with ADMIN_CHANNEL=discord',
+      });
+    }
+    if (!env.USER_MESSAGING_OUTBOX && (!env.GMAIL_USER || !env.GMAIL_PASSWORD)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'GMAIL_USER and GMAIL_PASSWORD are required without USER_MESSAGING_OUTBOX',
+      });
+    }
+    if (env.USER_MESSAGING_OUTBOX && process.env.NODE_ENV === 'production') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'USER_MESSAGING_OUTBOX keeps every email on disk: refused in production',
       });
     }
     if (env.ADMIN_CHANNEL === 'console' && process.env.NODE_ENV === 'production') {
@@ -106,6 +120,7 @@ export const environmentVariablesSchema = z
       serviceName: env.SERVICE_NAME,
       gmailUser: env.GMAIL_USER,
       gmailPassword: env.GMAIL_PASSWORD,
+      outbox: env.USER_MESSAGING_OUTBOX ?? null,
     },
     database: {
       host: env.DATABASE_HOST,
