@@ -1,12 +1,13 @@
 import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { AdminChannel } from '@crn-flix/contracts';
+import { AdminChannel, MetadataSource } from '@crn-flix/contracts';
 import { DiscordService } from '@crn-flix/discord';
 import { ConsoleAdminChannel } from '@crn-flix/messaging-admin-console';
 import { DiscordAdminChannel } from '@crn-flix/messaging-admin-discord';
 
 import { Config } from '@/app.module';
+import { METADATA } from '@/providers/media-titles';
 import { TicketsRepository } from '@/services/database/tickets';
 import { AdminTicketRelay } from '@/services/messaging/admin/relay';
 import { TicketContextLoader } from '@/services/tickets/context';
@@ -40,12 +41,14 @@ export const adminMessagingProviders = (kind: AdminChannelKind): Provider[] => [
   channelProviders[kind],
   {
     provide: AdminTicketRelay,
-    inject: [ADMIN_CHANNEL, TicketsRepository, TicketService, TicketContextLoader],
+    inject: [ADMIN_CHANNEL, TicketsRepository, TicketService, TicketContextLoader, METADATA],
     useFactory: (
       channel: AdminChannel,
       tickets: TicketsRepository,
       ticketService: TicketService,
       contextLoader: TicketContextLoader,
-    ): AdminTicketRelay => new AdminTicketRelay(channel, tickets, ticketService, contextLoader),
+      metadata: MetadataSource,
+    ): AdminTicketRelay =>
+      new AdminTicketRelay(channel, tickets, ticketService, contextLoader, (text) => metadata.findReference(text)),
   },
 ];

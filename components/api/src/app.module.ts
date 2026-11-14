@@ -18,9 +18,11 @@ import { AdminController } from '@/controllers/AdminController';
 import { AnnounceAdminController } from '@/controllers/AnnounceAdminController';
 import { AssetsController } from '@/controllers/AssetsController';
 import { HealthVersionController } from '@/controllers/HealthController';
+import { LibraryAdminController } from '@/controllers/LibraryAdminController';
 import { MailingController } from '@/controllers/MailingController';
 import { MeController } from '@/controllers/MeController';
 import { MessagesAdminController } from '@/controllers/MessagesAdminController';
+import { PoliciesAdminController } from '@/controllers/PoliciesAdminController';
 import { TicketsAdminController } from '@/controllers/TicketsAdminController';
 import { UserGuideController } from '@/controllers/UserGuideController';
 import { UsersAdminController } from '@/controllers/UsersAdminController';
@@ -33,6 +35,7 @@ import { repositoryProviders } from '@/providers/database';
 import { DiscordConnectionLifecycle, discordProvider } from '@/providers/discord';
 import { downloaderProviders } from '@/providers/downloader';
 import { jellyfinProvider } from '@/providers/jellyfin';
+import { libraryProviders } from '@/providers/library';
 import { mediaTitlesProviders } from '@/providers/media-titles';
 import { adminMessagingProviders } from '@/providers/messaging/admin';
 import {
@@ -45,6 +48,7 @@ import {
 import { namingAuditProviders } from '@/providers/naming-audit';
 import { indexersRegistryProvider, plannerProvider } from '@/providers/planner';
 import { playerProviders } from '@/providers/player';
+import { policyProviders } from '@/providers/policy';
 import { postDownloadProviders } from '@/providers/post-download';
 import { syncDataSourceConfigSchema, syncDataSourceProvider } from '@/providers/syncDataSource';
 import { ticketProviders } from '@/providers/tickets';
@@ -56,9 +60,11 @@ import { MemoryCacheService } from '@/services/cache/memory-cache.service';
 import { syncConfigSchema } from '@/services/catalog/sync';
 import { DownloadProgressService } from '@/services/download-progress';
 import { HealthChecksService } from '@/services/health-checks';
+import { libraryConfigSchema } from '@/services/library/paths';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
 import { quietHoursConfigSchema } from '@/services/messaging/user/quiet-hours';
 import { namingAuditConfigSchema } from '@/services/naming-audit';
+import { policyConfigSchema } from '@/services/policy/policy';
 import { StartupRecoveryService } from '@/services/startup-recovery';
 
 export const configSchema = z.object({
@@ -72,6 +78,8 @@ export const configSchema = z.object({
   jellyfin: jellyfinConfigSchema,
   mailing: emailConfigSchema,
   userMessaging: z.object({ mode: z.enum(['send', 'dry-run']), quietHours: quietHoursConfigSchema }),
+  policy: policyConfigSchema,
+  library: libraryConfigSchema,
   discord: discordConfigSchema,
   indexer: z.object({
     loadix: loadixConfigSchema.nullable(),
@@ -126,6 +134,8 @@ export function loadConfig(env: EnvironmentVariables): Config {
     },
     mailing: env.mailing,
     userMessaging: env.userMessaging,
+    policy: env.policy,
+    library: env.library,
   });
 }
 
@@ -142,6 +152,8 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       TicketsAdminController,
       AnnounceAdminController,
       UsersAdminController,
+      PoliciesAdminController,
+      LibraryAdminController,
       MessagesAdminController,
       MeController,
     ],
@@ -172,6 +184,8 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       DownloadProgressService,
       tmdbProvider,
       ...mediaTitlesProviders,
+      ...libraryProviders,
+      ...policyProviders,
       ...postDownloadProviders,
       ...namingAuditProviders,
       HealthChecksService,

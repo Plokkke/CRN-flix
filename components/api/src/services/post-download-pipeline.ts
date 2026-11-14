@@ -5,7 +5,7 @@ import { Logger } from '@nestjs/common';
 
 import { DownloadJobEntity, DownloadJobsRepository, DownloadJobStatus } from './database/download-jobs';
 import { TicketsRepository } from './database/tickets';
-import { IdentificationResult, MediaIdentifierService } from './media-identifier';
+import { DesignatedMedia, IdentificationResult, MediaIdentifierService } from './media-identifier';
 import { MediaLabelizerService } from './media-labelizer';
 import { TICKET_ID_METADATA_KEY, TicketCategory, TicketPayloadMap } from './tickets/model';
 import { isVideoFile } from './video-files';
@@ -52,14 +52,14 @@ export class PostDownloadPipeline {
     await this.placeAll(job, (videoFile) => this.resolveIdentity(videoFile, job));
   }
 
-  async retryWithImdbId(jobId: string, imdbId: string): Promise<void> {
+  async retryAs(jobId: string, designated: DesignatedMedia): Promise<void> {
     const job = await this.downloadJobs.get(jobId);
     if (!job || job.status !== DownloadJobStatus.Failed) {
       return;
     }
 
-    PostDownloadPipeline.logger.log(`Retrying job ${job.id} with IMDb ID ${imdbId}`);
-    await this.placeAll(job, (videoFile) => this.identification.identifyWithImdbId(videoFile, imdbId, job.id));
+    PostDownloadPipeline.logger.log(`Retrying job ${job.id} as IMDb ${designated.media.imdbId}`);
+    await this.placeAll(job, (videoFile) => this.identification.identifyAs(videoFile, designated, job.id));
   }
 
   /**
@@ -78,7 +78,7 @@ export class PostDownloadPipeline {
         if (!identity) {
           throw new Error(`Identification failed for ${path.basename(videoFile)}`);
         }
-        await this.placement.move(videoFile, identity, job.metadata);
+        await this.placement.move(videoFile, identity);
       } catch (error) {
         await this.fail(job, pending.slice(index), describeError(error));
         return;

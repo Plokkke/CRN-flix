@@ -1,4 +1,11 @@
-import { TicketEventKind, TicketOperation, TicketOperationKind, TicketTone, TicketView } from '@crn-flix/contracts';
+import {
+  IdentitySubmission,
+  TicketEventKind,
+  TicketOperation,
+  TicketOperationKind,
+  TicketTone,
+  TicketView,
+} from '@crn-flix/contracts';
 
 export { TicketEventKind, TicketOperation, TicketOperationKind, TicketTone, TicketView };
 
@@ -15,6 +22,10 @@ export enum TicketCategory {
   MissingImdb = 'missing-imdb',
   /** An integration (catalog, indexer) stopped matching its API; resolves itself once calls work again. */
   IntegrationFailure = 'integration-failure',
+  /** A subscriber contests a policy refusal or asks for an exemption. */
+  PolicyAppeal = 'policy-appeal',
+  /** A title on a shared shelf now breaks a rule for everyone; it stays there until an admin decides. */
+  PolicyAnomaly = 'policy-anomaly',
 }
 
 export enum TicketStatus {
@@ -24,9 +35,12 @@ export enum TicketStatus {
 }
 
 export type TicketSubject = {
-  type: 'user' | 'planned_download' | 'download_job' | 'show' | 'media' | 'integration';
+  type: 'user' | 'planned_download' | 'download_job' | 'show' | 'media' | 'integration' | 'policy_refusal';
   id: string;
 } | null;
+
+/** What the admin gave so far on a ticket asking who a media is; the next answer completes it. */
+export type IdentitySubmitted = { submitted?: IdentitySubmission | null };
 
 export type TicketPayloadMap = {
   [TicketCategory.UserApproval]: { userId: string };
@@ -36,7 +50,7 @@ export type TicketPayloadMap = {
     packageName: string;
     failedFiles: string[];
     errorMessage: string;
-  };
+  } & IdentitySubmitted;
   [TicketCategory.PipelineFailure]: { jobId: string; fileNames: string; failedStep: string; errorMessage: string };
   [TicketCategory.ManualDownload]: {
     url: string;
@@ -45,13 +59,37 @@ export type TicketPayloadMap = {
     requestId?: string;
     jobId?: string;
     lastError?: string;
-  };
-  [TicketCategory.MissingImdb]: { title: string; year: number | null; kind: 'movie' | 'show'; mediaIds: string[] };
+    /** The admin's choice of shelf; without one the rules place the title (restricted → the admin's collection). */
+    destination?: 'standard' | 'kids' | 'personal';
+  } & IdentitySubmitted;
+  [TicketCategory.MissingImdb]: {
+    title: string;
+    year: number | null;
+    kind: 'movie' | 'show';
+    mediaIds: string[];
+  } & IdentitySubmitted;
   [TicketCategory.IntegrationFailure]: {
     integration: string;
     operation: string;
     errorMessage: string;
     firstSeenAt: string;
+  };
+  [TicketCategory.PolicyAppeal]: {
+    userId: string;
+    userName: string;
+    imdbId: string;
+    title: string;
+    /** `contest`: the rule applies wrongly; `exemption`: it applies, an exception is asked. */
+    kind: 'contest' | 'exemption';
+    motivation: string;
+    refusals: { ruleId: string | null; ruleName: string; summary: string }[];
+  };
+  [TicketCategory.PolicyAnomaly]: {
+    imdbId: string;
+    title: string;
+    /** Where the title is kept meanwhile. */
+    shelf: string;
+    refusals: { ruleId: string | null; ruleName: string; summary: string }[];
   };
 };
 
@@ -83,13 +121,22 @@ export type TicketEventEntity = {
 
 /** Which operations each category accepts — single source for every adapter. */
 export const OPERATIONS_BY_CATEGORY: Record<TicketCategory, TicketOperationKind[]> = {
-  [TicketCategory.UserApproval]: ['approve', 'reject'],
+  [TicketCategory.UserApproval]: ['approveAdult', 'approveKids', 'reject'],
   [TicketCategory.DownloadAction]: ['submitLink', 'reject', 'restore', 'resolveManually'],
-  [TicketCategory.IdentificationFailure]: ['submitImdb', 'resolveManually'],
+  [TicketCategory.IdentificationFailure]: ['submitIdentity', 'resolveManually'],
   [TicketCategory.PipelineFailure]: ['resolveManually'],
-  [TicketCategory.ManualDownload]: ['submitImdb', 'submitLink', 'resolveManually'],
-  [TicketCategory.MissingImdb]: ['submitImdb', 'resolveManually'],
+  [TicketCategory.ManualDownload]: [
+    'submitIdentity',
+    'submitLink',
+    'shelveStandard',
+    'shelveKids',
+    'shelvePersonal',
+    'resolveManually',
+  ],
+  [TicketCategory.MissingImdb]: ['submitIdentity', 'resolveManually'],
   [TicketCategory.IntegrationFailure]: ['resolveManually'],
+  [TicketCategory.PolicyAppeal]: ['grantExemption', 'excludeTitle', 'reject', 'reply'],
+  [TicketCategory.PolicyAnomaly]: ['excludeTitle', 'unpublish'],
 };
 
 export type OperationOutcome =

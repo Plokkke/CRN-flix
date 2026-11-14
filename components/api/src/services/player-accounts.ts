@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { CatalogAccountSource, Player } from '@crn-flix/contracts';
 
 import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
+import { LibraryAccess } from '@/services/library/access';
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -19,10 +20,12 @@ export class PlayerAccountsService {
     private readonly usersRepository: UsersRepository,
     private readonly player: Player,
     private readonly catalogAccounts: CatalogAccountSource,
+    private readonly access: LibraryAccess | null = null,
   ) {}
 
   async applyAll(): Promise<void> {
     const [users, accountIds] = await Promise.all([this.usersRepository.list(), this.player.listAccountIds()]);
+    await this.ensureLibraries(users);
     for (const accountId of accountIds) {
       const user = users.find(
         (candidate) => candidate.jellyfinId === accountId && candidate.status === UserStatus.Active,
@@ -50,8 +53,21 @@ export class PlayerAccountsService {
     if (maxStreams === null) {
       return;
     }
-    if (await this.player.applyAccountPolicy(accountId, { maxStreams })) {
+    const access = user && this.access ? await this.access.policyOf(user) : {};
+    if (await this.player.applyAccountPolicy(accountId, { maxStreams, ...access })) {
       PlayerAccountsService.logger.log(`Account ${user?.name ?? accountId}: account policy applied`);
+    }
+  }
+
+  /** The shelves' libraries must exist before accounts are given them. */
+  private async ensureLibraries(users: UserEntity[]): Promise<void> {
+    if (!this.access?.enabled) {
+      return;
+    }
+    const active = users.filter((user) => user.status === UserStatus.Active);
+    const created = await this.player.ensureLibraries(await this.access.libraries(active));
+    if (created > 0) {
+      PlayerAccountsService.logger.log(`${created} shelf librar${created > 1 ? 'ies' : 'y'} created on the player`);
     }
   }
 

@@ -7,6 +7,7 @@ import { CATALOG_ACCOUNT_SOURCE } from '@/providers/catalog';
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 import { UsersRepository } from '@/services/database/users';
+import { LibraryAccess } from '@/services/library/access';
 import { PlayerAccountsService } from '@/services/player-accounts';
 import { PlayerSyncService } from '@/services/player-sync';
 
@@ -30,11 +31,12 @@ export const playerProviders: Provider[] = [
   },
   {
     provide: PlayerAccountsService,
-    inject: [UsersRepository, PLAYER, CATALOG_ACCOUNT_SOURCE],
+    inject: [UsersRepository, PLAYER, CATALOG_ACCOUNT_SOURCE, LibraryAccess],
     useFactory: (
       users: UsersRepository,
       player: Player,
       catalogAccounts: CatalogAccountSource,
-    ): PlayerAccountsService => new PlayerAccountsService(users, player, catalogAccounts),
+      access: LibraryAccess,
+    ): PlayerAccountsService => new PlayerAccountsService(users, player, catalogAccounts, access),
   },
 ];

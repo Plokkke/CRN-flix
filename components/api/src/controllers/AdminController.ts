@@ -35,11 +35,15 @@ import { PlannerFindingsRepository } from '@/services/database/planner-findings'
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
+import { LibraryShelves } from '@/services/library/shelves';
+import { MediaFactsService } from '@/services/media-facts';
 import { AdminTicketRelay } from '@/services/messaging/admin/relay';
 import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { NamingAuditService } from '@/services/naming-audit';
 import { PlannerService } from '@/services/planner/planner';
 import { PlayerSyncService } from '@/services/player-sync';
+import { PolicyService } from '@/services/policy/policy';
+import { PolicyRefusalNotices } from '@/services/policy/refusal-notices';
 import { TicketReconcilerService } from '@/services/tickets/reconciler';
 import { truthy } from '@/utils';
 import { adminDashboardTemplate } from '@/web/templates/admin-dashboard';
@@ -53,6 +57,10 @@ const JOBS = [
   { name: 'ticket-sync', schedule: 'Every 5 minutes' },
   { name: 'notification-redelivery', schedule: 'Every 5 minutes' },
   { name: 'scheduled-announcements', schedule: 'Every minute' },
+  { name: 'media-facts', schedule: 'Every hour' },
+  { name: 'policy-assessment', schedule: 'Every 10 minutes (POLICY_MODE dry-run / enforce)' },
+  { name: 'policy-refusal-notices', schedule: 'Every 5 minutes (POLICY_MODE dry-run / enforce)' },
+  { name: 'library-shelves', schedule: 'Every 15 minutes (LIBRARY_LAYOUT=shelves)' },
   { name: 'naming-audit', schedule: 'Manual only' },
   { name: 'admin-channel-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
 ] as const;
@@ -96,6 +104,10 @@ export class AdminController {
     private readonly adminRelay: AdminTicketRelay,
     private readonly redelivery: NotificationRedeliveryService,
     private readonly scheduledAnnouncements: ScheduledAnnouncementsService,
+    private readonly mediaFacts: MediaFactsService,
+    private readonly policy: PolicyService,
+    private readonly policyRefusalNotices: PolicyRefusalNotices,
+    private readonly libraryShelves: LibraryShelves,
   ) {
     this.jobHandlers = {
       'catalog-sync': () => this.catalogSync.sync(),
@@ -104,6 +116,10 @@ export class AdminController {
       'ticket-sync': () => this.ticketReconciler.sync(),
       'notification-redelivery': () => this.redelivery.redeliver(),
       'scheduled-announcements': () => this.scheduledAnnouncements.sendDue(),
+      'media-facts': () => this.mediaFacts.refresh(),
+      'policy-assessment': () => this.policy.refresh(),
+      'policy-refusal-notices': () => this.policyRefusalNotices.notify(),
+      'library-shelves': () => this.libraryShelves.reconcile(),
       'naming-audit': async () => {
         await this.namingAudit.run();
       },

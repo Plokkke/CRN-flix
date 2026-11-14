@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
 import {
+  AppealAnswer,
   CatalogRelink,
   createLogger,
   LoginChallenge,
+  PolicyRefusal,
   Recipient,
   RequestNotice,
   ServiceIdentity,
@@ -14,9 +16,11 @@ import {
 
 import { GmailSender, MailSender, OutboxSender } from './senders';
 import {
+  appealAnswerTemplate,
   catalogRelinkTemplate,
   errorTemplate,
   loginChallengeTemplate,
+  policyRefusalTemplate,
   registeredTemplate,
   requestUpdateTemplate,
   serviceNoticeTemplate,
@@ -94,6 +98,14 @@ export class EmailChannel implements UserChannel {
 
   catalogRelink(to: Recipient, relink: CatalogRelink): Promise<void> {
     return this.send(to, 'catalog relink', catalogRelinkTemplate(this.identity.serviceName, to.name, relink));
+  }
+
+  policyRefused(to: Recipient, refusals: PolicyRefusal[]): Promise<void> {
+    return this.send(to, 'policy refusal', policyRefusalTemplate(this.identity, to.name, refusals));
+  }
+
+  appealAnswered(to: Recipient, answer: AppealAnswer): Promise<void> {
+    return this.send(to, 'appeal answer', appealAnswerTemplate(this.identity, to.name, answer));
   }
 
   private async send(to: Recipient, purpose: string, rendered: Rendered): Promise<void> {

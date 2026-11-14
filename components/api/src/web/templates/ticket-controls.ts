@@ -5,13 +5,15 @@ import { OPERATION_LABELS } from '@/services/tickets/presenter';
 export function operationForm(ticketId: string, operation: TicketOperationKind, returnTo?: string): string {
   const label = OPERATION_LABELS[operation];
   const input =
-    operation === 'submitImdb'
-      ? `<input type="text" name="value" placeholder="tt1234567" required pattern="tt\\d{7,}" />`
+    operation === 'submitIdentity'
+      ? `<input type="text" name="value" placeholder="tt1234567, URL IMDb et/ou URL TMDB" required />`
       : operation === 'submitLink'
         ? `<input type="url" name="value" placeholder="https://..." required />`
         : operation === 'resolveManually'
           ? `<input type="text" name="value" placeholder="Note de résolution" required />`
-          : '';
+          : operation === 'reply'
+            ? `<textarea name="value" rows="3" placeholder="Message à l’abonné (envoyé par email)" required></textarea>`
+            : '';
 
   return `
     <form class="op-form" method="POST" action="/admin/tickets/${ticketId}/op" onclick="event.stopPropagation()">

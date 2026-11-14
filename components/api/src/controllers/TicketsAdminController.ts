@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  Inject,
   NotFoundException,
   Param,
   Post,
@@ -14,12 +15,16 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
+import { MetadataSource } from '@crn-flix/contracts';
+
 import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
 import { AdminSessionGuard } from '@/guards/admin-session.guard';
+import { METADATA } from '@/providers/media-titles';
 import { ContextService } from '@/services/context';
 import { TicketsRepository } from '@/services/database/tickets';
 import { TicketContextLoader } from '@/services/tickets/context';
 import { isDeadLetter, TicketCategory, TicketEntity, TicketOperation } from '@/services/tickets/model';
+import { parseMessageOperation, ReferenceFinder } from '@/services/tickets/parse';
 import { buildTicketView } from '@/services/tickets/presenter';
 import { TicketService } from '@/services/tickets/ticket.service';
 import { adminTicketDetailTemplate } from '@/web/templates/admin-ticket-detail';
@@ -27,14 +32,28 @@ import { adminTicketsTemplate, TicketListFilter, TicketListItem } from '@/web/te
 
 const RECENTLY_CLOSED_LIMIT = 50;
 
-function parseOperation(op: string | undefined, value: string | undefined): TicketOperation | null {
+function parseOperation(
+  op: string | undefined,
+  value: string | undefined,
+  findReference: ReferenceFinder,
+): TicketOperation | null {
   switch (op) {
     case 'approve':
+    case 'approveAdult':
+    case 'approveKids':
     case 'reject':
     case 'restore':
+    case 'grantExemption':
+    case 'excludeTitle':
+    case 'unpublish':
+    case 'shelveStandard':
+    case 'shelveKids':
+    case 'shelvePersonal':
       return { kind: op };
-    case 'submitImdb':
-      return value ? { kind: 'submitImdb', imdbId: value.trim() } : null;
+    case 'reply':
+      return value?.trim() ? { kind: 'reply', message: value.trim() } : null;
+    case 'submitIdentity':
+      return value ? parseMessageOperation(value, ['submitIdentity'], findReference) : null;
     case 'submitLink':
       return value ? { kind: 'submitLink', url: value.trim() } : null;
     case 'resolveManually':
@@ -53,6 +72,7 @@ export class TicketsAdminController {
     private readonly tickets: TicketsRepository,
     private readonly ticketService: TicketService,
     private readonly contextLoader: TicketContextLoader,
+    @Inject(METADATA) private readonly metadata: MetadataSource,
   ) {}
 
   @Get()
@@ -122,7 +142,7 @@ export class TicketsAdminController {
   ): Promise<void> {
     // Only same-site paths: a form field must not become an open redirect.
     const back = returnTo?.startsWith('/admin') ? returnTo : null;
-    const operation = parseOperation(op, value);
+    const operation = parseOperation(op, value, (text) => this.metadata.findReference(text));
     if (!operation) {
       res.redirect(`${back ?? `/admin/tickets/${id}`}?message=${encodeURIComponent('Opération invalide')}`);
       return;

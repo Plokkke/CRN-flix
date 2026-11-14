@@ -1,6 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 
+import { Profile } from '@/services/policy/shelves';
+
 export enum UserStatus {
   Pending = 'pending',
   Active = 'active',
@@ -14,6 +16,8 @@ export type UserEntity = {
   maxStreams: number | null;
   /** When the user was asked to link their catalog account again; null when it works. */
   catalogRelinkRequestedAt: Date | null;
+  /** Which shared shelves the account sees. */
+  profile: Profile;
   messagingKey: string;
   messagingId: string;
   status: UserStatus;
@@ -27,6 +31,7 @@ type UserRecord = {
   jellyfin_id: string | null;
   max_streams: number | null;
   catalog_relink_requested_at: Date | null;
+  profile: Profile;
   messaging_key: string;
   messaging_id: string;
   status: UserStatus;
@@ -41,6 +46,7 @@ function fromUserRecord(record: UserRecord): UserEntity {
     jellyfinId: record.jellyfin_id,
     maxStreams: record.max_streams,
     catalogRelinkRequestedAt: record.catalog_relink_requested_at,
+    profile: record.profile,
     messagingKey: record.messaging_key,
     messagingId: record.messaging_id,
     status: record.status,
@@ -120,6 +126,10 @@ export class UsersRepository {
 
   async setMaxStreams(userId: string, maxStreams: number): Promise<void> {
     await this.pool.query(`UPDATE users SET max_streams = $2 WHERE id = $1`, [userId, maxStreams]);
+  }
+
+  async setProfile(userId: string, profile: Profile): Promise<void> {
+    await this.pool.query(`UPDATE users SET profile = $2, updated_at = NOW() WHERE id = $1`, [userId, profile]);
   }
 
   async setCatalogRelinkRequestedAt(userId: string, requestedAt: Date | null): Promise<void> {

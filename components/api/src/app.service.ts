@@ -21,6 +21,7 @@ import {
 import { PlannedDownloadEvents, PlannedDownloadsRepository } from '@/services/database/planned-downloads';
 import {
   RequestCreatedEvent,
+  RequestEntity,
   RequestEvents,
   RequestsRepository,
   RequestStatus,
@@ -30,12 +31,17 @@ import {
 } from '@/services/database/requests';
 import { UserNotificationsRepository } from '@/services/database/user-notifications';
 import { UsersRepository } from '@/services/database/users';
+import { LibraryShelves } from '@/services/library/shelves';
+import { MediaFactsService } from '@/services/media-facts';
 import { MediaTitlesService } from '@/services/media-titles';
 import { isUserNotifiableStatus } from '@/services/messaging/user';
 import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/all';
 import { NotificationRedeliveryService } from '@/services/messaging/user/redelivery';
 import { PlannerService } from '@/services/planner/planner';
 import { PlayerSyncService } from '@/services/player-sync';
+import { PolicyGate } from '@/services/policy/gate';
+import { PolicyService } from '@/services/policy/policy';
+import { PolicyRefusalNotices } from '@/services/policy/refusal-notices';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { downloadActionResolution, isIdentificationError } from '@/services/tickets/auto-resolve';
 import { TICKET_ID_METADATA_KEY, TicketCategory } from '@/services/tickets/model';
@@ -71,6 +77,11 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     private readonly postDownloadPipeline: PostDownloadPipeline,
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly mediaTitles: MediaTitlesService,
+    private readonly mediaFacts: MediaFactsService,
+    private readonly policy: PolicyService,
+    private readonly policyGate: PolicyGate,
+    private readonly policyRefusalNotices: PolicyRefusalNotices,
+    private readonly libraryShelves: LibraryShelves,
     private readonly redelivery: NotificationRedeliveryService,
     private readonly scheduledAnnouncements: ScheduledAnnouncementsService,
   ) {}
@@ -82,12 +93,24 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.listenPlannedDownloadEvents(),
     );
 
+    if (this.config.get('library').layout === 'shelves') {
+      void this.shelveLibrary();
+    }
+
     if (process.env.NODE_ENV === 'production') {
+      if (this.config.get('library').layout === 'shelves') {
+        this.registerCronJob('library-shelves-job', '*/15 * * * *', () => this.libraryShelves.reconcile());
+      }
       this.registerCronJob('catalog-sync-job', '*/5 * * * *', () => this.runSync());
       this.registerCronJob('planner-job', '0 * * * *', () => this.planner.runAll());
       this.registerCronJob('player-sync-job', '*/15 * * * *', () => this.playerSync.sync());
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
       this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
+      this.registerCronJob('media-facts-job', '40 * * * *', () => this.mediaFacts.refresh());
+      if (this.policy.mode !== 'off') {
+        this.registerCronJob('policy-assessment-job', '*/10 * * * *', () => this.policy.refresh());
+        this.registerCronJob('policy-refusal-notices-job', '*/5 * * * *', () => this.policyRefusalNotices.notify());
+      }
       this.registerCronJob('notification-redelivery-job', '*/5 * * * *', () => this.redelivery.redeliver());
       this.registerCronJob('scheduled-announcements-job', '* * * * *', () => this.scheduledAnnouncements.sendDue());
     }
@@ -106,6 +129,16 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     while (this.pendingEvents.size > 0) {
       AppService.logger.log(`Waiting for ${this.pendingEvents.size} pending events to complete...`);
       await Promise.allSettled(Array.from(this.pendingEvents));
+    }
+  }
+
+  /** Off the boot path: the historical library moves into the store, then the shelves catch up. */
+  private async shelveLibrary(): Promise<void> {
+    try {
+      await this.libraryShelves.adopt();
+      await this.libraryShelves.reconcile();
+    } catch (error) {
+      AppService.logger.error(`Shelving the library failed: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -133,6 +166,16 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     if (request?.media) {
       this.planner.schedulePassForMedia(request.media);
     }
+  }
+
+  /** A title the policies refuse to a requester is never announced to them as available. */
+  private async notifiableUserIds(request: RequestEntity): Promise<string[]> {
+    const userIds = request.userRequests?.map((user) => user.userId) ?? [];
+    if (request.status !== RequestStatus.Fulfilled || !request.media?.imdbId) {
+      return userIds;
+    }
+    const admitted = await this.policyGate.admittedUserIds(request.media.imdbId, userIds);
+    return userIds.filter((userId) => admitted.has(userId));
   }
 
   private listenRequestsEvents(): Listener<RequestEvents> {
@@ -163,7 +206,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             return;
           }
 
-          const userIds = request.userRequests?.map((user) => user.userId) ?? [];
+          const userIds = await this.notifiableUserIds(request);
           AppService.logger.log(`Notifying ${userIds.length} users for request ${event.requestId}`);
           for (const userId of userIds) {
             const user = await this.usersRepository.get(userId);
@@ -197,6 +240,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             AppService.logger.debug(
               `Skipping user notifications for request ${event.requestId} (status ${request.status} is transient)`,
             );
+            return;
+          }
+
+          if (!(await this.notifiableUserIds(request)).includes(event.userId)) {
             return;
           }
 

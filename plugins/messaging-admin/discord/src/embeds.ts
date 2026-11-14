@@ -25,9 +25,17 @@ const TONE_COLORS: Record<TicketTone, number> = {
 
 const BUTTON_STYLES: Partial<Record<string, ButtonStyle>> = {
   'ticket-approve': ButtonStyle.Success,
+  'ticket-approve-adult': ButtonStyle.Success,
+  'ticket-approve-kids': ButtonStyle.Primary,
   'ticket-reject': ButtonStyle.Danger,
   'ticket-restore': ButtonStyle.Secondary,
   'ticket-resolve': ButtonStyle.Secondary,
+  'ticket-grant-exemption': ButtonStyle.Success,
+  'ticket-exclude-title': ButtonStyle.Primary,
+  'ticket-unpublish': ButtonStyle.Danger,
+  'ticket-shelve-standard': ButtonStyle.Secondary,
+  'ticket-shelve-kids': ButtonStyle.Secondary,
+  'ticket-shelve-personal': ButtonStyle.Secondary,
 };
 
 export function buildTicketEmbed(view: TicketView): EmbedBuilder {

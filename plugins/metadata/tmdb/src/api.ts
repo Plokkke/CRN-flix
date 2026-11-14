@@ -4,6 +4,18 @@ import { z } from 'zod';
 import { createLogger } from '@crn-flix/contracts';
 import { applyAxiosRetry, logAxiosError, logAxiosRequest, logAxiosResponse } from '@crn-flix/http';
 
+import {
+  TmdbMovieDetails,
+  tmdbMovieDetailsSchema,
+  TmdbPeopleSearch,
+  tmdbPeopleSearchSchema,
+  TmdbTvDetails,
+  tmdbTvDetailsSchema,
+} from './facts';
+
+/** Facts are read in English: genres and keywords are matched by name. */
+const FACTS_LANGUAGE = 'en-US';
+
 export const tmdbConfigSchema = z.object({
   apiKey: z.string(),
 });
@@ -35,6 +47,13 @@ export type TmdbTvShow = {
 export type TmdbExternalIds = {
   imdb_id: string | null;
   tvdb_id: number | null;
+};
+
+export type TmdbPageKind = 'movie' | 'tv';
+
+/** A movie or show page, with its external ids. */
+export type TmdbPage<K extends TmdbPageKind> = (K extends 'movie' ? TmdbMovie : TmdbTvShow) & {
+  external_ids: TmdbExternalIds;
 };
 
 export type TmdbEpisode = {
@@ -109,6 +128,21 @@ export class TmdbApiService {
     return response.data;
   }
 
+  /** Null when TMDB has no such page. */
+  async getPage<K extends TmdbPageKind>(kind: K, tmdbId: number, language: string): Promise<TmdbPage<K> | null> {
+    try {
+      const response = await this.client.get<TmdbPage<K>>(`/${kind}/${tmdbId}`, {
+        params: { language, append_to_response: 'external_ids' },
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   async findByImdbId(
     imdbId: string,
     opts: { language?: string } = {},
@@ -129,5 +163,28 @@ export class TmdbApiService {
     } catch {
       return null;
     }
+  }
+
+  /** Movie page with everything policies look at, in one call. */
+  async getMovieDetails(tmdbId: number): Promise<TmdbMovieDetails> {
+    const response = await this.client.get<unknown>(`/movie/${tmdbId}`, {
+      params: { language: FACTS_LANGUAGE, append_to_response: 'credits,release_dates,keywords' },
+    });
+    return tmdbMovieDetailsSchema.parse(response.data);
+  }
+
+  /** Show page with credits aggregated over every episode, in one call. */
+  async getTvDetails(tmdbId: number): Promise<TmdbTvDetails> {
+    const response = await this.client.get<unknown>(`/tv/${tmdbId}`, {
+      params: { language: FACTS_LANGUAGE, append_to_response: 'aggregate_credits,content_ratings,keywords' },
+    });
+    return tmdbTvDetailsSchema.parse(response.data);
+  }
+
+  async searchPeople(name: string): Promise<TmdbPeopleSearch> {
+    const response = await this.client.get<unknown>('/search/person', {
+      params: { query: name, language: FACTS_LANGUAGE },
+    });
+    return tmdbPeopleSearchSchema.parse(response.data);
   }
 }

@@ -5,10 +5,18 @@ import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
 import { AdminSessionsRepository } from '@/services/database/admin-sessions';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
 import { IndexerBookmarksRepository } from '@/services/database/indexer-bookmarks';
+import { LibraryTitlesRepository, ShelfOverridesRepository } from '@/services/database/library';
+import { MediaFactsRepository } from '@/services/database/media-facts';
 import { MediasRepository } from '@/services/database/medias';
 import { NamingAuditRepository } from '@/services/database/naming-audit';
 import { PlannedDownloadsRepository } from '@/services/database/planned-downloads';
 import { PlannerFindingsRepository } from '@/services/database/planner-findings';
+import {
+  PolicyAssessmentsRepository,
+  PolicyExemptionsRepository,
+  PolicyRefusalsRepository,
+  PolicyRulesRepository,
+} from '@/services/database/policy';
 import { RequestStatesRepository } from '@/services/database/request-states';
 import { RequestsRepository } from '@/services/database/requests';
 import { ScheduledAnnouncementsRepository } from '@/services/database/scheduled-announcements';
@@ -36,6 +44,13 @@ const REPOSITORIES = [
   RequestStatesRepository,
   PlannerFindingsRepository,
   ScheduledAnnouncementsRepository,
+  MediaFactsRepository,
+  PolicyRulesRepository,
+  PolicyExemptionsRepository,
+  PolicyAssessmentsRepository,
+  PolicyRefusalsRepository,
+  LibraryTitlesRepository,
+  ShelfOverridesRepository,
 ];
 
 export const repositoryProviders: Provider[] = [

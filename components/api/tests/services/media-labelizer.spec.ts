@@ -7,8 +7,6 @@ const config = {
   downloads: '/data/downloads',
   movies: '/data/medias/movies',
   series: '/data/medias/series',
-  privateMovies: '/data/medias/private/movies',
-  privateSeries: '/data/medias/private/series',
 };
 
 const layout = new JellyfinLayout();
@@ -68,15 +66,38 @@ describe('MediaLabelizerService.generateDestination', () => {
     episodeNumber: 3,
   };
 
-  it('roots the layout placement in the shared or private section', () => {
+  it('roots the layout placement in its section', () => {
     expect(service.generateDestination(episode)[0]).toBe(
       '/data/medias/series/Silo.(2023).[imdbid-tt14688458]/Season01',
     );
-    expect(service.generateDestination(episode, { isPrivate: true })[0]).toBe(
-      '/data/medias/private/series/Silo.(2023).[imdbid-tt14688458]/Season01',
-    );
-    expect(service.generateDestination(frenchMovie, { isPrivate: true })[0]).toMatch(
-      /^\/data\/medias\/private\/movies\//,
-    );
+    expect(service.generateDestination(frenchMovie)[0]).toMatch(/^\/data\/medias\/movies\//);
+  });
+});
+
+describe('MediaLabelizerService.move', () => {
+  it('announces the title folder it placed the file in, for the shelves', async () => {
+    const fs = await import('fs/promises');
+    const os = await import('os');
+    const path = await import('path');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'crn-flix-placement-'));
+    const source = path.join(root, 'downloads', 'Charlie.mkv');
+    await fs.mkdir(path.dirname(source), { recursive: true });
+    await fs.writeFile(source, 'video');
+    const onPlaced = jest.fn().mockResolvedValue(undefined);
+    const store = {
+      downloads: path.join(root, 'downloads'),
+      movies: path.join(root, 'store', 'movies'),
+      series: path.join(root, 'store', 'series'),
+    };
+    const service = new MediaLabelizerService(store, resolver('Charlie and the Chocolate Factory'), layout, onPlaced);
+
+    await service.move(source, { ...frenchMovie, confidence: 1 } as never);
+
+    expect(onPlaced).toHaveBeenCalledWith({
+      imdbId: 'tt0367594',
+      section: 'movies',
+      folder: 'Charlie.and.the.Chocolate.Factory.(2005).[imdbid-tt0367594]',
+    });
+    await fs.rm(root, { recursive: true, force: true });
   });
 });

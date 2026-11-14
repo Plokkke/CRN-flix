@@ -4,11 +4,18 @@ import {
   MediaType,
   Player,
   PlayerAsset,
+  PlayerLibrary,
   ShowcaseItem,
   ShowcaseKind,
 } from '@crn-flix/contracts';
 
-import { JellyfinMedia, JellyfinMediaService, JellyfinUserPolicy } from './api';
+import {
+  COLLECTION_TYPES,
+  JellyfinMedia,
+  JellyfinMediaService,
+  JellyfinUserPolicy,
+  JellyfinVirtualFolder,
+} from './api';
 
 /**
  * Viewers watch from anywhere, without managing the server; there is no live TV so its
@@ -26,12 +33,48 @@ const VIEWER_POLICY = {
   EnableMediaConversion: false,
 } as const;
 
-/** The account's policy with the viewer rules applied, or null when it already complies. */
-export function viewerPolicy(current: JellyfinUserPolicy, policy: AccountPolicy): JellyfinUserPolicy | null {
-  const wanted =
-    policy.maxStreams === undefined ? VIEWER_POLICY : { ...VIEWER_POLICY, MaxActiveSessions: policy.maxStreams };
-  const complies = Object.entries(wanted).every(([key, value]) => current[key] === value);
+const sameValue = (a: unknown, b: unknown): boolean =>
+  Array.isArray(a) && Array.isArray(b) ? JSON.stringify([...a].sort()) === JSON.stringify([...b].sort()) : a === b;
+
+/**
+ * The account's policy with the viewer rules applied, or null when it already complies.
+ * `enabledFolders` (library ids) replaces "every library" when the engine decides the access.
+ */
+export function viewerPolicy(
+  current: JellyfinUserPolicy,
+  policy: AccountPolicy,
+  enabledFolders?: string[],
+): JellyfinUserPolicy | null {
+  const wanted: Record<string, unknown> = {
+    ...VIEWER_POLICY,
+    ...(policy.maxStreams !== undefined && { MaxActiveSessions: policy.maxStreams }),
+    ...(enabledFolders && { EnableAllFolders: false, EnabledFolders: [...enabledFolders].sort() }),
+    ...(policy.maxParentalRating !== undefined && { MaxParentalRating: policy.maxParentalRating }),
+  };
+  const complies = Object.entries(wanted).every(([key, value]) => sameValue(current[key], value));
   return complies ? null : { ...current, ...wanted };
+}
+
+const withoutTrailingSlash = (folder: string): string => folder.replace(/\/+$/, '');
+
+const isUnder = (folder: string, root: string): boolean => {
+  const base = withoutTrailingSlash(root);
+  return withoutTrailingSlash(folder) === base || folder.startsWith(`${base}/`);
+};
+
+/** The libraries an account sees: the ones it is given, plus every library outside the engine's root. */
+export function enabledFolderIds(
+  folders: JellyfinVirtualFolder[],
+  access: NonNullable<AccountPolicy['libraries']>,
+): string[] {
+  const given = new Set(access.paths.map(withoutTrailingSlash));
+  return folders
+    .filter(
+      (folder) =>
+        folder.Locations.some((location) => given.has(withoutTrailingSlash(location))) ||
+        folder.Locations.every((location) => !isUnder(location, access.managedRoot)),
+    )
+    .map((folder) => folder.ItemId);
 }
 
 const ITEM_TYPE_BY_KIND: Record<ShowcaseKind, JellyfinMedia['Type']> = {
@@ -88,6 +131,9 @@ export class JellyfinPlayer implements Player {
 
   readonly name = 'jellyfin';
 
+  /** Libraries already given their image by this run: each one once, and a recreated one again. */
+  private readonly imaged = new Set<string>();
+
   constructor(private readonly jellyfin: JellyfinMediaService) {}
 
   get url(): string {
@@ -134,9 +180,43 @@ export class JellyfinPlayer implements Player {
   }
 
   /** Administrators are the owner's own accounts: never touched. */
+  async ensureLibraries(libraries: PlayerLibrary[]): Promise<number> {
+    const folders = await this.jellyfin.listVirtualFolders();
+    const served = new Set(folders.flatMap((folder) => folder.Locations.map(withoutTrailingSlash)));
+    const missing = libraries.filter((library) => !served.has(withoutTrailingSlash(library.path)));
+    for (const library of missing) {
+      await this.jellyfin.addVirtualFolder(library.name, COLLECTION_TYPES[library.section], library.path);
+      JellyfinPlayer.logger.log(`Library "${library.name}" created on ${library.path}`);
+    }
+    await this.applyImages(libraries, missing.length > 0 ? await this.jellyfin.listVirtualFolders() : folders);
+    return missing.length;
+  }
+
+  /**
+   * Left alone, Jellyfin draws a library from its content once and keeps that picture: a shelf
+   * that held one title shows it long after it left. The engine's image replaces it.
+   */
+  private async applyImages(libraries: PlayerLibrary[], folders: JellyfinVirtualFolder[]): Promise<void> {
+    for (const library of libraries) {
+      const folder = folders.find((candidate) =>
+        candidate.Locations.some((location) => withoutTrailingSlash(location) === withoutTrailingSlash(library.path)),
+      );
+      if (!library.image || !folder || this.imaged.has(folder.ItemId)) {
+        continue;
+      }
+      await this.jellyfin.setPrimaryImage(folder.ItemId, library.image);
+      this.imaged.add(folder.ItemId);
+      JellyfinPlayer.logger.log(`Library "${folder.Name}" given its image`);
+    }
+  }
+
   async applyAccountPolicy(accountId: string, policy: AccountPolicy): Promise<boolean> {
     const current = await this.jellyfin.getUserPolicy(accountId);
-    const next = current.IsAdministrator ? null : viewerPolicy(current, policy);
+    if (current.IsAdministrator) {
+      return false;
+    }
+    const enabled = policy.libraries && enabledFolderIds(await this.jellyfin.listVirtualFolders(), policy.libraries);
+    const next = viewerPolicy(current, policy, enabled);
     if (!next) {
       return false;
     }

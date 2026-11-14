@@ -1,50 +1,25 @@
 # Brique policy
 
-**DÉCIDÉ (2026-10-20)** — Nouvelle brique de l'architecture en plugins. Elle est définie (contrat `libs/contracts/src/policy.ts`), elle n'est pas développée.
+**DÉCIDÉ (2026-10-20)** — Brique de l'architecture en plugins. **Implémentée (2026-11-06)** : conception, décisions et avancement dans [todo/filter.md](todo/filter.md).
 
-## Objectif
+## En bref
 
-Filtrer automatiquement les demandes **en sortie de catalog**, avant que le planner ne cherche quoi que ce soit, pour refuser d'office ce que le service ne veut pas servir sans mobiliser un admin.
-
-```
-Catalog ──► demandes (intention) ──► Policy ──► accept ──► planner ──► indexers…
-                                        ├──► reject ──► demande refusée, utilisateur notifié avec la raison
-                                        └──► review ──► ticket : un admin tranche
-```
-
-## Contrat
-
-```ts
-type PolicySubject = { media: MediaItem; metadata: MediaMetadata | null; requester: { userRef; reasons } };
-type PolicyDecision = { verdict: 'accept' } | { verdict: 'reject' | 'review'; rule: string; reason: string };
-interface Policy { name; evaluate(subject): PolicyDecision }
-evaluatePolicies(policies, subject) // dans l'ordre, le premier verdict qui n'est pas « accept » l'emporte
-```
-
-- **Pure et synchrone** : aucune I/O. L'engine fournit tout ce dont la règle a besoin dans le sujet (métadonnées résolues, raisons de la demande, plus tard le quota consommé, etc.).
-- `rule` identifie la règle (pour l'audit et l'affichage admin) ; `reason` est rédigée pour l'utilisateur.
-
-## Ce que le verdict déclenche (existant réutilisé)
-
-| Verdict | Effet |
-|---|---|
-| `accept` | Rien : la demande suit son cours |
-| `reject` | `media_requests.status = 'rejected'` : la notification utilisateur existante part (seuls `fulfilled`/`rejected` notifient), avec la raison |
-| `review` | Ouverture d'un ticket (nouvelle catégorie) : « les tickets convoquent un humain » |
-
-## Exemples de règles
-
-Contenu adulte, genre ou langue originale non servis, note trop basse, quota par utilisateur, film trop ancien ou pas encore sorti, déjà disponible dans la bibliothèque.
+- **Une règle accepte ou refuse** (le verdict `review` du brouillon a disparu) : un humain n'intervient que sur appel de l'utilisateur, ou quand une règle frappe un titre déjà publié (ticket d'anomalie).
+- **Type de règle = plugin** (`plugins/policies/<nom>`, contrat `PolicyKind` dans `libs/contracts/src/policy.ts`), **règle concrète = ligne en base** (`policy_rules` + `policy_rule_entries`), créée et modifiée sur `/admin/policies` sans déploiement. Types livrés : `credits`, `adult`, `attributes`, `titles`.
+- Chaque règle vise `everyone` (refusé sur toutes les étagères) ou une étagère (ce qu'elle admet, `kids` aujourd'hui). Les règles `everyone` laissent passer quand elles ne peuvent pas trancher, les règles d'étagère refusent.
+- Le cœur pur est `libs/policy` : `assess`, `classify` (restreint / première étagère dont le titre passe les règles ; le choix de l'admin prime), `admit` (profil du demandeur + dérogations).
+- Les faits évalués (`media_facts`) viennent du metadata (`MetadataSource.facts`).
+- Les titres sont rangés sur des **étagères** (stock + liens, `LIBRARY_LAYOUT=shelves`) : `standard` et `kids` disjointes, plus une étagère personnelle par utilisateur.
 
 ## À distinguer
 
-- `preferences.ts` (qualité, langue, hôte, taille) filtre des **releases**. La policy filtre des **intentions**. Les deux restent séparés.
-- `user-approval` décide si une **personne** est acceptée. La policy décide pour une **demande**.
+- `preferences.ts` (qualité, langue, hôte, taille) filtre des **releases**. La policy filtre des **titres**. Les deux restent séparés.
+- `user-approval` décide si une **personne** est acceptée (et son profil). La policy décide pour un **titre** et un **demandeur**.
 
-## Questions ouvertes (à trancher au développement)
+## Réponses aux questions ouvertes du brouillon
 
-- Où vit la configuration des règles (variables d'environnement, base, configuration de composition) ?
-- Réévaluation : quand une règle change, faut-il réévaluer les demandes ouvertes, comme `revalidate.ts` le fait pour les propositions du planner ?
-- Persistance de la raison du refus (colonne sur `media_requests` ou événement), pour l'afficher sur `/admin` et `/me`.
-- Un admin peut-il passer outre un `reject` (forçage), et comment le tracer ?
-- Quelles métadonnées faut-il dans `MediaMetadata` (genres, note, certification) ? Le contrat metadata devra grossir avec.
+- Configuration des règles : en base, éditées sur `/admin/policies`.
+- Réévaluation : automatique (empreinte des règles + date des faits) ; un titre déjà publié qui devient restreint passe par un ticket d'anomalie.
+- Persistance de la raison : `policy_refusals` (par utilisateur × titre), affichée sur `/me` et dans le mail.
+- Passer outre : dérogations (`policy_exemptions`, personnelles ou globales) et choix d'étagère de l'admin (`shelf_overrides`).
+- Métadonnées : `MediaFacts` (générique avec références de personnes, genres, mots-clés, certifications, `adult`, pays, durée).

@@ -1,7 +1,14 @@
 import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AxiosError } from 'axios';
 
-import { AccountNameTakenError, Downloader, IdentifiedMedia, LiveDownload, Player } from '@crn-flix/contracts';
+import {
+  AccountNameTakenError,
+  Downloader,
+  IdentifiedMedia,
+  IdentitySubmission,
+  LiveDownload,
+  Player,
+} from '@crn-flix/contracts';
 
 import { Listener } from '@/helpers/events';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
@@ -11,13 +18,16 @@ import { RequestsRepository, RequestStatus } from '@/services/database/requests'
 import { TicketNotifyEvents, TicketsRepository } from '@/services/database/tickets';
 import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
 import { buildDownloadMetadata } from '@/services/downloads/metadata';
-import { MediaIdentifierService } from '@/services/media-identifier';
+import { DESTINATION_BY_OPERATION, ManualDestination, ManualDestinations } from '@/services/library/manual-destination';
+import { MediaIdentifierService, SubmissionResolution } from '@/services/media-identifier';
 import { AllUserMessaging, messagingContextOf } from '@/services/messaging/user/all';
 import { buildActionDownloadMetadata, PlannerService } from '@/services/planner/planner';
 import { PlayerAccountsService } from '@/services/player-accounts';
+import { Profile } from '@/services/policy/shelves';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
 import { identificationFailureResolved } from '@/services/tickets/auto-resolve';
 import {
+  IdentitySubmitted,
   OperationOutcome,
   TICKET_ID_METADATA_KEY,
   TicketCategory,
@@ -34,6 +44,16 @@ const SETTLED_DOWNLOAD_STATUSES = new Set(['completed', 'failed']);
 
 type Identification = IdentifiedMedia;
 type ManualDownloadPayload = TicketPayloadMap[TicketCategory.ManualDownload];
+type SubmitIdentity = Extract<TicketOperation, { kind: 'submitIdentity' }>;
+
+/** What the admin gave so far on this ticket: a new answer completes or replaces the previous one. */
+function submissionOf(ticket: TicketEntity, operation: SubmitIdentity): IdentitySubmission {
+  const previous = (ticket.payload as IdentitySubmitted).submitted;
+  return {
+    imdbId: operation.imdbId ?? previous?.imdbId ?? null,
+    reference: operation.reference ?? previous?.reference ?? null,
+  };
+}
 
 function labelOf(identification: Identification): string {
   return `${identification.title}${identification.year ? ` (${identification.year})` : ''}`;
@@ -69,6 +89,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     private readonly planner: PlannerService,
     private readonly downloadJobs: DownloadJobsRepository,
     private readonly playerAccounts: PlayerAccountsService,
+    private readonly destinations: ManualDestinations | null = null,
   ) {}
 
   onModuleInit(): void {
@@ -77,7 +98,9 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     this.ticketService.registerHandler(TicketCategory.IdentificationFailure, (t, op) =>
       this.handleIdentificationFailure(t, op),
     );
-    this.ticketService.registerHandler(TicketCategory.ManualDownload, (t, op) => this.handleManualDownload(t, op));
+    this.ticketService.registerHandler(TicketCategory.ManualDownload, (t, op, actor) =>
+      this.handleManualDownload(t, op, actor),
+    );
     this.ticketService.registerHandler(TicketCategory.MissingImdb, (t, op) => this.handleMissingImdb(t, op));
 
     // A manual download fires its first attempt as soon as the ticket exists.
@@ -106,7 +129,15 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     if (!user) {
       return { status: 'resolved', message: 'Utilisateur déjà supprimé' };
     }
-    return operation.kind === 'reject' ? this.rejectUser(user) : this.approveUser(user);
+    if (operation.kind === 'reject') {
+      return this.rejectUser(user);
+    }
+    const profile: Profile = operation.kind === 'approveKids' ? 'kids' : 'adult';
+    if (user.profile !== profile) {
+      await this.usersRepository.setProfile(user.id, profile);
+      user.profile = profile;
+    }
+    return this.approveUser(user);
   }
 
   /** The user is only deleted once told: a refusal that could not be sent keeps the ticket open. */
@@ -206,29 +237,50 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     ticket: TicketEntity,
     operation: TicketOperation,
   ): Promise<OperationOutcome> {
-    if (operation.kind !== 'submitImdb') {
+    if (operation.kind !== 'submitIdentity') {
       return failed(`Opération ${operation.kind} inattendue`);
     }
     const payload = ticket.payload as TicketPayloadMap[TicketCategory.IdentificationFailure];
-    await this.postDownloadPipeline.retryWithImdbId(payload.jobId, operation.imdbId);
+    const { submitted, resolution } = await this.designate(ticket, operation);
+    if (!resolution.ok) {
+      return failed(resolution.reason, { submitted });
+    }
+    await this.postDownloadPipeline.retryAs(payload.jobId, resolution.designated);
 
     const job = await this.downloadJobs.get(payload.jobId);
     if (job && identificationFailureResolved(job.status)) {
-      return { status: 'resolved', message: `Identifié avec ${operation.imdbId}` };
+      return { status: 'resolved', message: `Identifié : ${labelOf(resolution.designated.media)}` };
     }
-    return failed(job?.errorMessage ?? 'Le retry a échoué');
+    return failed(job?.errorMessage ?? 'Le retry a échoué', { submitted });
+  }
+
+  private async designate(
+    ticket: TicketEntity,
+    operation: SubmitIdentity,
+  ): Promise<{ submitted: IdentitySubmission; resolution: SubmissionResolution }> {
+    const submitted = submissionOf(ticket, operation);
+    return { submitted, resolution: await this.mediaIdentifier.resolveSubmission(submitted) };
   }
 
   // --- manual-download ---
 
-  private async handleManualDownload(ticket: TicketEntity, operation: TicketOperation): Promise<OperationOutcome> {
+  private async handleManualDownload(
+    ticket: TicketEntity,
+    operation: TicketOperation,
+    actor: string,
+  ): Promise<OperationOutcome> {
     const payload = ticket.payload as TicketPayloadMap[TicketCategory.ManualDownload];
+    const destination = DESTINATION_BY_OPERATION[operation.kind];
+    if (destination) {
+      return this.chooseDestination(payload, destination, actor);
+    }
 
-    if (operation.kind === 'submitImdb') {
-      const identification = await this.mediaIdentifier.identifyImdbId(operation.imdbId);
-      if (!identification) {
-        return failed(`Aucun média TMDB pour ${operation.imdbId}`);
+    if (operation.kind === 'submitIdentity') {
+      const { submitted, resolution } = await this.designate(ticket, operation);
+      if (!resolution.ok) {
+        return failed(resolution.reason, { submitted, lastError: resolution.reason });
       }
+      const identification = resolution.designated.media;
       const inFlight = this.findInFlightDownload(ticket.id);
       if (inFlight) {
         return this.reidentifyInFlightDownload(ticket, inFlight, payload, identification);
@@ -262,6 +314,34 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     return this.launchIdentifiedDownload(ticket, url, identification);
   }
 
+  /** Applied now when the title is known, otherwise as soon as it is identified. */
+  private async chooseDestination(
+    payload: ManualDownloadPayload,
+    destination: ManualDestination,
+    actor: string,
+  ): Promise<OperationOutcome> {
+    if (!payload.imdbId) {
+      return {
+        status: 'progress',
+        message: 'Destination notée : appliquée dès l’identification',
+        payloadPatch: { destination },
+      };
+    }
+    const problem = await this.destinations?.apply(payload.imdbId, destination, actor);
+    return problem
+      ? failed(problem)
+      : { status: 'progress', message: 'Destination appliquée', payloadPatch: { destination } };
+  }
+
+  private async placeIdentified(payload: ManualDownloadPayload, imdbId: string): Promise<void> {
+    const outcome = payload.destination
+      ? this.destinations?.apply(imdbId, payload.destination, SYSTEM_ACTOR)
+      : this.destinations?.applyDefault(imdbId, SYSTEM_ACTOR);
+    await Promise.resolve(outcome).catch((error: unknown) => {
+      TicketHandlersService.logger.warn(`Destination of ${imdbId} not applied: ${describeError(error)}`);
+    });
+  }
+
   private findInFlightDownload(ticketId: string): LiveDownload | undefined {
     return this.downloader
       .liveDownloads()
@@ -291,6 +371,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     identification: Identification,
   ): Promise<OperationOutcome> {
     const media = await this.ensurePendingRequest(identification);
+    await this.placeIdentified(ticket.payload as ManualDownloadPayload, identification.imdbId);
 
     this.downloader.download(url, this.downloadMetadata(ticket, media));
 
@@ -298,7 +379,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     return {
       status: 'progress',
       message: `Identifié : ${labelOf(identification)} — téléchargement lancé`,
-      payloadPatch: { url, imdbId: identification.imdbId, requestId: media.id, lastError: null },
+      payloadPatch: { url, imdbId: identification.imdbId, requestId: media.id, lastError: null, submitted: null },
     };
   }
 
@@ -315,6 +396,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     identification: Identification,
   ): Promise<OperationOutcome> {
     const media = await this.ensurePendingRequest(identification);
+    await this.placeIdentified(payload, identification.imdbId);
     this.downloader.updateMetadata(inFlight.id, this.downloadMetadata(ticket, media));
 
     if (payload.requestId && payload.requestId !== media.id) {
@@ -325,7 +407,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
     return {
       status: 'progress',
       message: `Identification corrigée : ${labelOf(identification)} — le téléchargement en cours est conservé`,
-      payloadPatch: { imdbId: identification.imdbId, requestId: media.id, lastError: null },
+      payloadPatch: { imdbId: identification.imdbId, requestId: media.id, lastError: null, submitted: null },
     };
   }
 
@@ -343,24 +425,43 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
   // --- missing-imdb ---
 
   private async handleMissingImdb(ticket: TicketEntity, operation: TicketOperation): Promise<OperationOutcome> {
-    if (operation.kind !== 'submitImdb') {
+    if (operation.kind !== 'submitIdentity') {
       return failed(`Opération ${operation.kind} inattendue`);
     }
-    if (!IMDB_ID_PATTERN.test(operation.imdbId)) {
-      return failed(`"${operation.imdbId}" n'est pas un IMDb ID valide (tt...)`);
+    const imdbId = await this.missingImdbIdOf(ticket, operation);
+    if (!imdbId.ok) {
+      return failed(imdbId.reason, { submitted: imdbId.submitted });
     }
 
     const payload = ticket.payload as TicketPayloadMap[TicketCategory.MissingImdb];
     for (const mediaId of payload.mediaIds) {
-      await this.mediasRepository.updateImdbId(mediaId, operation.imdbId);
+      await this.mediasRepository.updateImdbId(mediaId, imdbId.value);
     }
 
     if (payload.kind === 'show') {
-      this.planner.schedulePass({ kind: 'show', imdbId: operation.imdbId });
+      this.planner.schedulePass({ kind: 'show', imdbId: imdbId.value });
     } else if (payload.mediaIds[0]) {
       this.planner.schedulePass({ kind: 'movie', mediaId: payload.mediaIds[0] });
     }
 
-    return { status: 'resolved', message: `IMDb ${operation.imdbId} appliqué à ${payload.mediaIds.length} média(s)` };
+    return { status: 'resolved', message: `IMDb ${imdbId.value} appliqué à ${payload.mediaIds.length} média(s)` };
+  }
+
+  /** The catalog already holds the titles: a bare IMDb id is enough, a page is only read to find one. */
+  private async missingImdbIdOf(
+    ticket: TicketEntity,
+    operation: SubmitIdentity,
+  ): Promise<{ ok: true; value: string } | { ok: false; reason: string; submitted: IdentitySubmission }> {
+    const submitted = submissionOf(ticket, operation);
+    if (submitted.imdbId && !IMDB_ID_PATTERN.test(submitted.imdbId)) {
+      return { ok: false, reason: `"${submitted.imdbId}" n'est pas un IMDb ID valide (tt...)`, submitted };
+    }
+    if (submitted.imdbId && !submitted.reference) {
+      return { ok: true, value: submitted.imdbId };
+    }
+    const resolution = await this.mediaIdentifier.resolveSubmission(submitted);
+    return resolution.ok
+      ? { ok: true, value: resolution.designated.media.imdbId }
+      : { ok: false, reason: resolution.reason, submitted };
   }
 }

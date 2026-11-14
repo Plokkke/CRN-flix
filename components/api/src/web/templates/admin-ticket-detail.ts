@@ -73,33 +73,30 @@ export const adminTicketDetailTemplate = (params: AdminTicketDetailParams): stri
   `;
 
   const additionalCSS = `
-    .container { max-width: 900px; background-color: #1a1a2e; color: #e0e0e0; }
-    body { background-color: #0f0f1a; color: #e0e0e0; }
-    .header { background-color: #16162a; }
-    h2 { color: #e0e0e0; margin: 24px 0 12px 0; font-size: 20px; }
-    a { color: ${COLORS.info}; }
+    .container { max-width: 900px; }
+    h2 { color: var(--text); margin: 24px 0 12px 0; font-size: 20px; }
 
     .flash-message {
-      background-color: #1e2a3a; padding: 12px 16px; border-left: 4px solid ${COLORS.info};
-      border-radius: 4px; margin-bottom: 20px; color: #e0e0e0;
+      background-color: var(--tone-info-bg); padding: 12px 16px; border-left: 4px solid ${COLORS.info};
+      border-radius: 4px; margin-bottom: 20px; color: var(--text);
     }
 
-    .ticket-meta { display: flex; gap: 16px; font-size: 13px; color: #888; margin-bottom: 16px; }
+    .ticket-meta { display: flex; gap: 16px; font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
     .ticket-category {
-      background-color: #2a2a3e; padding: 1px 8px; border-radius: 10px; font-size: 12px; color: #ccc;
+      background-color: var(--tone-neutral-bg); padding: 1px 8px; border-radius: 10px; font-size: 12px; color: var(--text-light);
     }
 
     .fields { display: flex; flex-direction: column; gap: 8px; }
     .field { display: flex; gap: 12px; font-size: 14px; }
-    .field-name { color: #888; min-width: 180px; }
-    .field-value { color: #e0e0e0; white-space: pre-wrap; word-break: break-all; }
-    .footer-hint { color: #888; font-style: italic; font-size: 13px; margin-top: 12px; }
+    .field-name { color: var(--text-muted); min-width: 180px; }
+    .field-value { color: var(--text); white-space: pre-wrap; word-break: break-all; }
+    .footer-hint { color: var(--text-muted); font-style: italic; font-size: 13px; margin-top: 12px; }
 
     .op-forms { display: flex; flex-direction: column; gap: 10px; }
     .op-form { display: flex; gap: 8px; align-items: center; }
     .op-form input[type=text], .op-form input[type=url] {
       flex: 1; max-width: 400px; padding: 8px 12px; border-radius: 4px;
-      border: 1px solid #2a2a3e; background-color: #22223a; color: #e0e0e0;
+      border: 1px solid var(--border); background-color: var(--surface-raised); color: var(--text);
     }
     .op-form button { width: auto; padding: 8px 20px; font-size: 14px; background-color: ${COLORS.info}; }
     .op-form button.op-reject { background-color: ${COLORS.error}; }
@@ -107,16 +104,16 @@ export const adminTicketDetailTemplate = (params: AdminTicketDetailParams): stri
     .op-form button.op-resolveManually { background-color: #555; }
 
     .timeline { display: flex; flex-direction: column; gap: 10px; }
-    .event { border-left: 3px solid #2a2a3e; padding: 6px 12px; background: #22223a; border-radius: 0 6px 6px 0; }
+    .event { border-left: 3px solid var(--border); padding: 6px 12px; background: var(--surface-raised); border-radius: 0 6px 6px 0; }
     .event-attempt-failed { border-left-color: ${COLORS.error}; }
     .event-resolved { border-left-color: ${COLORS.success}; }
     .event-operation { border-left-color: ${COLORS.info}; }
-    .event-head { display: flex; gap: 14px; font-size: 12px; color: #888; margin-bottom: 4px; }
-    .event-kind { font-weight: bold; color: #ccc; }
-    .event-message { font-size: 14px; color: #e0e0e0; white-space: pre-wrap; word-break: break-word; }
+    .event-head { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .event-kind { font-weight: bold; color: var(--text-light); }
+    .event-message { font-size: 14px; color: var(--text); white-space: pre-wrap; word-break: break-word; }
 
-    .empty-state { color: #666; font-style: italic; }
+    .empty-state { color: var(--text-muted); font-style: italic; }
   `;
 
-  return getWebTemplate(`Ticket - ${serviceName}`, serviceName, content, additionalCSS);
+  return getWebTemplate(`Ticket - ${serviceName}`, serviceName, content, additionalCSS, '', 'dark');
 };

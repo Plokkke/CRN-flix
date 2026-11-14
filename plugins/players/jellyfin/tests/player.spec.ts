@@ -18,6 +18,13 @@ const episode = media({
   ProviderIds: { Imdb: 'tt-episode' },
 });
 
+const FOLDERS = [
+  { Name: 'Films', Locations: ['/medias/movies'], ItemId: 'lib-movies' },
+  { Name: 'Films enfants', Locations: ['/medias/shelves/kids/movies/'], ItemId: 'lib-kids' },
+  { Name: 'Films · Alex', Locations: ['/medias/shelves/users/u1/movies'], ItemId: 'lib-alex' },
+  { Name: 'Musique', Locations: ['/music'], ItemId: 'lib-music' },
+];
+
 function buildPlayer() {
   const jellyfin = {
     url: 'https://jellyfin.example.com',
@@ -29,6 +36,9 @@ function buildPlayer() {
     resetUserPassword: jest.fn().mockResolvedValue(undefined),
     getUserPolicy: jest.fn().mockResolvedValue({}),
     setUserPolicy: jest.fn().mockResolvedValue(undefined),
+    listVirtualFolders: jest.fn().mockResolvedValue(FOLDERS),
+    addVirtualFolder: jest.fn().mockResolvedValue(undefined),
+    setPrimaryImage: jest.fn().mockResolvedValue(undefined),
   };
   return { jellyfin, player: new JellyfinPlayer(jellyfin as unknown as JellyfinMediaService) };
 }
@@ -149,6 +159,71 @@ describe('JellyfinPlayer', () => {
       await expect(player.applyAccountPolicy('jf-1', { maxStreams: 1 })).resolves.toBe(false);
       await expect(player.accountMaxStreams('jf-1')).resolves.toBeNull();
       expect(jellyfin.setUserPolicy).not.toHaveBeenCalled();
+    });
+
+    it('limits the account to the libraries it is given, leaving the ones outside the engine’s root visible', async () => {
+      const { jellyfin, player } = buildPlayer();
+      jellyfin.getUserPolicy.mockResolvedValue({ ...viewer, EnableAllFolders: true });
+
+      await player.applyAccountPolicy('jf-1', {
+        libraries: { paths: ['/medias/shelves/kids/movies'], managedRoot: '/medias' },
+        maxParentalRating: 10,
+      });
+
+      expect(jellyfin.setUserPolicy).toHaveBeenCalledWith('jf-1', {
+        ...viewer,
+        EnableAllFolders: false,
+        EnabledFolders: ['lib-kids', 'lib-music'],
+        MaxParentalRating: 10,
+      });
+    });
+
+    it('compares the library lists whatever their order', async () => {
+      const { jellyfin, player } = buildPlayer();
+      jellyfin.getUserPolicy.mockResolvedValue({
+        ...viewer,
+        EnableAllFolders: false,
+        EnabledFolders: ['lib-music', 'lib-movies', 'lib-kids'],
+      });
+
+      const access = { paths: ['/medias/movies', '/medias/shelves/kids/movies'], managedRoot: '/medias' };
+      await expect(player.applyAccountPolicy('jf-1', { libraries: access })).resolves.toBe(false);
+    });
+  });
+
+  describe('ensureLibraries', () => {
+    it('creates only the libraries no folder serves yet', async () => {
+      const { jellyfin, player } = buildPlayer();
+
+      const created = await player.ensureLibraries([
+        { name: 'Films', section: 'movies', path: '/medias/movies' },
+        { name: 'Séries enfants', section: 'series', path: '/medias/shelves/kids/series' },
+      ]);
+
+      expect(created).toBe(1);
+      expect(jellyfin.addVirtualFolder).toHaveBeenCalledWith(
+        'Séries enfants',
+        'tvshows',
+        '/medias/shelves/kids/series',
+      );
+    });
+
+    it('gives each library its image once per run, the libraries without one left alone', async () => {
+      const { jellyfin, player } = buildPlayer();
+      const image = { data: new Uint8Array([1, 2]), contentType: 'image/jpeg' as const };
+      const libraries = [
+        { name: 'Films', section: 'movies' as const, path: '/medias/movies', image },
+        { name: 'Films enfants', section: 'movies' as const, path: '/medias/shelves/kids/movies', image },
+        { name: 'Films · Alex', section: 'movies' as const, path: '/medias/shelves/users/u1/movies' },
+      ];
+
+      await player.ensureLibraries(libraries);
+      await player.ensureLibraries(libraries);
+
+      expect(jellyfin.setPrimaryImage.mock.calls).toEqual([
+        ['lib-movies', image],
+        ['lib-kids', image],
+      ]);
     });
   });
 });

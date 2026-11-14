@@ -33,6 +33,12 @@ export const environmentVariablesSchema = z
     /** Subscribers are only messaged outside this window (login codes excepted). */
     USER_MESSAGING_QUIET_HOURS: z.string().default('00:00-07:00'),
     USER_MESSAGING_TIMEZONE: z.string().default('Europe/Paris'),
+    /** `dry-run` assesses titles and shows the outcome to admins without refusing anyone. */
+    POLICY_MODE: z.enum(['off', 'dry-run', 'enforce']).default('off'),
+    /** `shelves`: files go to the store and every library is a set of links (see knowledge/todo/filter.md). */
+    LIBRARY_LAYOUT: z.enum(['legacy', 'shelves']).default('legacy'),
+    KIDS_MAX_PARENTAL_RATING: z.coerce.number().int().min(0).default(10),
+    ADMIN_USER_NAME: z.string().optional(),
     DATABASE_HOST: z.string(),
     DATABASE_PORT: z.coerce.number(),
     DATABASE_NAME: z.string(),
@@ -61,7 +67,6 @@ export const environmentVariablesSchema = z
     MEDIAS_PATH: z.string(),
     MOVIES_FOLDER: z.string().default('movies'),
     SERIES_FOLDER: z.string().default('series'),
-    PRIVATE_FOLDER: z.string().default('private'),
     JELLYFIN_LIBRARY_ROOT: z.string().default('/medias'),
   })
   .superRefine((env, ctx) => {
@@ -150,6 +155,9 @@ export const environmentVariablesSchema = z
       mode: env.USER_MESSAGING,
       quietHours: { window: env.USER_MESSAGING_QUIET_HOURS, timeZone: env.USER_MESSAGING_TIMEZONE },
     },
+    policy: {
+      mode: env.POLICY_MODE,
+    },
     mailing: {
       serviceName: env.SERVICE_NAME,
       gmailUser: env.GMAIL_USER,
@@ -185,12 +193,20 @@ export const environmentVariablesSchema = z
       downloads: env.DOWNLOADS_PATH,
       movies: path.join(env.MEDIAS_PATH, env.MOVIES_FOLDER),
       series: path.join(env.MEDIAS_PATH, env.SERIES_FOLDER),
-      privateMovies: path.join(env.MEDIAS_PATH, env.PRIVATE_FOLDER, env.MOVIES_FOLDER),
-      privateSeries: path.join(env.MEDIAS_PATH, env.PRIVATE_FOLDER, env.SERIES_FOLDER),
+    },
+    library: {
+      layout: env.LIBRARY_LAYOUT,
+      mediasPath: env.MEDIAS_PATH,
+      moviesFolder: env.MOVIES_FOLDER,
+      seriesFolder: env.SERIES_FOLDER,
+      playerRoot: env.JELLYFIN_LIBRARY_ROOT,
+      kidsMaxParentalRating: env.KIDS_MAX_PARENTAL_RATING,
+      adminUserName: env.ADMIN_USER_NAME ?? null,
     },
     namingAudit: {
       jellyfinLibraryRoot: env.JELLYFIN_LIBRARY_ROOT,
       engineMediasPath: env.MEDIAS_PATH,
+      renamesAllowed: env.LIBRARY_LAYOUT === 'legacy',
     },
   }));
 

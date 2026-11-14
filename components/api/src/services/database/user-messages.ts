@@ -7,6 +7,8 @@ export const USER_MESSAGE_KINDS = [
   'error',
   'announce',
   'catalog-relink',
+  'policy-refusal',
+  'appeal-answered',
 ] as const;
 export type UserMessageKind = (typeof USER_MESSAGE_KINDS)[number];
 

@@ -9,6 +9,7 @@ const user = (id: string, name: string, status = UserStatus.Active, messagingKey
   jellyfinId: null,
   maxStreams: 1,
   catalogRelinkRequestedAt: null,
+  profile: 'adult',
   messagingKey,
   messagingId: `${name}@test`,
   status,

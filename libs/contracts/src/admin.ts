@@ -1,19 +1,46 @@
+/** Who a media is, as an admin gave it: an IMDb id, a metadata source's page reference, or both. */
+export type IdentitySubmission = { imdbId: string | null; reference: string | null };
+
 /** What an admin can do on a ticket; which ones a ticket accepts is part of its view. */
 export type TicketOperation =
-  | { kind: 'submitImdb'; imdbId: string }
+  | ({ kind: 'submitIdentity' } & IdentitySubmission)
   | { kind: 'submitLink'; url: string }
+  /** Kept for buttons rendered before profiles existed: approves as an adult. */
   | { kind: 'approve' }
+  | { kind: 'approveAdult' }
+  | { kind: 'approveKids' }
   | { kind: 'reject' }
   | { kind: 'restore' }
+  /** Policy appeal: the requester gets the title on their personal shelf. */
+  | { kind: 'grantExemption' }
+  /** Policy appeal: the rules no longer apply to this title, for everyone. */
+  | { kind: 'excludeTitle' }
+  /** Policy anomaly: the title leaves the shared shelves, as the rules now want. */
+  | { kind: 'unpublish' }
+  /** Manual download: where the title goes, whatever the rules say. */
+  | { kind: 'shelveStandard' }
+  | { kind: 'shelveKids' }
+  | { kind: 'shelvePersonal' }
+  /** A message to the user the ticket is about; the ticket stays open. */
+  | { kind: 'reply'; message: string }
   | { kind: 'resolveManually'; note: string };
 
 export type TicketOperationKind = TicketOperation['kind'];
 
 export const OPERATION_LABELS: Record<TicketOperationKind, string> = {
   approve: 'Accepter',
+  approveAdult: 'Accepter (adulte)',
+  approveKids: 'Accepter (enfant)',
   reject: 'Rejeter',
   restore: 'Restaurer',
-  submitImdb: 'Soumettre un IMDb ID',
+  grantExemption: 'Accorder la dérogation',
+  excludeTitle: 'Exclure le titre de la règle (pour tous)',
+  reply: 'Répondre à l’abonné',
+  unpublish: 'Retirer des étagères partagées',
+  shelveStandard: 'Étagère standard',
+  shelveKids: 'Étagère enfants',
+  shelvePersonal: 'Ma collection',
+  submitIdentity: 'Identifier (IMDb / TMDB)',
   submitLink: 'Soumettre un lien',
   resolveManually: 'Marquer résolu',
 };

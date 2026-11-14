@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { z } from 'zod';
 
-import { AccountNameTakenError, createLogger, PluginLogger } from '@crn-flix/contracts';
+import { AccountNameTakenError, createLogger, LibraryImage, PluginLogger } from '@crn-flix/contracts';
 import { applyAxiosRetry, logAxiosError, logAxiosRequest, logAxiosResponse } from '@crn-flix/http';
 
 export type JellyfinUser = {
@@ -57,8 +57,25 @@ export const jellyfinUserPolicySchema = z
   .object({
     IsAdministrator: z.boolean(),
     MaxActiveSessions: z.number().int(),
+    EnableAllFolders: z.boolean().optional(),
+    EnabledFolders: z.array(z.string()).optional(),
+    MaxParentalRating: z.number().nullish(),
   })
   .passthrough();
+
+export const jellyfinVirtualFolderSchema = z
+  .object({
+    Name: z.string(),
+    Locations: z.array(z.string()),
+    ItemId: z.string(),
+    CollectionType: z.string().nullish(),
+  })
+  .passthrough();
+
+export type JellyfinVirtualFolder = z.infer<typeof jellyfinVirtualFolderSchema>;
+
+/** Jellyfin's name for each kind of library content. */
+export const COLLECTION_TYPES = { movies: 'movies', series: 'tvshows' } as const;
 
 export type JellyfinUserPolicy = z.infer<typeof jellyfinUserPolicySchema>;
 
@@ -233,6 +250,26 @@ export class JellyfinMediaService {
 
   async setPluginConfiguration(pluginId: string, configuration: unknown): Promise<void> {
     await this.api.post(`/Plugins/${pluginId}/Configuration`, configuration);
+  }
+
+  async listVirtualFolders(): Promise<JellyfinVirtualFolder[]> {
+    const response = await this.api.get<unknown>('/Library/VirtualFolders');
+    return z.array(jellyfinVirtualFolderSchema).parse(response.data);
+  }
+
+  async addVirtualFolder(name: string, collectionType: string, folder: string): Promise<void> {
+    await this.api.post(
+      '/Library/VirtualFolders',
+      { LibraryOptions: { PathInfos: [{ Path: folder }] } },
+      { params: { name, collectionType, refreshLibrary: true } },
+    );
+  }
+
+  /** Jellyfin takes the image base64-encoded, with its own type as content type. */
+  async setPrimaryImage(itemId: string, image: LibraryImage): Promise<void> {
+    await this.api.post(`/Items/${itemId}/Images/Primary`, Buffer.from(image.data).toString('base64'), {
+      headers: { 'Content-Type': image.contentType },
+    });
   }
 
   async getUserPolicy(userId: string): Promise<JellyfinUserPolicy> {

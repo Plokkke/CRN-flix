@@ -15,7 +15,10 @@ const COMPOSE = ['compose', '-f', path.join(ROOT, 'infrastructure/docker/compose
 
 const { JellyfinLayout } = createRequire(import.meta.url)(path.join(ROOT, 'plugins/layouts/jellyfin/dist/index.js'));
 
-/** A few kids titles, a few that adult rules may refuse, a war film for the « school exemption » case. */
+/**
+ * A few kids titles, a few that adult rules may refuse, a war film for the « school exemption » case,
+ * and a published title a credits rule may hit afterwards (the anomaly case).
+ */
 const MOVIES = [
   { title: 'Toy Story', year: 1995, imdbId: 'tt0114709' },
   { title: 'Cars', year: 2006, imdbId: 'tt0317219' },
@@ -23,6 +26,7 @@ const MOVIES = [
   { title: 'Alien', year: 1979, imdbId: 'tt0078748' },
   { title: 'Saving Private Ryan', year: 1998, imdbId: 'tt0120815' },
   { title: 'The Matrix', year: 1999, imdbId: 'tt0133093' },
+  { title: 'Last Tango in Paris', year: 1972, imdbId: 'tt0070849' },
 ];
 
 const SHOWS = [

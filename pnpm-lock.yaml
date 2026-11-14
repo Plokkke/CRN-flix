@@ -250,6 +250,21 @@ importers:
       '@crn-flix/player-jellyfin':
         specifier: workspace:*
         version: link:../../plugins/players/jellyfin
+      '@crn-flix/policy':
+        specifier: workspace:*
+        version: link:../../libs/policy
+      '@crn-flix/policy-adult':
+        specifier: workspace:*
+        version: link:../../plugins/policies/adult
+      '@crn-flix/policy-attributes':
+        specifier: workspace:*
+        version: link:../../plugins/policies/attributes
+      '@crn-flix/policy-credits':
+        specifier: workspace:*
+        version: link:../../plugins/policies/credits
+      '@crn-flix/policy-titles':
+        specifier: workspace:*
+        version: link:../../plugins/policies/titles
       '@nestjs/common':
         specifier: 'catalog:'
         version: 11.1.17(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
@@ -498,6 +513,34 @@ importers:
         version: 5.9.3
 
   libs/planner:
+    dependencies:
+      '@crn-flix/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@crn-flix/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 30.0.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.0
+      eslint:
+        specifier: 'catalog:'
+        version: 10.1.0(supports-color@8.1.1)
+      jest:
+        specifier: 'catalog:'
+        version: 30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3))
+      ts-jest:
+        specifier: 'catalog:'
+        version: 29.4.6(@babel/core@7.29.7(supports-color@8.1.1))(@jest/transform@30.3.0(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(jest-util@30.5.1)(jest@30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3)))(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  libs/policy:
     dependencies:
       '@crn-flix/contracts':
         specifier: workspace:*
@@ -912,6 +955,130 @@ importers:
       axios:
         specifier: 'catalog:'
         version: 1.13.6(debug@4.4.3(supports-color@8.1.1))
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+    devDependencies:
+      '@crn-flix/tooling':
+        specifier: workspace:*
+        version: link:../../../libs/tooling
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 30.0.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.0
+      eslint:
+        specifier: 'catalog:'
+        version: 10.1.0(supports-color@8.1.1)
+      jest:
+        specifier: 'catalog:'
+        version: 30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3))
+      ts-jest:
+        specifier: 'catalog:'
+        version: 29.4.6(@babel/core@7.29.7(supports-color@8.1.1))(@jest/transform@30.3.0(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(jest-util@30.5.1)(jest@30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3)))(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  plugins/policies/adult:
+    dependencies:
+      '@crn-flix/contracts':
+        specifier: workspace:*
+        version: link:../../../libs/contracts
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+    devDependencies:
+      '@crn-flix/tooling':
+        specifier: workspace:*
+        version: link:../../../libs/tooling
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 30.0.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.0
+      eslint:
+        specifier: 'catalog:'
+        version: 10.1.0(supports-color@8.1.1)
+      jest:
+        specifier: 'catalog:'
+        version: 30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3))
+      ts-jest:
+        specifier: 'catalog:'
+        version: 29.4.6(@babel/core@7.29.7(supports-color@8.1.1))(@jest/transform@30.3.0(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(jest-util@30.5.1)(jest@30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3)))(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  plugins/policies/attributes:
+    dependencies:
+      '@crn-flix/contracts':
+        specifier: workspace:*
+        version: link:../../../libs/contracts
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+    devDependencies:
+      '@crn-flix/tooling':
+        specifier: workspace:*
+        version: link:../../../libs/tooling
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 30.0.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.0
+      eslint:
+        specifier: 'catalog:'
+        version: 10.1.0(supports-color@8.1.1)
+      jest:
+        specifier: 'catalog:'
+        version: 30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3))
+      ts-jest:
+        specifier: 'catalog:'
+        version: 29.4.6(@babel/core@7.29.7(supports-color@8.1.1))(@jest/transform@30.3.0(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(jest-util@30.5.1)(jest@30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3)))(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  plugins/policies/credits:
+    dependencies:
+      '@crn-flix/contracts':
+        specifier: workspace:*
+        version: link:../../../libs/contracts
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+    devDependencies:
+      '@crn-flix/tooling':
+        specifier: workspace:*
+        version: link:../../../libs/tooling
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 30.0.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.0
+      eslint:
+        specifier: 'catalog:'
+        version: 10.1.0(supports-color@8.1.1)
+      jest:
+        specifier: 'catalog:'
+        version: 30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3))
+      ts-jest:
+        specifier: 'catalog:'
+        version: 29.4.6(@babel/core@7.29.7(supports-color@8.1.1))(@jest/transform@30.3.0(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(jest-util@30.5.1)(jest@30.3.0(@types/node@24.12.0)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@24.12.0)(typescript@5.9.3)))(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  plugins/policies/titles:
+    dependencies:
+      '@crn-flix/contracts':
+        specifier: workspace:*
+        version: link:../../../libs/contracts
       zod:
         specifier: 'catalog:'
         version: 4.3.6
