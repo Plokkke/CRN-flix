@@ -6,6 +6,7 @@ import {
   TAGLINE,
   wordmark,
 } from './components';
+import { escapeHtml } from './text';
 import { themeCss, WebTheme } from './theme';
 import { COLORS, FONT_STACK, RADIUS, TONES } from './tokens';
 
@@ -54,6 +55,7 @@ const WEB_CSS = `
       }
       .header { padding: 22px 28px; border-bottom: 1px solid var(--border-light); background-color: var(--header-bg); }
       .tagline { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+      .tagline .version { font-variant-numeric: tabular-nums; }
       .content { padding: 28px; line-height: 1.6; }
       h1, h2, h3 { color: var(--heading); letter-spacing: -0.01em; }
       h2 { font-size: 20px; margin: 0 0 12px; }
@@ -124,6 +126,8 @@ export const getWebTemplate = (
   additionalCSS = '',
   additionalJS = '',
   theme: WebTheme = 'light',
+  /** Shown discreetly in the header (admin pages: the deployed version). */
+  version?: string,
 ): string => `
 <!DOCTYPE html>
 <html lang="fr">
@@ -141,7 +145,7 @@ export const getWebTemplate = (
     <div class="container">
         <div class="header">
             ${wordmark(serviceName, 'var(--heading)', 'var(--accent)')}
-            <div class="tagline">${TAGLINE}</div>
+            <div class="tagline">${TAGLINE}${version ? ` · <span class="version">${/^\d/.test(version) ? 'v' : ''}${escapeHtml(version)}</span>` : ''}</div>
         </div>
         <div class="content">
             ${content}

@@ -1,4 +1,4 @@
-import { escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { escapeHtml } from '@crn-flix/design-system';
 
 import { ShelfOverride } from '@/services/database/library';
 import {
@@ -9,6 +9,7 @@ import {
   PAGE_SIZE,
   SHELF_LABELS,
 } from '@/services/library/admin-view';
+import { adminPage } from '@/web/templates/admin-page';
 
 const TYPE_LABELS: Record<string, string> = { movies: 'Film', series: 'Série' };
 
@@ -284,5 +285,5 @@ export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
     }
     ${pager(filter, params.total)}
     </div>`;
-  return getWebTemplate('Bibliothèque', params.serviceName, content, CSS, LIVE_LIBRARY_JS, 'dark');
+  return adminPage('Bibliothèque', params.serviceName, content, CSS, LIVE_LIBRARY_JS);
 };

@@ -1,9 +1,10 @@
-import { COLORS, escapeHtml, getWebTemplate, RADIUS } from '@crn-flix/design-system';
+import { COLORS, escapeHtml, RADIUS } from '@crn-flix/design-system';
 
 import { NOTICE_PRESETS, NoticePreset, PRESET_LABELS } from '@/services/announcements/presets';
 import { ScheduledAnnouncementEntity } from '@/services/database/scheduled-announcements';
 import { UserEntity } from '@/services/database/users';
 import { NOTICE_TONES, ServiceNotice } from '@/services/messaging/user';
+import { adminPage } from '@/web/templates/admin-page';
 
 const TONE_LABELS: Record<ServiceNotice['tone'], string> = {
   warning: 'Alerte (orange)',
@@ -209,5 +210,5 @@ export const adminAnnounceFormTemplate = (params: AdminAnnounceFormParams): stri
     ${announcementLists(params.upcoming, params.sent, schedule.format)}
   `;
 
-  return getWebTemplate(`Annonce - ${serviceName}`, serviceName, content, ADMIN_CSS, TOGGLE_JS, 'dark');
+  return adminPage(`Annonce - ${serviceName}`, serviceName, content, ADMIN_CSS, TOGGLE_JS);
 };

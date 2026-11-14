@@ -1,7 +1,8 @@
-import { escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { escapeHtml } from '@crn-flix/design-system';
 
 import { FLOOD_THRESHOLD_24H, MessageStatsCell, MessageStatsRow } from '@/services/admin/message-stats';
 import { USER_MESSAGE_KINDS, UserMessageKind } from '@/services/database/user-messages';
+import { adminPage } from '@/web/templates/admin-page';
 
 interface AdminMessagesParams {
   serviceName: string;
@@ -74,5 +75,5 @@ export const adminMessagesTemplate = ({ serviceName, rows }: AdminMessagesParams
     <p class="hint">Par abonné et par type : dernières 24 h · 7 jours · depuis le début, puis le dernier envoi. Seuls les messages réellement délivrés comptent (rien en dry-run ni en cas d'échec). Une case est signalée au-delà de ${FLOOD_THRESHOLD_24H} envois en 24 h.</p>
     ${table(rows)}
   `;
-  return getWebTemplate('Messages', serviceName, content, MESSAGES_CSS, '', 'dark');
+  return adminPage('Messages', serviceName, content, MESSAGES_CSS);
 };

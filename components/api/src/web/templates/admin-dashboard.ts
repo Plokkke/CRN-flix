@@ -1,6 +1,7 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { COLORS, escapeHtml } from '@crn-flix/design-system';
 
 import { Dashboard, DashboardTab } from '@/services/admin/requests-view';
+import { adminPage } from '@/web/templates/admin-page';
 
 import { ADMIN_REQUESTS_CSS, adminRequestsJs, adminRequestsSection } from './admin-requests';
 
@@ -150,5 +151,5 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
 
   const additionalJS = adminRequestsJs(activeTab);
 
-  return getWebTemplate(`Admin - ${serviceName}`, serviceName, content, additionalCSS, additionalJS, 'dark');
+  return adminPage(`Admin - ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
 };

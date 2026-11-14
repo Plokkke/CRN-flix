@@ -1,6 +1,7 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { COLORS, escapeHtml } from '@crn-flix/design-system';
 
 import { TicketEntity, TicketStatus, TicketView } from '@/services/tickets/model';
+import { adminPage } from '@/web/templates/admin-page';
 
 export type TicketListFilter = 'open' | 'dead-letter' | 'closed';
 
@@ -104,5 +105,5 @@ export const adminTicketsTemplate = (params: AdminTicketsParams): string => {
     .empty-state { color: var(--text-muted); font-style: italic; }
   `;
 
-  return getWebTemplate(`Tickets - ${serviceName}`, serviceName, content, additionalCSS, '', 'dark');
+  return adminPage(`Tickets - ${serviceName}`, serviceName, content, additionalCSS);
 };
