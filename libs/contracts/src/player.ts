@@ -12,11 +12,18 @@ export class AccountNameTakenError extends Error {
   }
 }
 
+/** The artwork the engine gives a library (the player would otherwise build one from its content). */
+export type LibraryImage = {
+  data: Uint8Array;
+  contentType: 'image/jpeg' | 'image/png';
+};
+
 /** A library the engine wants served: one folder (as the player sees it), one kind of content. */
 export type PlayerLibrary = {
   name: string;
   section: LibrarySection;
   path: string;
+  image?: LibraryImage;
 };
 
 /** What the engine decides for a viewing account; every absent field leaves the account's own. */
@@ -52,7 +59,10 @@ export interface Player {
   /** Every asset whose media identity is known (imdb id resolved). */
   listAvailable(): Promise<PlayerAsset[]>;
   refreshLibrary(): Promise<void>;
-  /** Creates the libraries the player does not serve yet (matched by folder); returns how many were created. */
+  /**
+   * Creates the libraries the player does not serve yet (matched by folder) and gives each its
+   * image (at creation, and once per run for the existing ones); returns how many were created.
+   */
   ensureLibraries(libraries: PlayerLibrary[]): Promise<number>;
   /**
    * Gives the user an account with this password: resets it when `accountId` is known,

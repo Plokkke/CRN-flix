@@ -131,6 +131,9 @@ export class JellyfinPlayer implements Player {
 
   readonly name = 'jellyfin';
 
+  /** Libraries already given their image by this run: each one once, and a recreated one again. */
+  private readonly imaged = new Set<string>();
+
   constructor(private readonly jellyfin: JellyfinMediaService) {}
 
   get url(): string {
@@ -185,7 +188,26 @@ export class JellyfinPlayer implements Player {
       await this.jellyfin.addVirtualFolder(library.name, COLLECTION_TYPES[library.section], library.path);
       JellyfinPlayer.logger.log(`Library "${library.name}" created on ${library.path}`);
     }
+    await this.applyImages(libraries, missing.length > 0 ? await this.jellyfin.listVirtualFolders() : folders);
     return missing.length;
+  }
+
+  /**
+   * Left alone, Jellyfin draws a library from its content once and keeps that picture: a shelf
+   * that held one title shows it long after it left. The engine's image replaces it.
+   */
+  private async applyImages(libraries: PlayerLibrary[], folders: JellyfinVirtualFolder[]): Promise<void> {
+    for (const library of libraries) {
+      const folder = folders.find((candidate) =>
+        candidate.Locations.some((location) => withoutTrailingSlash(location) === withoutTrailingSlash(library.path)),
+      );
+      if (!library.image || !folder || this.imaged.has(folder.ItemId)) {
+        continue;
+      }
+      await this.jellyfin.setPrimaryImage(folder.ItemId, library.image);
+      this.imaged.add(folder.ItemId);
+      JellyfinPlayer.logger.log(`Library "${folder.Name}" given its image`);
+    }
   }
 
   async applyAccountPolicy(accountId: string, policy: AccountPolicy): Promise<boolean> {

@@ -38,6 +38,7 @@ function buildPlayer() {
     setUserPolicy: jest.fn().mockResolvedValue(undefined),
     listVirtualFolders: jest.fn().mockResolvedValue(FOLDERS),
     addVirtualFolder: jest.fn().mockResolvedValue(undefined),
+    setPrimaryImage: jest.fn().mockResolvedValue(undefined),
   };
   return { jellyfin, player: new JellyfinPlayer(jellyfin as unknown as JellyfinMediaService) };
 }
@@ -205,6 +206,24 @@ describe('JellyfinPlayer', () => {
         'tvshows',
         '/medias/shelves/kids/series',
       );
+    });
+
+    it('gives each library its image once per run, the libraries without one left alone', async () => {
+      const { jellyfin, player } = buildPlayer();
+      const image = { data: new Uint8Array([1, 2]), contentType: 'image/jpeg' as const };
+      const libraries = [
+        { name: 'Films', section: 'movies' as const, path: '/medias/movies', image },
+        { name: 'Films enfants', section: 'movies' as const, path: '/medias/shelves/kids/movies', image },
+        { name: 'Films · Alex', section: 'movies' as const, path: '/medias/shelves/users/u1/movies' },
+      ];
+
+      await player.ensureLibraries(libraries);
+      await player.ensureLibraries(libraries);
+
+      expect(jellyfin.setPrimaryImage.mock.calls).toEqual([
+        ['lib-movies', image],
+        ['lib-kids', image],
+      ]);
     });
   });
 });

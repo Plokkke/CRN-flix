@@ -5,6 +5,7 @@ import { AccountPolicy, LibrarySection, PlayerLibrary } from '@crn-flix/contract
 import { UserEntity } from '@/services/database/users';
 import { SHELVES } from '@/services/policy/shelves';
 
+import { NO_IMAGES, PERSONAL_SHELF, ShelfImages } from './images';
 import { LibraryConfig, LibraryPaths, SECTIONS } from './paths';
 
 const SECTION_LABELS: Record<LibrarySection, string> = { movies: 'Films', series: 'Séries' };
@@ -27,6 +28,7 @@ export class LibraryAccess {
     private readonly config: LibraryConfig & { kidsMaxParentalRating: number },
     private readonly paths: LibraryPaths,
     private readonly fs: Fs = fsPromises,
+    private readonly images: ShelfImages = NO_IMAGES,
   ) {}
 
   get enabled(): boolean {
@@ -36,7 +38,12 @@ export class LibraryAccess {
   /** Every library the shelves need; their folders are created so the player can serve them. */
   async libraries(users: UserEntity[]): Promise<PlayerLibrary[]> {
     const shared = SHELVES.flatMap(({ key }) =>
-      SECTIONS.map((section) => ({ name: sharedName(key, section), section, folder: this.paths.shelf(key, section) })),
+      SECTIONS.map((section) => ({
+        name: sharedName(key, section),
+        section,
+        shelf: key,
+        folder: this.paths.shelf(key, section),
+      })),
     );
     const personal = (
       await Promise.all(users.map(async (user) => ((await this.hasPersonalShelf(user.id)) ? [user] : [])))
@@ -46,12 +53,18 @@ export class LibraryAccess {
         SECTIONS.map((section) => ({
           name: `${SECTION_LABELS[section]} · ${user.name}`,
           section,
+          shelf: PERSONAL_SHELF,
           folder: this.paths.personal(user.id, section),
         })),
       );
     const all = [...shared, ...personal];
     await Promise.all(all.map(({ folder }) => this.fs.mkdir(folder, { recursive: true })));
-    return all.map(({ name, section, folder }) => ({ name, section, path: this.paths.forPlayer(folder) }));
+    return Promise.all(
+      all.map(async ({ name, section, shelf, folder }) => {
+        const image = await this.images.of(shelf, section);
+        return { name, section, path: this.paths.forPlayer(folder), ...(image && { image }) };
+      }),
+    );
   }
 
   /** What the account sees; nothing to decide with the legacy layout. */

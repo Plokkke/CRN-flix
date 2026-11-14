@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { z } from 'zod';
 
-import { AccountNameTakenError, createLogger, PluginLogger } from '@crn-flix/contracts';
+import { AccountNameTakenError, createLogger, LibraryImage, PluginLogger } from '@crn-flix/contracts';
 import { applyAxiosRetry, logAxiosError, logAxiosRequest, logAxiosResponse } from '@crn-flix/http';
 
 export type JellyfinUser = {
@@ -263,6 +263,13 @@ export class JellyfinMediaService {
       { LibraryOptions: { PathInfos: [{ Path: folder }] } },
       { params: { name, collectionType, refreshLibrary: true } },
     );
+  }
+
+  /** Jellyfin takes the image base64-encoded, with its own type as content type. */
+  async setPrimaryImage(itemId: string, image: LibraryImage): Promise<void> {
+    await this.api.post(`/Items/${itemId}/Images/Primary`, Buffer.from(image.data).toString('base64'), {
+      headers: { 'Content-Type': image.contentType },
+    });
   }
 
   async getUserPolicy(userId: string): Promise<JellyfinUserPolicy> {

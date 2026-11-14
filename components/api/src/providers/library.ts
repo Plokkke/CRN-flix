@@ -9,6 +9,7 @@ import { LibraryTitlesRepository, ShelfOverridesRepository } from '@/services/da
 import { PolicyExemptionsRepository } from '@/services/database/policy';
 import { UsersRepository } from '@/services/database/users';
 import { LibraryAccess } from '@/services/library/access';
+import { BundledShelfImages } from '@/services/library/images';
 import { ManualDestinations } from '@/services/library/manual-destination';
 import { LibraryPaths } from '@/services/library/paths';
 import { PolicyShelfResolver } from '@/services/library/resolver';
@@ -28,7 +29,7 @@ export const libraryProviders: Provider[] = [
     provide: LibraryAccess,
     inject: [ConfigService, LibraryPaths],
     useFactory: (configService: ConfigService<Config, true>, paths: LibraryPaths): LibraryAccess =>
-      new LibraryAccess(configService.get('library'), paths),
+      new LibraryAccess(configService.get('library'), paths, undefined, new BundledShelfImages()),
   },
   {
     provide: PolicyShelfResolver,

@@ -144,6 +144,30 @@ describe('LibraryAccess', () => {
     ]);
   });
 
+  it('gives each library the picture of its shelf, the personal ones sharing one', async () => {
+    const images = {
+      of: jest.fn(async (shelf: string, section: string) => ({
+        data: new Uint8Array(),
+        contentType: 'image/jpeg' as const,
+        tag: `${shelf}/${section}`,
+      })),
+    };
+    const access = new LibraryAccess(config, new LibraryPaths(config), fs(['son']) as never, images);
+
+    const libraries = await access.libraries([user('son', 'kids')]);
+
+    expect(libraries.map((library) => `${library.name}: ${(library.image as unknown as { tag: string }).tag}`)).toEqual(
+      [
+        'Films enfants: kids/movies',
+        'Séries enfants: kids/series',
+        'Films: standard/movies',
+        'Séries: standard/series',
+        'Films · son: personal/movies',
+        'Séries · son: personal/series',
+      ],
+    );
+  });
+
   it('decides nothing with the legacy layout', async () => {
     const legacy = { ...config, layout: 'legacy' as const };
     await expect(new LibraryAccess(legacy, new LibraryPaths(legacy)).policyOf(user('dad', 'adult'))).resolves.toEqual(
