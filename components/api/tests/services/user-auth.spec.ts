@@ -15,6 +15,7 @@ const USER: UserEntity = {
   messagingKey: 'email',
   messagingId: 'alice@example.com',
   adminDiscordId: null,
+  guest: false,
   status: UserStatus.Active,
   createdAt: new Date(),
   updatedAt: new Date(),

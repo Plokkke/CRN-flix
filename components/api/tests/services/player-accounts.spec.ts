@@ -82,24 +82,21 @@ describe('PlayerAccountsService', () => {
     expect(catalogAccounts.enforceSettings).toHaveBeenCalled();
   });
 
-  it('lists the player accounts the engine does not know, never the player’s administrators', async () => {
-    const { player, service } = build([user({ jellyfinId: 'jf1' })]);
+  it('takes in every player account it does not know, never an administrator nor a name a user holds', async () => {
+    const { player, usersRepository, service } = build([
+      user({ jellyfinId: 'jf1', name: 'one' }),
+      user({ id: 'p', name: 'Pending', jellyfinId: null }),
+    ]);
     player.listAccounts.mockResolvedValue([
       { id: 'jf1', name: 'one', isAdministrator: false },
       { id: 'jf2', name: 'Invité', isAdministrator: false },
       { id: 'jf3', name: 'Owner', isAdministrator: true },
+      { id: 'jf4', name: 'pending', isAdministrator: false },
     ]);
 
-    await expect(service.listUnlinked()).resolves.toEqual([{ id: 'jf2', name: 'Invité', isAdministrator: false }]);
-  });
+    await expect(service.adoptUnknown()).resolves.toHaveLength(1);
 
-  it('takes an unknown player account in as an active user and applies the viewer rules to it', async () => {
-    const { player, usersRepository, service } = build([], ['jf2']);
-
-    await expect(service.adopt('jf2')).resolves.toMatchObject({ name: 'jf2', jellyfinId: 'jf2' });
-
-    expect(usersRepository.createFromPlayerAccount).toHaveBeenCalledWith('jf2', 'jf2');
-    expect(player.applyAccountPolicy).toHaveBeenCalledWith('jf2', expect.objectContaining({ maxStreams: 3 }));
-    await expect(service.adopt('unknown')).rejects.toThrow(/introuvable/);
+    expect(usersRepository.createFromPlayerAccount).toHaveBeenCalledTimes(1);
+    expect(usersRepository.createFromPlayerAccount).toHaveBeenCalledWith('Invité', 'jf2');
   });
 });

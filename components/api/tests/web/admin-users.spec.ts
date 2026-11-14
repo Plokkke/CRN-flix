@@ -13,14 +13,14 @@ const user = (overrides: Partial<UserEntity>): UserEntity =>
   }) as UserEntity;
 
 describe('adminUsersTemplate', () => {
-  const render = (unlinked: { id: string; name: string; isAdministrator: boolean }[] | null = []): string =>
+  const render = (): string =>
     adminUsersTemplate({
       serviceName: 'CRN-Flix',
       users: [
         user({}),
         user({ id: 'u2', name: 'papa', maxStreams: null, profile: 'adult', messagingKey: null, adminDiscordId: '42' }),
+        user({ id: 'g', name: 'Invité', guest: true }),
       ],
-      unlinked,
       adminIds: ['42', '43'],
       currentAdminId: '42',
     });
@@ -41,13 +41,12 @@ describe('adminUsersTemplate', () => {
 
     expect(html).toContain('<option value="42" selected>moi (42)</option>');
     expect(html).toContain('<option value="43">43</option>');
-    expect(html).toContain('<td class="hint">aucune</td>');
+    expect(html).toContain('<td class="hint">-</td>');
   });
 
-  it('offers to take in the player accounts the engine does not know', () => {
-    expect(render([{ id: 'j1', name: 'Invité', isAdministrator: false }])).toContain(
-      '<input type="hidden" name="accountId" value="j1" /><button type="submit">Intégrer</button>',
+  it('marks a guest account with its own checkbox', () => {
+    expect(render()).toMatch(
+      /action="\/admin\/users\/g\/guest"><input type="checkbox" name="guest" value="on" checked/,
     );
-    expect(render(null)).toContain('Le lecteur ne répond pas');
   });
 });

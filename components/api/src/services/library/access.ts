@@ -41,9 +41,7 @@ export class LibraryAccess {
         folder: this.paths.shelf(key, section),
       })),
     );
-    const personal = (
-      await Promise.all(users.map(async (user) => ((await this.hasPersonalShelf(user.id)) ? [user] : [])))
-    )
+    const personal = (await Promise.all(users.map(async (user) => ((await this.hasPersonalShelf(user)) ? [user] : []))))
       .flat()
       .flatMap((user) =>
         SECTIONS.map((section) => ({
@@ -68,7 +66,7 @@ export class LibraryAccess {
     const shared = SHELVES.filter((shelf) => shelf.profiles.includes(user.profile)).flatMap(({ key }) =>
       SECTIONS.map((section) => this.paths.shelf(key, section)),
     );
-    const personal = (await this.hasPersonalShelf(user.id))
+    const personal = (await this.hasPersonalShelf(user))
       ? SECTIONS.map((section) => this.paths.personal(user.id, section))
       : [];
     return {
@@ -80,10 +78,14 @@ export class LibraryAccess {
     };
   }
 
-  private async hasPersonalShelf(userId: string): Promise<boolean> {
+  /** A guest never has one, whatever is left on disk. */
+  private async hasPersonalShelf(user: UserEntity): Promise<boolean> {
+    if (user.guest) {
+      return false;
+    }
     const found = await Promise.all(
       SECTIONS.map((section) =>
-        this.fs.stat(this.paths.personal(userId, section)).then(
+        this.fs.stat(this.paths.personal(user.id, section)).then(
           () => true,
           () => false,
         ),

@@ -48,6 +48,7 @@ function request(spec: MediaSpec, status: RequestStatus, users: string[] = ['ali
         messagingKey: 'email',
         messagingId: name,
         adminDiscordId: null,
+        guest: false,
         status: 'active' as never,
         createdAt: now,
         updatedAt: now,
