@@ -108,6 +108,15 @@ const WEB_CSS = `
       ${TONE_CLASSES}
 `;
 
+/** A link to another site opens in a new tab, whatever built it (template or script). */
+const EXTERNAL_LINKS_JS = `document.addEventListener('click', (event) => {
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (link && link.origin !== location.origin && !link.target) {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+      }
+    }, true);`;
+
 export const getWebTemplate = (
   title: string,
   serviceName: string,
@@ -138,6 +147,7 @@ export const getWebTemplate = (
             ${content}
         </div>
     </div>
+    <script>${EXTERNAL_LINKS_JS}</script>
     ${additionalJS ? `<script>${additionalJS}</script>` : ''}
 </body>
 </html>
