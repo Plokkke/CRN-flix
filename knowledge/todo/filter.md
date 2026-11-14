@@ -5,9 +5,9 @@ Développe la brique policy (`knowledge/policy.md`, contrat `libs/contracts/src/
 ## Besoin
 
 - Refuser automatiquement une demande d'après l'identité du média et ses caractéristiques : durée, origine, genre, certification, générique (acteurs, réalisation, production…), année, etc.
-- Premier usage : refuser les œuvres impliquant une personne condamnée ou mise en cause pour agression ou harcèlement. Deuxième : le contenu adulte. Le système ne s'y limite pas : n'importe quelle règle doit pouvoir s'enregistrer.
+- Premier usage : refuser les œuvres impliquant une personne ayant commis des agressions ou du harcèlement, selon notre politique (pas un verdict : les faits rapportés par les sources suffisent). Deuxième : le contenu adulte. Le système ne s'y limite pas : n'importe quelle règle doit pouvoir s'enregistrer.
 - **Comptes enfants** : une bibliothèque dédiée (dessins animés, films adaptés), et des règles qui dépendent du profil du demandeur.
-- Un refus envoie un mail à l'utilisateur : la politique enfreinte et le détail du motif (personne mise en cause et faits reprochés, par exemple). Ce détail dépend du type de règle.
+- Un refus envoie un mail à l'utilisateur : la politique enfreinte et le détail du motif (personne visée et faits reprochés, par exemple). Ce détail dépend du type de règle.
 - Depuis le mail, l'utilisateur peut **contester** ou **demander une dérogation** en motivant sa demande. Cela ouvre un ticket admin (Discord + web) : infos du média, motif du refus, motivation, et l'admin peut répondre, accepter ou refuser.
 - Un média obtenu par dérogation n'est visible que dans la collection personnelle des utilisateurs qui ont une dérogation. Un 2ᵉ utilisateur est d'abord refusé ; si sa dérogation est accordée, le média déjà présent lui est ouvert sans nouveau téléchargement.
 - Un téléchargement manuel de l'admin indique son étagère de destination et n'est pas bloqué par la policy.
@@ -131,12 +131,12 @@ interface PolicyKind<Params, Entry> {
 
 | Plugin | Paramètres | Entrées |
 |---|---|---|
-| `credits` | départements / jobs visés, seuil d'épisodes pour une série | personne : réf., nom, statut `condamné` \| `mis en cause`, faits, sources datées |
+| `credits` | départements / jobs visés, seuil d'épisodes pour une série | personne : réf., nom, faits, sources datées |
 | `adult` | certifications considérées comme adultes par pays | — |
 | `attributes` | conditions sur certification, durée, année, genre, pays, langue d'origine (sert aussi à définir `kids`) | — |
 | `titles` | — | titre : imdb id, motif (refuser un titre précis, sans critère général) |
 
-L'avis de `credits` ne cite que le contenu de l'entrée (statut, faits, sources) et distingue toujours « condamné » de « mis en cause ». Les entrées sont saisies à la main. Plus tard, éventuellement : un job Wikidata (P1399 « condamné pour ») qui **propose** des entrées par ticket, sans jamais les ajouter seul.
+L'avis de `credits` ne cite que le contenu de l'entrée (faits, sources). **DÉCIDÉ (2026-11-14)** : pas de statut judiciaire (« condamné », « mis en cause ») : on applique une politique de filtrage, on ne juge pas ; une affaire qui se retourne remonte par une demande de dérogation, qui fait revoir l'entrée. Les entrées sont saisies à la main. Plus tard, éventuellement : un job Wikidata (P1399 « condamné pour ») qui **propose** des entrées par ticket, sans jamais les ajouter seul.
 
 ### Persistance (migrations `00030` faits, `00031` policy)
 
