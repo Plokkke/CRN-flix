@@ -80,11 +80,8 @@ export class PlayerAccountsService {
 
   private async applyTo(accountId: string, user: UserEntity | undefined): Promise<void> {
     const maxStreams = user ? (user.maxStreams ?? (await this.adoptMaxStreams(user, accountId))) : undefined;
-    if (maxStreams === null) {
-      return;
-    }
     const access = user && this.access ? await this.access.policyOf(user) : {};
-    if (await this.player.applyAccountPolicy(accountId, { maxStreams, ...access })) {
+    if (await this.player.applyAccountPolicy(accountId, { ...(maxStreams !== null && { maxStreams }), ...access })) {
       PlayerAccountsService.logger.log(`Account ${user?.name ?? accountId}: account policy applied`);
     }
   }
@@ -101,7 +98,7 @@ export class PlayerAccountsService {
     }
   }
 
-  /** Null for an account the player's administrators manage themselves. */
+  /** Null for a player administrator: its stream limit is its own until one is set on /admin/users. */
   private async adoptMaxStreams(user: UserEntity, accountId: string): Promise<number | null> {
     const current = await this.player.accountMaxStreams(accountId);
     if (current !== null) {
