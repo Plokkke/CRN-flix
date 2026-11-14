@@ -174,8 +174,22 @@ export class UsersRepository {
     await this.pool.query(`UPDATE users SET max_streams = $2 WHERE id = $1`, [userId, maxStreams]);
   }
 
-  async setGuest(userId: string, guest: boolean): Promise<void> {
-    await this.pool.query(`UPDATE users SET guest = $2, updated_at = NOW() WHERE id = $1`, [userId, guest]);
+  /** Designates the one guest account (null: none); the previous one becomes a standard account. */
+  async setGuestAccount(userId: string | null): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`UPDATE users SET guest = FALSE, updated_at = NOW() WHERE guest`);
+      if (userId) {
+        await client.query(`UPDATE users SET guest = TRUE, updated_at = NOW() WHERE id = $1`, [userId]);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async setProfile(userId: string, profile: Profile): Promise<void> {

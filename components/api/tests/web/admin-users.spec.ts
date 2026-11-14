@@ -19,7 +19,7 @@ describe('adminUsersTemplate', () => {
       users: [
         user({}),
         user({ id: 'u2', name: 'papa', maxStreams: null, profile: 'adult', messagingKey: null, adminDiscordId: '42' }),
-        user({ id: 'g', name: 'Invité', guest: true }),
+        user({ id: 'g', name: 'Invité', guest: true, messagingKey: null }),
       ],
       adminIds: ['42', '43'],
       currentAdminId: '42',
@@ -44,9 +44,13 @@ describe('adminUsersTemplate', () => {
     expect(html).toContain('<td class="hint">-</td>');
   });
 
-  it('marks a guest account with its own checkbox', () => {
-    expect(render()).toMatch(
-      /action="\/admin\/users\/g\/guest"><input type="checkbox" name="guest" value="on" checked/,
-    );
+  it('designates the one guest among the accounts without messaging, listed with its mark', () => {
+    const html = render();
+
+    expect(html).toContain('action="/admin/users/guest"');
+    expect(html).toContain('<option value="g" selected>Invité</option>');
+    expect(html).toContain('<option value="u2">papa</option>');
+    expect(html).not.toContain('<option value="u1">leo</option>');
+    expect(html).toContain('Invité <span class="hint">(invité)</span>');
   });
 });

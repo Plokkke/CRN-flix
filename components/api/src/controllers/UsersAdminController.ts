@@ -56,24 +56,18 @@ export class UsersAdminController {
     });
   }
 
-  /** A guest sees the shelves of its profile and never has a personal shelf; it is listed last. */
-  @Post(':id/guest')
-  async setGuest(
-    @Param('id') id: string,
-    @Body('guest') guest: string | undefined,
-    @Req() req: Request,
-    @Res() res: Response,
-  ): Promise<void> {
-    const user = await this.usersRepository.get(id);
-    if (!user) {
-      answer(req, res, 'Utilisateur introuvable', true);
+  /** The one guest account (the player's shared account): no messaging, no personal shelf, listed last. */
+  @Post('guest')
+  async setGuest(@Body('userId') userId: string | undefined, @Req() req: Request, @Res() res: Response): Promise<void> {
+    const user = userId ? await this.usersRepository.get(userId) : null;
+    if (userId && (!user || user.messagingKey !== null)) {
+      answer(req, res, user ? 'Un compte avec messagerie ne peut pas être l’invité' : 'Utilisateur introuvable', true);
       return;
     }
-    const isGuest = guest === 'on';
-    await this.usersRepository.setGuest(id, isGuest);
+    await this.usersRepository.setGuestAccount(user?.id ?? null);
     await this.shelves.reconcile().catch(() => undefined);
-    await this.playerAccounts.apply({ ...user, guest: isGuest }).catch(() => undefined);
-    answer(req, res, `${user.name} : ${isGuest ? 'invité, sans étagère personnelle' : 'abonné'}`, false, true);
+    await this.playerAccounts.applyAll().catch(() => undefined);
+    answer(req, res, user ? `${user.name} est le compte invité` : 'Plus de compte invité', false, true);
   }
 
   /** The Discord admin this account belongs to; an admin has one account, the previous one is let go. */
