@@ -293,13 +293,20 @@ export class PolicyAssessmentsRepository {
     }));
   }
 
-  /** Titles never assessed, assessed with other rules, or whose facts changed since; oldest first. */
+  /**
+   * Titles never assessed, assessed with other rules, or whose facts changed since; oldest
+   * first. Requested titles and every title of the store (one added by hand has no media row).
+   */
   async listStale(fingerprint: string, limit: number): Promise<string[]> {
     const result = await withDbRetry(
       () =>
         this.pool.query<{ imdb_id: string }>(
           `SELECT m.imdb_id
-           FROM (SELECT DISTINCT imdb_id FROM medias WHERE imdb_id <> '') m
+           FROM (
+             SELECT imdb_id FROM medias WHERE imdb_id <> ''
+             UNION
+             SELECT imdb_id FROM library_titles
+           ) m
            LEFT JOIN policy_assessments a ON a.imdb_id = m.imdb_id
            LEFT JOIN media_facts f ON f.imdb_id = m.imdb_id
            WHERE a.imdb_id IS NULL OR a.fingerprint <> $1 OR f.fetched_at > a.assessed_at

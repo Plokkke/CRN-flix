@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 
 import { Logger } from '@nestjs/common';
 
+import { MediaTitles } from '@crn-flix/contracts';
 import {
   admit,
   Admission,
@@ -31,6 +32,18 @@ const REFRESH_BATCH = 200;
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /** Identifies the rules (and their entries) an assessment was computed with. */
+/**
+ * A title of the store nobody requested has no media row: it is still assessed, on its facts
+ * (the rules read the metadata source, not the names), under its imdb id.
+ */
+const unknownTitles = (imdbId: string): MediaTitles => ({
+  title: imdbId,
+  originalTitle: null,
+  frenchTitle: null,
+  originalLanguage: null,
+  year: null,
+});
+
 export function rulesFingerprint(rules: PolicyRuleRecord[]): string {
   const payload = JSON.stringify({ version: ASSESSMENT_VERSION, facts: FACTS_SCHEMA_VERSION, rules });
   return createHash('sha256').update(payload).digest('hex');
@@ -61,7 +74,7 @@ export class PolicyService {
     private readonly overrideOf: (imdbId: string) => Promise<ShelfOverride> = async () => null,
   ) {}
 
-  /** The title's outcomes under the current rules, assessed now when stale; null when the title is unknown. */
+  /** The title's outcomes under the current rules, assessed now when stale. */
   async outcomesOf(imdbId: string): Promise<RuleOutcome[] | null> {
     const rules = await this.rules.listEnabled();
     const fingerprint = rulesFingerprint(rules);
@@ -104,7 +117,7 @@ export class PolicyService {
     return admissions?.get(userId) ?? null;
   }
 
-  /** Each requester's admission, from one assessment; null when the title is unknown. */
+  /** Each requester's admission, from one assessment. */
   async admissionsOf(
     imdbId: string,
     requesters: { id: string; profile: Profile }[],
@@ -149,10 +162,7 @@ export class PolicyService {
     rules: PolicyRuleRecord[],
     fingerprint: string,
   ): Promise<RuleOutcome[] | null> {
-    const titles = await this.medias.titlesOf(imdbId);
-    if (!titles) {
-      return null;
-    }
+    const titles = (await this.medias.titlesOf(imdbId)) ?? unknownTitles(imdbId);
     const facts = await this.facts.ensure(imdbId);
     const outcomes = assess(this.kinds, rules, { imdbId, titles, facts, requester: null });
     await this.assessments.save(imdbId, outcomes, fingerprint);

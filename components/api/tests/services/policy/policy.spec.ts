@@ -29,7 +29,9 @@ const RULE: PolicyRuleRecord = {
   entries: [{ imdbId: 'tt1', title: 'Banned', reason: 'Retiré.' }],
 };
 
-function build(opts: { stored?: StoredAssessment | null; exemptions?: Exemption[]; stale?: string[] } = {}) {
+function build(
+  opts: { stored?: StoredAssessment | null; exemptions?: Exemption[]; stale?: string[]; known?: boolean } = {},
+) {
   const assessments = {
     get: jest.fn().mockResolvedValue(opts.stored ?? null),
     save: jest.fn().mockResolvedValue(undefined),
@@ -42,7 +44,7 @@ function build(opts: { stored?: StoredAssessment | null; exemptions?: Exemption[
     assessments as unknown as PolicyAssessmentsRepository,
     { listGranted: jest.fn().mockResolvedValue(opts.exemptions ?? []) } as unknown as PolicyExemptionsRepository,
     facts as unknown as MediaFactsService,
-    { titlesOf: jest.fn().mockResolvedValue(TITLES) } as unknown as MediasRepository,
+    { titlesOf: jest.fn().mockResolvedValue(opts.known === false ? null : TITLES) } as unknown as MediasRepository,
   );
   return { service, assessments, facts };
 }
@@ -56,6 +58,14 @@ describe('PolicyService', () => {
     expect(facts.ensure).toHaveBeenCalledWith('tt1');
     expect(outcomes).toEqual([expect.objectContaining({ ruleId: 'rule-1', status: 'refused' })]);
     expect(assessments.save).toHaveBeenCalledWith('tt1', outcomes, rulesFingerprint([RULE]));
+  });
+
+  it('assesses a title of the store nobody requested (no media row) on its facts', async () => {
+    const { service, facts, assessments } = build({ known: false });
+
+    await expect(service.outcomesOf('tt1')).resolves.toEqual([expect.objectContaining({ ruleId: 'rule-1' })]);
+    expect(facts.ensure).toHaveBeenCalledWith('tt1');
+    expect(assessments.save).toHaveBeenCalled();
   });
 
   it('reuses an assessment made with the same rules', async () => {
