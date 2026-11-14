@@ -135,3 +135,25 @@ variable "indexer_preferences" {
     bytes_per_minute = { "uhd-4k" = 80000000, "hd-1080p" = 24000000, "hd-720p" = 12000000, "sd" = 6000000 }
   }
 }
+
+variable "policy_mode" {
+  description = "off, dry-run (titles assessed, nobody refused nor told) or enforce"
+  type        = string
+  default     = "dry-run"
+
+  validation {
+    condition     = contains(["off", "dry-run", "enforce"], var.policy_mode)
+    error_message = "policy_mode is off, dry-run or enforce."
+  }
+}
+
+variable "library_layout" {
+  description = "legacy (files in the section folders) or shelves (files in the store, every library a shelf of links)"
+  type        = string
+  default     = "shelves"
+
+  validation {
+    condition     = contains(["legacy", "shelves"], var.library_layout)
+    error_message = "library_layout is legacy or shelves."
+  }
+}
