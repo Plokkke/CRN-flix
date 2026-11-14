@@ -31,54 +31,51 @@ interface AdminAnnounceFormParams {
 }
 
 const ADMIN_CSS = `
-  .container { max-width: 900px; background-color: #1a1a2e; color: #e0e0e0; }
-  body { background-color: #0f0f1a; color: #e0e0e0; }
-  .header { background-color: #16162a; }
-  h2 { color: #e0e0e0; margin: 20px 0 15px 0; font-size: 20px; }
-  a { color: ${COLORS.info}; }
+  .container { max-width: 900px; }
+  h2 { color: var(--text); margin: 20px 0 15px 0; font-size: 20px; }
   .flash-message {
-    background-color: #1e2a3a; padding: 12px 16px; border-left: 4px solid ${COLORS.info};
-    border-radius: 4px; margin-bottom: 20px; color: #e0e0e0;
+    background-color: var(--tone-info-bg); padding: 12px 16px; border-left: 4px solid ${COLORS.info};
+    border-radius: 4px; margin-bottom: 20px; color: var(--text);
   }
   .filter-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
   .filter-tab {
-    padding: 6px 16px; border-radius: 4px; background-color: #2a2a3e; color: #888;
+    padding: 6px 16px; border-radius: 4px; background-color: var(--tone-neutral-bg); color: var(--text-muted);
     text-decoration: none; font-size: 14px; font-weight: bold;
   }
   .filter-tab.active { background-color: ${COLORS.info}; color: #fff; }
-  label { color: #e0e0e0; }
+  label { color: var(--text); }
   input, textarea, select {
-    width: 100%; padding: 12px; border: 1px solid #2a2a3e; border-radius: 4px; font-size: 16px;
-    box-sizing: border-box; background-color: #22223a; color: #e0e0e0; font-family: inherit;
+    width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 16px;
+    box-sizing: border-box; background-color: var(--surface-raised); color: var(--text); font-family: inherit;
   }
   textarea { min-height: 220px; line-height: 1.5; }
-  .hint { font-size: 13px; color: #888; margin: 4px 0 0 0; }
+  .hint { font-size: 13px; color: var(--text-muted); margin: 4px 0 0 0; }
   .recipients { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
   .recipient {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 6px;
-    background: #22223a; border: 1px solid #2a2a3e; cursor: pointer; font-weight: normal;
+    background: var(--surface-raised); border: 1px solid var(--border); cursor: pointer; font-weight: normal;
   }
   .recipient input { width: auto; margin: 0; }
-  .recipient .channel { color: #888; font-size: 13px; margin-left: auto; }
+  .recipient .channel { color: var(--text-muted); font-size: 13px; margin-left: auto; }
   .toolbar { display: flex; gap: 12px; margin: 8px 0 16px 0; font-size: 14px; }
   .actions { display: flex; gap: 12px; margin-top: 24px; }
   .actions button { width: auto; padding: 12px 24px; }
   .actions .send { background-color: ${COLORS.secondary}; }
-  .actions .preview { background-color: #2a2a3e; }
+  .actions .preview { background-color: var(--tone-neutral-bg); }
   .flash-message.error { border-left-color: ${COLORS.error}; background-color: #3a1e24; }
   input[type="datetime-local"] { width: auto; color-scheme: dark; }
   .schedule-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   .announcement {
     display: flex; gap: 12px; align-items: center; padding: 12px 14px; margin-bottom: 8px;
-    border: 1px solid #2a2a3e; border-radius: ${RADIUS.md}; background: #22223a;
+    border: 1px solid var(--border); border-radius: ${RADIUS.md}; background: var(--surface-raised);
   }
   .announcement .what { flex: 1; min-width: 0; }
   .announcement .subject { font-weight: 600; }
-  .announcement .meta { font-size: 13px; color: #888; margin-top: 2px; }
+  .announcement .meta { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
   .announcement form { margin: 0; }
-  .announcement button { width: auto; padding: 6px 14px; font-size: 13px; background: transparent; border: 1px solid #3a3a52; color: #e0e0e0; }
-  .count-sent { color: ${COLORS.success}; }
-  .count-failed { color: #ff8888; }
+  .announcement button { width: auto; padding: 6px 14px; font-size: 13px; background: transparent; border: 1px solid var(--tone-neutral-border); color: var(--text); }
+  .count-sent { color: var(--tone-success-text); }
+  .count-failed { color: var(--tone-danger-text); }
 `;
 
 const recipientRow = (user: UserEntity, checked: boolean): string => `
@@ -212,5 +209,5 @@ export const adminAnnounceFormTemplate = (params: AdminAnnounceFormParams): stri
     ${announcementLists(params.upcoming, params.sent, schedule.format)}
   `;
 
-  return getWebTemplate(`Annonce - ${serviceName}`, serviceName, content, ADMIN_CSS, TOGGLE_JS);
+  return getWebTemplate(`Annonce - ${serviceName}`, serviceName, content, ADMIN_CSS, TOGGLE_JS, 'dark');
 };

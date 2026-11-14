@@ -1,4 +1,4 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { escapeHtml, getWebTemplate } from '@crn-flix/design-system';
 
 import { FLOOD_THRESHOLD_24H, MessageStatsCell, MessageStatsRow } from '@/services/admin/message-stats';
 import { USER_MESSAGE_KINDS, UserMessageKind } from '@/services/database/user-messages';
@@ -18,22 +18,19 @@ const KIND_LABELS: Record<UserMessageKind, string> = {
 };
 
 const MESSAGES_CSS = `
-  .container { max-width: 1100px; background-color: #1a1a2e; color: #e0e0e0; }
-  body { background-color: #0f0f1a; color: #e0e0e0; }
-  .header { background-color: #16162a; }
-  h2 { color: #e0e0e0; margin: 20px 0 15px 0; font-size: 20px; }
-  a { color: ${COLORS.info}; }
-  .hint { font-size: 13px; color: #888; }
+  .container { max-width: 1100px; }
+  h2 { color: var(--text); margin: 20px 0 15px 0; font-size: 20px; }
+  .hint { font-size: 13px; color: var(--text-muted); }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { padding: 8px 10px; border-bottom: 1px solid #2a2a3e; text-align: center; white-space: nowrap; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
-  th { color: #aaa; font-weight: 600; }
+  th { color: var(--text-light); font-weight: 600; }
   .counts { font-variant-numeric: tabular-nums; }
-  .last { display: block; font-size: 11px; color: #777; }
-  .empty { color: #555; }
-  .flagged { background: rgba(255, 215, 0, 0.12); color: ${COLORS.warning}; font-weight: 600; }
-  .flag { color: ${COLORS.warning}; }
+  .last { display: block; font-size: 11px; color: var(--text-muted); }
+  .empty { color: var(--text-muted); }
+  .flagged { background: var(--tone-warning-bg); color: var(--tone-warning-text); font-weight: 600; }
+  .flag { color: var(--tone-warning-text); }
 `;
 
 const formatDate = (date: Date): string =>
@@ -75,5 +72,5 @@ export const adminMessagesTemplate = ({ serviceName, rows }: AdminMessagesParams
     <p class="hint">Par abonné et par type : dernières 24 h · 7 jours · depuis le début, puis le dernier envoi. Seuls les messages réellement délivrés comptent (rien en dry-run ni en cas d'échec). Une case est signalée au-delà de ${FLOOD_THRESHOLD_24H} envois en 24 h.</p>
     ${table(rows)}
   `;
-  return getWebTemplate('Messages', serviceName, content, MESSAGES_CSS);
+  return getWebTemplate('Messages', serviceName, content, MESSAGES_CSS, '', 'dark');
 };

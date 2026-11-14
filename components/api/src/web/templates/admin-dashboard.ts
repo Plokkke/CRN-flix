@@ -45,7 +45,7 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
 
   const content = `
     ${flashHtml}
-    <p><a href="/admin/tickets" style="color: #4dabf7;">🎫 Tickets</a> · <a href="/admin/announce" style="color: #4dabf7;">📣 Annonce aux abonnés</a> · <a href="/admin/users" style="color: #4dabf7;">👥 Comptes</a> · <a href="/admin/messages" style="color: #4dabf7;">✉️ Messages</a></p>
+    <p><a href="/admin/tickets" style="color: var(--link);">🎫 Tickets</a> · <a href="/admin/announce" style="color: var(--link);">📣 Annonce aux abonnés</a> · <a href="/admin/users" style="color: var(--link);">👥 Comptes</a> · <a href="/admin/messages" style="color: var(--link);">✉️ Messages</a></p>
     ${getJobsSection(jobs)}
     <h2>Requests</h2>
     ${adminRequestsSection({ dashboard, activeTab, returnTo: `/admin?tab=${activeTab}` })}
@@ -56,7 +56,7 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
 
   const additionalCSS = `
     ${ADMIN_REQUESTS_CSS}
-    .container { max-width: 900px; background-color: #1a1a2e; color: #e0e0e0; }
+    .container { max-width: 900px; }
 
     .logout-form {
       margin-top: 40px;
@@ -65,30 +65,26 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
 
     .logout-form button {
       background-color: transparent;
-      border: 1px solid #555;
-      color: #888;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
       width: auto;
       padding: 8px 16px;
       font-size: 13px;
     }
 
-    body { background-color: #0f0f1a; color: #e0e0e0; }
-
-    .header { background-color: #16162a; }
-
     h2 {
-      color: #e0e0e0;
+      color: var(--text);
       margin: 30px 0 15px 0;
       font-size: 20px;
     }
 
     .flash-message {
-      background-color: #1e2a3a;
+      background-color: var(--tone-info-bg);
       padding: 12px 16px;
       border-left: 4px solid ${COLORS.info};
       border-radius: 4px;
       margin-bottom: 20px;
-      color: #e0e0e0;
+      color: var(--text);
     }
 
     .jobs-grid {
@@ -98,22 +94,22 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
     }
 
     .job-card {
-      border: 1px solid #2a2a3e;
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 16px;
-      background: #22223a;
+      background: var(--surface-raised);
     }
 
     .job-name {
       font-weight: bold;
       font-size: 14px;
-      color: #e0e0e0;
+      color: var(--text);
       margin-bottom: 4px;
     }
 
     .job-schedule {
       font-size: 13px;
-      color: #888;
+      color: var(--text-muted);
       margin-bottom: 12px;
     }
 
@@ -127,26 +123,26 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
     #user-filter {
       padding: 6px 12px;
       border-radius: 4px;
-      border: 1px solid #2a2a3e;
-      background-color: #22223a;
-      color: #e0e0e0;
+      border: 1px solid var(--border);
+      background-color: var(--surface-raised);
+      color: var(--text);
       font-size: 14px;
       cursor: pointer;
     }
 
-    .requests-table th { background-color: #16162a; color: #ccc; }
-    .requests-table td { border-bottom: 1px solid #2a2a3e; color: #e0e0e0; }
-    .requests-table a { color: ${COLORS.info}; }
-    .requests-table code { background-color: #2a2a3e; padding: 2px 6px; border-radius: 3px; font-size: 12px; color: #ccc; }
-    .requests-table tr.group-row:hover { background-color: #22223a; }
+    .requests-table th { background-color: var(--header-bg); color: var(--text-light); }
+    .requests-table td { border-bottom: 1px solid var(--border); color: var(--text); }
+    .requests-table a { color: var(--link); }
+    .requests-table code { background-color: var(--tone-neutral-bg); padding: 2px 6px; border-radius: 3px; font-size: 12px; color: var(--text-light); }
+    .requests-table tr.group-row:hover { background-color: var(--surface-raised); }
 
     .empty-state {
-      color: #666;
+      color: var(--text-muted);
       font-style: italic;
     }
 
-    label { color: #e0e0e0; }
-    input { background-color: #22223a; border-color: #2a2a3e; color: #e0e0e0; }
+    label { color: var(--text); }
+    input { background-color: var(--surface-raised); border-color: var(--border); color: var(--text); }
     input:focus { border-color: ${COLORS.info}; }
     button { background-color: ${COLORS.info}; }
     button:hover { background-color: #1c7ed6; }
@@ -154,5 +150,5 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
 
   const additionalJS = adminRequestsJs(activeTab);
 
-  return getWebTemplate(`Admin - ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
+  return getWebTemplate(`Admin - ${serviceName}`, serviceName, content, additionalCSS, additionalJS, 'dark');
 };

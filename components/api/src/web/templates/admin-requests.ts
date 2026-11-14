@@ -252,52 +252,52 @@ export const adminRequestsSection = ({ dashboard, activeTab, returnTo }: AdminRe
 export const ADMIN_REQUESTS_CSS = `
   ${BADGE_CSS}
   ${DASHBOARD_LAYOUT_CSS}
-  .banner { background: #22223a; }
+  .banner { background: var(--surface-raised); }
   .banner .alert { background: ${COLORS.error}; color: #fff; padding: 3px 10px; border-radius: 4px; font-weight: bold; }
-  .tab { background: #2a2a3e; color: #aaa; }
-  .tab.active { background: #1e2a3a; color: #fff; border-color: ${COLORS.info}; }
-  #user-filter { padding: 6px 12px; border-radius: 4px; border: 1px solid #2a2a3e; background: #22223a; color: #e0e0e0; font-size: 14px; }
-  .requests-table th { background: #16162a; color: #ccc; }
-  .requests-table td { border-bottom: 1px solid #2a2a3e; }
-  .group-row:hover { background: #22223a; }
-  .group-meta a { color: ${COLORS.info}; }
-  .requests-table code { background: #2a2a3e; padding: 2px 6px; border-radius: 3px; font-size: 12px; color: #ccc; }
-  .dl { background: #2a2a3e; }
+  .tab { background: var(--tone-neutral-bg); color: var(--text-light); }
+  .tab.active { background: var(--tone-info-bg); color: #fff; border-color: ${COLORS.info}; }
+  #user-filter { padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface-raised); color: var(--text); font-size: 14px; }
+  .requests-table th { background: var(--header-bg); color: var(--text-light); }
+  .requests-table td { border-bottom: 1px solid var(--border); }
+  .group-row:hover { background: var(--surface-raised); }
+  .group-meta a { color: var(--link); }
+  .requests-table code { background: var(--tone-neutral-bg); padding: 2px 6px; border-radius: 3px; font-size: 12px; color: var(--text-light); }
+  .dl { background: var(--tone-neutral-bg); }
   .dl.failed { background: ${COLORS.error}; color: #fff; }
   .urg-starved { background: ${COLORS.error}; color: #fff; }
-  .urg-needed { background: ${COLORS.orange}; color: #fff; }
-  .urg-deferred { background: #555; color: #ddd; }
+  .urg-needed { background: ${COLORS.warning}; color: #fff; }
+  .urg-deferred { background: #555; color: var(--text); }
   .src-available { background: ${COLORS.success}; color: #fff; }
-  .src-non-compliant { background: ${COLORS.warning}; color: #000; }
+  .src-non-compliant { background: ${COLORS.warning}; color: #fff; }
   .src-unavailable { background: ${COLORS.error}; color: #fff; }
   .src-not-indexed { background: #7a4bd6; color: #fff; }
   .src-not-referenced { background: #8a2be2; color: #fff; }
-  .src-unknown { background: #444; color: #bbb; }
+  .src-unknown { background: #444; color: var(--text-light); }
   .override { background: ${COLORS.info}; color: #fff; }
-  .action-status { background: #2a2a3e; color: #ccc; }
-  .fold h4 { color: #ccc; }
-  .episodes-table th { color: #888; }
-  .episodes-table td { border-bottom: 1px solid #22223a; }
-  .non-compliant { color: ${COLORS.warning}; font-weight: bold; }
-  tr.uncovered td:nth-child(2) { color: #aaa; }
-  .action-card { border: 1px solid #2a2a3e; border-radius: 6px; padding: 10px 12px; margin: 6px 0; background: #1e1e33; }
+  .action-status { background: var(--tone-neutral-bg); color: var(--text-light); }
+  .fold h4 { color: var(--text-light); }
+  .episodes-table th { color: var(--text-muted); }
+  .episodes-table td { border-bottom: 1px solid var(--border-light); }
+  .non-compliant { color: var(--tone-warning-text); font-weight: bold; }
+  tr.uncovered td:nth-child(2) { color: var(--text-light); }
+  .action-card { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin: 6px 0; background: var(--surface); }
   .action-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .action-head a { color: ${COLORS.info}; }
-  .dl-detail { color: #aaa; }
+  .action-head a { color: var(--link); }
+  .dl-detail { color: var(--text-light); }
   .ops { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .op-form { display: flex; gap: 6px; }
-  .op-form input { width: auto; padding: 6px 8px; font-size: 13px; background: #22223a; border-color: #2a2a3e; color: #e0e0e0; }
+  .op-form input { width: auto; padding: 6px 8px; font-size: 13px; background: var(--surface-raised); border-color: var(--border); color: var(--text); }
   .op-form button { width: auto; padding: 6px 12px; font-size: 13px; }
-  button.secondary { background: transparent; border: 1px solid #555; color: #aaa; }
-  .muted { color: #888; opacity: 1; }
-  .empty-state { color: #666; }
-  .ticket-card { display: block; padding: 10px 12px; margin: 6px 0; border-left: 4px solid #555; background: #1e1e33; color: #e0e0e0; text-decoration: none; border-radius: 4px; }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text-light); }
+  .muted { color: var(--text-muted); opacity: 1; }
+  .empty-state { color: var(--text-muted); }
+  .ticket-card { display: block; padding: 10px 12px; margin: 6px 0; border-left: 4px solid var(--border); background: var(--surface); color: var(--text); text-decoration: none; border-radius: 4px; }
   .ticket-card.tone-danger { border-color: ${COLORS.error}; }
   .ticket-card.tone-warning { border-color: ${COLORS.warning}; }
   .ticket-card.tone-info { border-color: ${COLORS.info}; }
   .ticket-card.tone-success { border-color: ${COLORS.success}; }
   .ticket-title { font-weight: bold; }
-  .ticket-meta { font-size: 12px; color: #888; }
+  .ticket-meta { font-size: 12px; color: var(--text-muted); }
 `;
 
 export const adminRequestsJs = (activeTab: DashboardTab): string =>

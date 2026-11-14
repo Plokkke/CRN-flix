@@ -65,47 +65,44 @@ export const adminTicketsTemplate = (params: AdminTicketsParams): string => {
   `;
 
   const additionalCSS = `
-    .container { max-width: 900px; background-color: #1a1a2e; color: #e0e0e0; }
-    body { background-color: #0f0f1a; color: #e0e0e0; }
-    .header { background-color: #16162a; }
-    h2 { color: #e0e0e0; margin: 20px 0 15px 0; font-size: 20px; }
-    a { color: ${COLORS.info}; }
+    .container { max-width: 900px; }
+    h2 { color: var(--text); margin: 20px 0 15px 0; font-size: 20px; }
     .manual-download { display: flex; gap: 8px; margin-bottom: 16px; }
-    .manual-download input { flex: 1; padding: 8px; border: 1px solid #2a2a3e; border-radius: 4px; background: #1a1a2e; color: #e0e0e0; }
+    .manual-download input { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); }
     .manual-download button { width: auto; padding: 8px 16px; }
 
     .flash-message {
-      background-color: #1e2a3a; padding: 12px 16px; border-left: 4px solid ${COLORS.info};
-      border-radius: 4px; margin-bottom: 20px; color: #e0e0e0;
+      background-color: var(--tone-info-bg); padding: 12px 16px; border-left: 4px solid ${COLORS.info};
+      border-radius: 4px; margin-bottom: 20px; color: var(--text);
     }
 
     .filter-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
     .filter-tab {
-      padding: 6px 16px; border-radius: 4px; background-color: #2a2a3e; color: #888;
+      padding: 6px 16px; border-radius: 4px; background-color: var(--tone-neutral-bg); color: var(--text-muted);
       text-decoration: none; font-size: 14px; font-weight: bold;
     }
     .filter-tab.active { background-color: ${COLORS.info}; color: #fff; }
 
     .tickets-list { display: flex; flex-direction: column; gap: 10px; }
     .ticket-card {
-      display: block; border: 1px solid #2a2a3e; border-left-width: 4px; border-radius: 8px;
-      padding: 14px 16px; background: #22223a; text-decoration: none; color: #e0e0e0;
+      display: block; border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px;
+      padding: 14px 16px; background: var(--surface-raised); text-decoration: none; color: var(--text);
     }
-    .ticket-card:hover { background: #26264a; }
-    .ticket-title { font-weight: bold; margin-bottom: 6px; color: #e0e0e0; }
-    .ticket-meta { display: flex; gap: 16px; font-size: 13px; color: #888; }
+    .ticket-card:hover { background: var(--surface-raised); }
+    .ticket-title { font-weight: bold; margin-bottom: 6px; color: var(--text); }
+    .ticket-meta { display: flex; gap: 16px; font-size: 13px; color: var(--text-muted); }
     .ticket-category {
-      background-color: #2a2a3e; padding: 1px 8px; border-radius: 10px; font-size: 12px; color: #ccc;
+      background-color: var(--tone-neutral-bg); padding: 1px 8px; border-radius: 10px; font-size: 12px; color: var(--text-light);
     }
 
     .tone-danger { border-left-color: ${COLORS.error}; }
     .tone-warning { border-left-color: ${COLORS.warning}; }
     .tone-info { border-left-color: ${COLORS.info}; }
-    .tone-muted { border-left-color: #555; }
+    .tone-muted { border-left-color: var(--border); }
     .tone-success { border-left-color: ${COLORS.success}; }
 
-    .empty-state { color: #666; font-style: italic; }
+    .empty-state { color: var(--text-muted); font-style: italic; }
   `;
 
-  return getWebTemplate(`Tickets - ${serviceName}`, serviceName, content, additionalCSS);
+  return getWebTemplate(`Tickets - ${serviceName}`, serviceName, content, additionalCSS, '', 'dark');
 };

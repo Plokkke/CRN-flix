@@ -6,6 +6,7 @@ import {
   TAGLINE,
   wordmark,
 } from './components';
+import { themeCss, WebTheme } from './theme';
 import { COLORS, FONT_STACK, RADIUS, TONES } from './tokens';
 
 export const getEmailTemplate = (title: string, serviceName: string, content: string): string => `
@@ -26,9 +27,10 @@ export const getEmailTemplate = (title: string, serviceName: string, content: st
 </html>
 `;
 
-const TONE_CLASSES = Object.entries(TONES)
+const TONE_CLASSES = Object.keys(TONES)
   .map(
-    ([tone, { bg, text, border }]) => `.tone-${tone} { background: ${bg}; color: ${text}; border-color: ${border}; }`,
+    (tone) =>
+      `.tone-${tone} { background: var(--tone-${tone}-bg); color: var(--tone-${tone}-text); border-color: var(--tone-${tone}-border); }`,
   )
   .join('\n      ');
 
@@ -38,40 +40,40 @@ const WEB_CSS = `
         font-family: ${FONT_STACK};
         margin: 0;
         padding: 0;
-        background-color: ${COLORS.background};
-        color: ${COLORS.text};
+        background-color: var(--page);
+        color: var(--text);
         -webkit-font-smoothing: antialiased;
       }
       .container {
         max-width: 600px;
         margin: 32px auto;
-        background-color: ${COLORS.white};
-        border: 1px solid ${COLORS.border};
+        background-color: var(--surface);
+        border: 1px solid var(--border);
         border-radius: ${RADIUS.lg};
         overflow: hidden;
       }
-      .header { padding: 22px 28px; border-bottom: 1px solid ${COLORS.borderLight}; }
-      .tagline { font-size: 13px; color: ${COLORS.textMuted}; margin-top: 2px; }
+      .header { padding: 22px 28px; border-bottom: 1px solid var(--border-light); background-color: var(--header-bg); }
+      .tagline { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
       .content { padding: 28px; line-height: 1.6; }
-      h1, h2, h3 { color: ${COLORS.primary}; letter-spacing: -0.01em; }
+      h1, h2, h3 { color: var(--heading); letter-spacing: -0.01em; }
       h2 { font-size: 20px; margin: 0 0 12px; }
-      p { color: ${COLORS.textLight}; }
-      a { color: ${COLORS.info}; }
+      p { color: var(--text-light); }
+      a { color: var(--link); }
       .form-group { margin-bottom: 18px; }
-      label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: ${COLORS.text}; }
+      label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: var(--text); }
       input, select, textarea {
         width: 100%;
         padding: 11px 12px;
-        border: 1px solid ${COLORS.border};
+        border: 1px solid var(--border);
         border-radius: ${RADIUS.md};
         font: inherit;
         font-size: 15px;
-        background: ${COLORS.white};
-        color: ${COLORS.text};
+        background: var(--input-bg);
+        color: var(--text);
       }
       input:focus, select:focus, textarea:focus {
         outline: none;
-        border-color: ${COLORS.primary};
+        border-color: var(--heading);
         box-shadow: 0 0 0 3px rgba(22, 22, 29, 0.08);
       }
       button, .btn {
@@ -90,12 +92,12 @@ const WEB_CSS = `
         width: 100%;
       }
       button:hover, .btn:hover { background-color: ${COLORS.accentHover}; border-color: ${COLORS.accentHover}; }
-      .btn-secondary, button.btn-secondary { background: ${COLORS.white}; color: ${COLORS.primary}; border-color: ${COLORS.border}; }
-      .btn-secondary:hover, button.btn-secondary:hover { background: ${COLORS.surfaceMuted}; border-color: ${COLORS.border}; }
+      .btn-secondary, button.btn-secondary { background: var(--surface); color: var(--heading); border-color: var(--border); }
+      .btn-secondary:hover, button.btn-secondary:hover { background: var(--surface-muted); border-color: var(--border); }
       .info-box {
         padding: 18px 20px;
-        border: 1px solid ${TONES.info.border};
-        background: ${TONES.info.bg};
+        border: 1px solid var(--tone-info-border);
+        background: var(--tone-info-bg);
         border-radius: ${RADIUS.md};
         margin: 0 0 20px;
       }
@@ -110,6 +112,7 @@ export const getWebTemplate = (
   content: string,
   additionalCSS = '',
   additionalJS = '',
+  theme: WebTheme = 'light',
 ): string => `
 <!DOCTYPE html>
 <html lang="fr">
@@ -118,6 +121,7 @@ export const getWebTemplate = (
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
     <style>
+      ${themeCss(theme)}
       ${WEB_CSS}
       ${additionalCSS}
     </style>
@@ -125,7 +129,7 @@ export const getWebTemplate = (
 <body>
     <div class="container">
         <div class="header">
-            ${wordmark(serviceName)}
+            ${wordmark(serviceName, 'var(--heading)')}
             <div class="tagline">${TAGLINE}</div>
         </div>
         <div class="content">

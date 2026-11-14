@@ -199,21 +199,19 @@ export const adminNamingAuditTemplate = (params: AdminNamingAuditParams): string
   `;
 
   const additionalCSS = `
-    .container { max-width: 1500px; background-color: #1a1a2e; color: #e0e0e0; }
-    body { background-color: #0f0f1a; color: #e0e0e0; }
-    .header { background-color: #16162a; }
-    h2 { color: #e0e0e0; margin: 20px 0 12px 0; }
+    .container { max-width: 1500px; }
+    h2 { color: var(--text); margin: 20px 0 12px 0; }
 
     .flash-message {
-      background-color: #1e2a3a;
+      background-color: var(--tone-info-bg);
       padding: 12px 16px;
       border-left: 4px solid ${COLORS.info};
       border-radius: 4px;
       margin-bottom: 20px;
     }
 
-    .summary { color: #aaa; margin-bottom: 16px; }
-    .summary code { background: #2a2a3e; padding: 2px 6px; border-radius: 3px; }
+    .summary { color: var(--text-light); margin-bottom: 16px; }
+    .summary code { background: var(--tone-neutral-bg); padding: 2px 6px; border-radius: 3px; }
 
     .trigger-form { margin-bottom: 24px; }
     .trigger-form button { width: auto; padding: 8px 16px; background: ${COLORS.info}; }
@@ -226,7 +224,7 @@ export const adminNamingAuditTemplate = (params: AdminNamingAuditParams): string
       margin-bottom: 16px;
       flex-wrap: wrap;
       padding: 12px;
-      background: #22223a;
+      background: var(--surface-raised);
       border-radius: 6px;
       position: sticky;
       top: 0;
@@ -234,19 +232,19 @@ export const adminNamingAuditTemplate = (params: AdminNamingAuditParams): string
     }
 
     .filter-group { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    .filter-group label { display: inline-flex; align-items: center; gap: 6px; color: #ccc; font-size: 13px; }
-    .filter-group select, .filter-group input[type=checkbox] { background: #1a1a2e; color: #e0e0e0; border: 1px solid #2a2a3e; padding: 4px 8px; border-radius: 4px; }
+    .filter-group label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-light); font-size: 13px; }
+    .filter-group select, .filter-group input[type=checkbox] { background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; }
 
     .bulk-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .bulk-actions button { width: auto; padding: 6px 12px; font-size: 13px; background: ${COLORS.secondary}; }
     .bulk-actions .apply-btn { background: ${COLORS.success}; font-weight: bold; }
-    .selected-count { color: #aaa; font-size: 13px; padding: 0 8px; }
+    .selected-count { color: var(--text-light); font-size: 13px; padding: 0 8px; }
 
     .series-group {
       margin-bottom: 12px;
-      border: 1px solid #2a2a3e;
+      border: 1px solid var(--border);
       border-radius: 6px;
-      background: #1e1e30;
+      background: var(--surface);
     }
     .series-group[data-empty="1"] { display: none; }
 
@@ -258,33 +256,33 @@ export const adminNamingAuditTemplate = (params: AdminNamingAuditParams): string
       align-items: center;
       gap: 12px;
       flex-wrap: wrap;
-      background: #22223a;
+      background: var(--surface-raised);
       border-radius: 6px;
     }
     .series-header::-webkit-details-marker { display: none; }
-    .series-toggle { width: 14px; color: #888; }
+    .series-toggle { width: 14px; color: var(--text-muted); }
     .series-toggle::before { content: '▶'; }
     details[open] .series-toggle::before { content: '▼'; }
 
-    .group-select { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: #ccc; font-size: 12px; padding: 4px 8px; background: #2a2a3e; border-radius: 4px; }
+    .group-select { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light); font-size: 12px; padding: 4px 8px; background: var(--tone-neutral-bg); border-radius: 4px; }
     .group-select input { margin: 0; }
 
-    .series-title { font-weight: bold; color: #e0e0e0; }
-    .series-imdb { background: #2a2a3e; color: #ccc; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
-    .series-summary { color: #888; font-size: 12px; margin-left: auto; }
+    .series-title { font-weight: bold; color: var(--text); }
+    .series-imdb { background: var(--tone-neutral-bg); color: var(--text-light); padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+    .series-summary { color: var(--text-muted); font-size: 12px; margin-left: auto; }
 
     .table-wrapper { overflow-x: auto; padding: 0 8px 8px; }
     .audit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .audit-table th { background-color: #16162a; color: #ccc; padding: 6px 10px; text-align: left; white-space: nowrap; }
-    .audit-table td { padding: 6px 10px; border-bottom: 1px solid #2a2a3e; vertical-align: top; }
-    .audit-table tr:hover { background-color: #22223a; }
+    .audit-table th { background-color: var(--header-bg); color: var(--text-light); padding: 6px 10px; text-align: left; white-space: nowrap; }
+    .audit-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .audit-table tr:hover { background-color: var(--surface-raised); }
     .audit-table tr.hidden-row { display: none; }
 
-    .audit-table code { background: #1a1a2e; padding: 2px 4px; border-radius: 3px; font-size: 11px; word-break: break-all; }
+    .audit-table code { background: var(--surface); padding: 2px 4px; border-radius: 3px; font-size: 11px; word-break: break-all; }
     .path-cell { max-width: 460px; }
 
     .status { padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; }
-    .status-pending { background: ${COLORS.warning}; color: #000; }
+    .status-pending { background: ${COLORS.warning}; color: #fff; }
     .status-conforming { background: ${COLORS.success}; color: #fff; }
     .status-applied { background: #2d7a4f; color: #fff; }
     .status-failed { background: ${COLORS.error}; color: #fff; }
@@ -293,8 +291,8 @@ export const adminNamingAuditTemplate = (params: AdminNamingAuditParams): string
     .reason-ok { background: #2a3a2e; color: #a0f0c0; }
 
     .select-cell { text-align: center; width: 40px; }
-    .not-fixable { color: #666; }
-    .error-msg { color: ${COLORS.error}; font-size: 11px; }
+    .not-fixable { color: var(--text-muted); }
+    .error-msg { color: var(--tone-danger-text); font-size: 11px; }
 
     button { background-color: ${COLORS.info}; }
     button:hover { opacity: 0.85; }
@@ -406,5 +404,5 @@ export const adminNamingAuditTemplate = (params: AdminNamingAuditParams): string
     applyFilters();
   `;
 
-  return getWebTemplate(`Naming audit - ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
+  return getWebTemplate(`Naming audit - ${serviceName}`, serviceName, content, additionalCSS, additionalJS, 'dark');
 };
