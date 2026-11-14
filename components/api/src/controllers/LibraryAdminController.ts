@@ -139,7 +139,7 @@ export class LibraryAdminController {
     @Res() res: Response,
   ): Promise<void> {
     const user = userId ? await this.users.get(userId) : null;
-    if (!user || (action !== 'grant' && action !== 'revoke')) {
+    if (!user || user.guest || (action !== 'grant' && action !== 'revoke')) {
       await this.answer(req, res, imdbId, view, 'Abonné ou action inconnus', true);
       return;
     }
@@ -175,7 +175,9 @@ export class LibraryAdminController {
       grantsOf: (imdbId) => grants.get(imdbId) ?? [],
       userNameOf: (userId) => userNames.get(userId) ?? userId,
     });
-    const active = users.filter((user) => user.status === 'active').map((user) => ({ id: user.id, name: user.name }));
+    const active = users
+      .filter((user) => user.status === 'active' && !user.guest)
+      .map((user) => ({ id: user.id, name: user.name }));
     return { rows, users: active };
   }
 

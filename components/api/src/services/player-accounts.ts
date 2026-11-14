@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 
-import { CatalogAccountSource, Player, PlayerAccount } from '@crn-flix/contracts';
+import { CatalogAccountSource, Player } from '@crn-flix/contracts';
 
 import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
 import { LibraryAccess } from '@/services/library/access';
@@ -23,36 +23,29 @@ export class PlayerAccountsService {
     private readonly access: LibraryAccess | null = null,
   ) {}
 
-  /** Viewing accounts the engine does not know (the player's administrators aside), to take in. */
-  async listUnlinked(): Promise<PlayerAccount[]> {
+  /**
+   * Every viewing account is a subscriber: one the engine does not know (created on the player
+   * by hand, the player's administrators aside) is taken in as an active user without catalog
+   * nor messaging. An account whose name a user already holds is left alone (a registration in
+   * progress links its own account). Returns the users taken in.
+   */
+  async adoptUnknown(): Promise<UserEntity[]> {
     const [users, accounts] = await Promise.all([this.usersRepository.list(), this.player.listAccounts()]);
     const linked = new Set(users.flatMap((user) => (user.jellyfinId ? [user.jellyfinId] : [])));
-    return accounts.filter((account) => !account.isAdministrator && !linked.has(account.id));
-  }
-
-  /**
-   * Takes a player account in: an active user without catalog nor messaging, administered like
-   * the others (profile, streams, personal shelf); its stream limit is adopted from the player.
-   */
-  async adopt(accountId: string): Promise<UserEntity> {
-    const account = (await this.listUnlinked()).find((candidate) => candidate.id === accountId);
-    if (!account) {
-      throw new Error('Compte introuvable ou déjà rattaché');
+    const names = new Set(users.map((user) => user.name.toLowerCase()));
+    const unknown = accounts.filter(
+      (account) => !account.isAdministrator && !linked.has(account.id) && !names.has(account.name.toLowerCase()),
+    );
+    const adopted: UserEntity[] = [];
+    for (const account of unknown) {
+      adopted.push(await this.usersRepository.createFromPlayerAccount(account.name, account.id));
+      PlayerAccountsService.logger.log(`Player account ${account.name} taken in`);
     }
-    if (await this.usersRepository.existsByName(account.name)) {
-      throw new Error(`Le nom ${account.name} est déjà pris par un abonné`);
-    }
-    const user = await this.usersRepository.createFromPlayerAccount(account.name, account.id);
-    await this.apply(user).catch((error: unknown) => {
-      PlayerAccountsService.logger.warn(
-        `Account ${user.name}: taken in, policy on the next pass (${describeError(error)})`,
-      );
-    });
-    PlayerAccountsService.logger.log(`Player account ${account.name} taken in`);
-    return user;
+    return adopted;
   }
 
   async applyAll(): Promise<void> {
+    await this.adoptUnknown();
     const [users, accounts] = await Promise.all([this.usersRepository.list(), this.player.listAccounts()]);
     const accountIds = accounts.map((account) => account.id);
     await this.ensureLibraries(users);

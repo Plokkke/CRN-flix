@@ -13,6 +13,7 @@ const user = (id: string, name: string, status = UserStatus.Active, messagingKey
   messagingKey,
   messagingId: `${name}@test`,
   adminDiscordId: null,
+  guest: false,
   status,
   createdAt: new Date(),
   updatedAt: new Date(),

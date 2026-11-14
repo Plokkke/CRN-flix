@@ -23,6 +23,8 @@ export type UserEntity = {
   messagingId: string | null;
   /** The Discord admin this account belongs to (their personal downloads land here). */
   adminDiscordId: string | null;
+  /** A guest account: the shelves of its profile, never a personal shelf. */
+  guest: boolean;
   status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -38,6 +40,7 @@ type UserRecord = {
   messaging_key: string | null;
   messaging_id: string | null;
   admin_discord_id: string | null;
+  guest: boolean;
   status: UserStatus;
   created_at: Date;
   updated_at: Date;
@@ -54,6 +57,7 @@ function fromUserRecord(record: UserRecord): UserEntity {
     messagingKey: record.messaging_key,
     messagingId: record.messaging_id,
     adminDiscordId: record.admin_discord_id,
+    guest: record.guest,
     status: record.status,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
@@ -168,6 +172,10 @@ export class UsersRepository {
 
   async setMaxStreams(userId: string, maxStreams: number): Promise<void> {
     await this.pool.query(`UPDATE users SET max_streams = $2 WHERE id = $1`, [userId, maxStreams]);
+  }
+
+  async setGuest(userId: string, guest: boolean): Promise<void> {
+    await this.pool.query(`UPDATE users SET guest = $2, updated_at = NOW() WHERE id = $1`, [userId, guest]);
   }
 
   async setProfile(userId: string, profile: Profile): Promise<void> {

@@ -20,7 +20,7 @@ const sees = (profile: Profile, shelf: string): boolean =>
  * Where each title of the store is shown. The admin's choice prevails; otherwise, once the
  * policy is enforced, its classification (restricted, kids, standard), and before that the
  * standard shelf as always. A personal exemption adds the title to its user's shelf, unless
- * the user already sees it on a shared shelf.
+ * the user already sees it on a shared shelf or is a guest (no personal shelf).
  */
 export class PolicyShelfResolver implements ShelfResolver {
   private static readonly logger = new Logger(PolicyShelfResolver.name);
@@ -46,7 +46,7 @@ export class PolicyShelfResolver implements ShelfResolver {
     ]);
     const overrideOf = (imdbId: string): string | null => overrides.get(imdbId) ?? null;
     const stored = await this.policy.storedPlacements(overrideOf);
-    const profileOf = new Map(users.map((user) => [user.id, user.profile]));
+    const profileOf = new Map(users.filter((user) => !user.guest).map((user) => [user.id, user.profile]));
     const shared = new Map<string, string | null>();
     for (const imdbId of new Set(titles.map((title) => title.imdbId))) {
       shared.set(imdbId, await this.sharedShelfOf(imdbId, overrideOf(imdbId), stored.get(imdbId), assess));

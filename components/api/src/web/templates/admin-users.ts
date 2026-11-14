@@ -1,4 +1,3 @@
-import { PlayerAccount } from '@crn-flix/contracts';
 import { escapeHtml, LIVE_FORMS_CSS, LIVE_FORMS_JS, liveFlashSlot } from '@crn-flix/design-system';
 
 import { UserEntity } from '@/services/database/users';
@@ -10,8 +9,6 @@ export const PROFILE_LABELS: Record<Profile, string> = { adult: 'adulte', kids: 
 interface AdminUsersParams {
   serviceName: string;
   users: UserEntity[];
-  /** Player accounts the engine does not know yet; null when the player could not be asked. */
-  unlinked: PlayerAccount[] | null;
   /** The Discord admins (DISCORD_ADMIN_IDS) and the one looking at the page. */
   adminIds: string[];
   currentAdminId: string | null;
@@ -68,42 +65,29 @@ function adminCell(user: UserEntity, params: AdminUsersParams): string {
   );
 }
 
+const guestCell = (user: UserEntity): string =>
+  liveForm(
+    `/admin/users/${user.id}/guest`,
+    `<input type="checkbox" name="guest" value="on"${user.guest ? ' checked' : ''} aria-label="${escapeHtml(user.name)} est un compte invité" />`,
+  );
+
 const userRow = (user: UserEntity, params: AdminUsersParams): string => `<tr>
     <td>${escapeHtml(user.name)}</td>
-    <td class="hint">${escapeHtml(user.messagingKey ?? 'aucune')}</td>
+    <td>${guestCell(user)}</td>
+    <td class="hint">${escapeHtml(user.messagingKey ?? '-')}</td>
     <td>${streamsCell(user)}</td>
     <td>${profileCell(user)}</td>
     <td>${adminCell(user, params)}</td>
   </tr>`;
 
-function unlinkedSection(unlinked: PlayerAccount[] | null): string {
-  if (unlinked === null) {
-    return '<p class="hint">Le lecteur ne répond pas : impossible de lister ses autres comptes.</p>';
-  }
-  if (unlinked.length === 0) {
-    return '';
-  }
-  const rows = unlinked.map(
-    (account) =>
-      `<tr><td>${escapeHtml(account.name)}</td><td>${liveForm(
-        '/admin/users/adopt',
-        `<input type="hidden" name="accountId" value="${escapeHtml(account.id)}" /><button type="submit">Intégrer</button>`,
-      )}</td></tr>`,
-  );
-  return `<h3>Comptes du lecteur hors CRN-Flix</h3>
-    <p class="hint">Comptes Jellyfin sans lien catalogue ni messagerie. Intégrés, ils s’administrent comme les autres (profil, flux, étagère personnelle), sans notifications ni accès à l’espace abonné.</p>
-    <table class="users"><tbody>${rows.join('')}</tbody></table>`;
-}
-
 export const adminUsersTemplate = (params: AdminUsersParams): string => {
   const content = `
     <p><a href="/admin">← Dashboard</a></p>
     <h2>👥 Comptes de visionnage</h2>
-    <p class="hint">Chaque changement s’applique tout de suite. Flux simultanés : 0 = illimité. Profil : les étagères visibles. Admin Discord : ce que cet admin garde pour lui (« Ma collection ») arrive sur l’étagère personnelle de ce compte. Un administrateur du lecteur garde ses droits : seules ses étagères (et une limite de flux fixée ici) suivent son profil.</p>
+    <p class="hint">Chaque changement s’applique tout de suite. Tout compte du lecteur est un abonné, avec ou sans messagerie. Invité : compte partagé, sans étagère personnelle (en bas de la liste). Flux simultanés : 0 = illimité. Profil : les étagères visibles. Admin Discord : ce que cet admin garde pour lui (« Ma collection ») arrive sur l’étagère personnelle de ce compte. Un administrateur du lecteur garde ses droits : seules ses étagères (et une limite de flux fixée ici) suivent son profil.</p>
     ${liveFlashSlot(params.flashMessage)}
-    <table class="users"><thead><tr><th>Compte</th><th>Messagerie</th><th>Flux simultanés</th><th>Profil</th><th>Admin Discord</th></tr></thead>
+    <table class="users"><thead><tr><th>Compte</th><th>Invité</th><th>Messagerie</th><th>Flux simultanés</th><th>Profil</th><th>Admin Discord</th></tr></thead>
       <tbody>${params.users.map((user) => userRow(user, params)).join('')}</tbody></table>
-    ${unlinkedSection(params.unlinked)}
   `;
   return adminPage('Comptes', params.serviceName, content, USERS_CSS, LIVE_FORMS_JS);
 };

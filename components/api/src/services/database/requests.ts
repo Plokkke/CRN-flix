@@ -263,6 +263,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                                     'messagingKey', u.messaging_key,
                                     'messagingId', u.messaging_id,
                                     'adminDiscordId', u.admin_discord_id,
+                                    'guest', u.guest,
                                     'status', u.status,
                                     'createdAt', u.created_at,
                                     'updatedAt', u.updated_at
@@ -426,6 +427,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                   'messagingKey', u.messaging_key,
                   'messagingId', u.messaging_id,
                   'adminDiscordId', u.admin_discord_id,
+                  'guest', u.guest,
                   'status', u.status,
                   'createdAt', u.created_at,
                   'updatedAt', u.updated_at

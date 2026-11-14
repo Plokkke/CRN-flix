@@ -42,36 +42,38 @@ export class UsersAdminController {
   @Get()
   @Header('content-type', 'text/html')
   async list(@Req() req: Request, @Query('message') message?: string): Promise<string> {
-    const [all, unlinked] = await Promise.all([
-      this.usersRepository.list(),
-      this.playerAccounts.listUnlinked().catch(() => null),
-    ]);
-    const users = all
+    const adopted = await this.playerAccounts.adoptUnknown().catch(() => []);
+    adopted.forEach((user) => void this.playerAccounts.apply(user).catch(() => undefined));
+    const users = (await this.usersRepository.list())
       .filter((user) => user.status === UserStatus.Active)
-      .sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+      .sort((a, b) => Number(a.guest) - Number(b.guest) || a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
     return adminUsersTemplate({
       serviceName: this.contextService.name,
       users,
-      unlinked,
       adminIds: this.adminIds,
       currentAdminId: adminOf(req),
       flashMessage: message,
     });
   }
 
-  /** Takes a player account the engine does not know in; the page is reloaded (a new line). */
-  @Post('adopt')
-  async adopt(
-    @Body('accountId') accountId: string | undefined,
+  /** A guest sees the shelves of its profile and never has a personal shelf; it is listed last. */
+  @Post(':id/guest')
+  async setGuest(
+    @Param('id') id: string,
+    @Body('guest') guest: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    try {
-      const user = await this.playerAccounts.adopt(String(accountId ?? ''));
-      answer(req, res, `${user.name} intégré`, false, true);
-    } catch (error) {
-      answer(req, res, error instanceof Error ? error.message : String(error), true);
+    const user = await this.usersRepository.get(id);
+    if (!user) {
+      answer(req, res, 'Utilisateur introuvable', true);
+      return;
     }
+    const isGuest = guest === 'on';
+    await this.usersRepository.setGuest(id, isGuest);
+    await this.shelves.reconcile().catch(() => undefined);
+    await this.playerAccounts.apply({ ...user, guest: isGuest }).catch(() => undefined);
+    answer(req, res, `${user.name} : ${isGuest ? 'invité, sans étagère personnelle' : 'abonné'}`, false, true);
   }
 
   /** The Discord admin this account belongs to; an admin has one account, the previous one is let go. */
