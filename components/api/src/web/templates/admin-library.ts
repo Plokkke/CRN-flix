@@ -7,7 +7,6 @@ import {
   LibraryFilter,
   LibraryRow,
   PAGE_SIZE,
-  SHELF_CHOICES,
   SHELF_LABELS,
 } from '@/services/library/admin-view';
 
@@ -44,16 +43,18 @@ const CSS = `
   td { padding: 8px; border-bottom: 1px solid var(--border-light); vertical-align: top; }
   tr.unplaced td { background: var(--tone-warning-bg); }
   .pill { margin-right: 4px; }
-  form.inline { display: flex; gap: 6px; align-items: center; margin: 0 0 6px 0; }
-  form.inline select { width: auto; padding: 4px 6px; font-size: 13px; }
-  form.inline button { width: auto; padding: 4px 10px; font-size: 13px; margin: 0; }
-  form.revoke { display: inline; }
+  form.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0 0; }
+  form.chips[aria-busy='true'] { opacity: 0.5; pointer-events: none; }
+  label.chip { position: relative; margin: 0; font-weight: 400; cursor: pointer; }
+  label.chip input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+  label.chip span { display: inline-block; padding: 2px 10px; font-size: 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-light); background: var(--surface); }
+  label.chip input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; }
+  label.chip input:focus-visible + span { outline: 2px solid var(--link); outline-offset: 1px; }
   form.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 16px 0; }
   form.filters input[type='search'] { width: 220px; padding: 6px 8px; font-size: 13px; }
   form.filters select { width: auto; padding: 6px 8px; font-size: 13px; }
   form.filters button { width: auto; padding: 6px 14px; font-size: 13px; margin: 0; }
   .pager { display: flex; gap: 12px; align-items: center; margin: 12px 0; }
-  form.revoke button { width: auto; padding: 0 6px; font-size: 12px; margin: 0 0 0 4px; background: transparent; color: var(--link); border: none; }
 `;
 
 const flash = (message?: string, error?: boolean): string =>
@@ -76,39 +77,27 @@ function placementCell(row: LibraryRow): string {
   return `${shared}${choice}`;
 }
 
-function personalCell(row: LibraryRow, view: string): string {
-  if (row.personal.length === 0) {
-    return '<span class="hint">—</span>';
-  }
-  return row.personal
-    .map(
-      (
-        user,
-      ) => `<div>${escapeHtml(user.name)}<form class="revoke" method="POST" action="/admin/library/${encodeURIComponent(row.imdbId)}/personal">
-        <input type="hidden" name="userId" value="${escapeHtml(user.userId)}" /><input type="hidden" name="action" value="revoke" />${view}
-        <button type="submit" title="Retirer de son étagère personnelle">retirer</button></form></div>`,
-    )
-    .join('');
+/** `auto` hands the title back to the rules; the others are the admin's choice, which prevails. */
+const SHARED_CHIPS: [string, string][] = [
+  ['auto', 'Auto'],
+  ['none', 'Aucune'],
+  ['standard', 'Standard'],
+  ['kids', 'Kids'],
+];
+
+const chip = (type: 'radio' | 'checkbox', name: string, value: string, label: string, checked: boolean): string =>
+  `<label class="chip"><input type="${type}" name="${name}" value="${escapeHtml(value)}"${checked ? ' checked' : ''} /><span>${escapeHtml(label)}</span></label>`;
+
+function sharedChips(row: LibraryRow, view: string): string {
+  const current = row.choice?.shelf ?? 'auto';
+  const chips = SHARED_CHIPS.map(([value, label]) => chip('radio', 'shelf', value, label, current === value)).join('');
+  return `<form class="chips" method="POST" action="/admin/library/${encodeURIComponent(row.imdbId)}/shelf" aria-label="Étagère partagée">${view}${chips}</form>`;
 }
 
-function actionsCell(row: LibraryRow, users: { id: string; name: string }[], view: string): string {
-  const current = row.choice?.shelf ?? 'auto';
-  const options = [
-    `<option value="auto"${current === 'auto' ? ' selected' : ''}>Selon les règles</option>`,
-    ...SHELF_CHOICES.map(
-      (shelf) =>
-        `<option value="${shelf}"${current === shelf ? ' selected' : ''}>${escapeHtml(SHELF_LABELS[shelf])}</option>`,
-    ),
-  ].join('');
-  const candidates = users.filter((user) => !row.personal.some((granted) => granted.userId === user.id));
-  const grant = candidates.length
-    ? `<form class="inline" method="POST" action="/admin/library/${encodeURIComponent(row.imdbId)}/personal">
-        <input type="hidden" name="action" value="grant" />${view}
-        <select name="userId" aria-label="Abonné">${candidates.map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(user.name)}</option>`).join('')}</select>
-        <button type="submit">Ajouter à son étagère</button></form>`
-    : '';
-  return `<form class="inline" method="POST" action="/admin/library/${encodeURIComponent(row.imdbId)}/shelf">
-      ${view}<select name="shelf" aria-label="Étagère partagée">${options}</select><button type="submit">Placer</button></form>${grant}`;
+function personalChips(row: LibraryRow, users: { id: string; name: string }[], view: string): string {
+  const granted = new Set(row.personal.map((user) => user.userId));
+  const chips = users.map((user) => chip('checkbox', 'userId', user.id, user.name, granted.has(user.id))).join('');
+  return `<form class="chips" method="POST" action="/admin/library/${encodeURIComponent(row.imdbId)}/personal" aria-label="Étagères personnelles">${view}${chips}</form>`;
 }
 
 const option = (value: string, label: string, current: string | undefined): string =>
@@ -137,10 +126,11 @@ function filterForm(filter: LibraryFilter): string {
 
 /**
  * The list follows the filters as they change, without reloading the page (the search field
- * keeps its focus): typing waits for a pause, a select applies at once. Only the results are
- * replaced, the address keeps the filters, and a late answer never overwrites a newer one.
+ * keeps its focus): typing waits for a pause, a select applies at once. A chip applies its
+ * choice at once too. Only the results are replaced, the address keeps the filters, and a late
+ * answer never overwrites a newer one.
  */
-const LIVE_FILTERS_JS = `
+const LIVE_LIBRARY_JS = `
   (() => {
     const form = document.querySelector('form.filters');
     if (!form) return;
@@ -153,26 +143,40 @@ const LIVE_FILTERS_JS = `
       });
       return query.toString();
     };
-    const refresh = async () => {
+    const load = async (url, init, address) => {
       clearTimeout(timer);
       pending?.abort();
       pending = new AbortController();
-      const query = queryOf();
-      const url = '/admin/library' + (query ? '?' + query : '');
       try {
-        const response = await fetch(url, { signal: pending.signal });
-        if (response.redirected) {
+        const response = await fetch(url, { ...init, signal: pending.signal });
+        if (response.redirected && !response.url.includes('/admin/library')) {
           location.href = response.url;
           return;
         }
         const next = new DOMParser().parseFromString(await response.text(), 'text/html').getElementById('library-results');
         if (next) {
           document.getElementById('library-results').replaceWith(next);
-          history.replaceState(null, '', url);
+          if (address) history.replaceState(null, '', address);
         }
       } catch (error) {
-        if (error.name !== 'AbortError') console.warn('Library filters:', error);
+        if (error.name !== 'AbortError') console.warn('Library:', error);
       }
+    };
+    const refresh = () => {
+      const query = queryOf();
+      const url = '/admin/library' + (query ? '?' + query : '');
+      return load(url, {}, url);
+    };
+    const apply = (chips, input) => {
+      const body = new URLSearchParams({ view: chips.querySelector('input[name="view"]').value });
+      if (input.name === 'shelf') {
+        body.set('shelf', input.value);
+      } else {
+        body.set('userId', input.value);
+        body.set('action', input.checked ? 'grant' : 'revoke');
+      }
+      chips.setAttribute('aria-busy', 'true');
+      return load(chips.action, { method: 'POST', body });
     };
     form.addEventListener('input', (event) => {
       if (event.target.name === 'q') {
@@ -186,6 +190,10 @@ const LIVE_FILTERS_JS = `
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       refresh();
+    });
+    document.addEventListener('change', (event) => {
+      const chips = event.target.closest('form.chips');
+      if (chips) apply(chips, event.target);
     });
   })();
 `;
@@ -235,14 +243,12 @@ export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
       (row) => `<tr${row.unplaced ? ' class="unplaced"' : ''}>
         <td>${escapeHtml(row.title)}<div class="hint">${TYPE_LABELS[row.section] ?? row.section} · <a href="https://www.imdb.com/title/${encodeURIComponent(row.imdbId)}/">${escapeHtml(row.imdbId)}</a></div></td>
         <td>${computedCell(row)}</td>
-        <td>${placementCell(row)}</td>
-        <td>${personalCell(row, view)}</td>
-        <td>${actionsCell(row, params.users, view)}</td>
+        <td>${placementCell(row)}${sharedChips(row, view)}</td>
+        <td>${personalChips(row, params.users, view)}</td>
       </tr>`,
     )
     .join('');
   const content = `
-    ${flash(params.flashMessage, params.flashError)}
     <p><a href="/admin">← Dashboard</a></p>
     <h2>📚 Bibliothèque</h2>
     ${notes}
@@ -250,14 +256,15 @@ export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
     ${unplaced > 0 ? `<p><a href="/admin/library?state=unplaced">${pill(`${unplaced} titre(s) sur aucune étagère`, 'warning')}</a></p>` : ''}
     ${filterForm(filter)}
     <div id="library-results">
+    ${flash(params.flashMessage, params.flashError)}
     <p class="hint">${params.total} titre(s)</p>
     ${pager(filter, params.total)}
     ${
       rows
-        ? `<table><thead><tr><th>Titre</th><th>Selon les règles</th><th>Étagère partagée</th><th>Étagères personnelles</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`
+        ? `<table><thead><tr><th>Titre</th><th>Selon les règles</th><th>Étagère partagée</th><th>Étagères personnelles</th></tr></thead><tbody>${rows}</tbody></table>`
         : '<p class="hint">Aucun titre ne correspond.</p>'
     }
     ${pager(filter, params.total)}
     </div>`;
-  return getWebTemplate('Bibliothèque', params.serviceName, content, CSS, LIVE_FILTERS_JS, 'dark');
+  return getWebTemplate('Bibliothèque', params.serviceName, content, CSS, LIVE_LIBRARY_JS, 'dark');
 };

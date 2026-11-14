@@ -146,11 +146,17 @@ describe('adminLibraryTemplate', () => {
     expect(html).toContain('setTimeout(refresh, 300)');
   });
 
-  it('offers to add a title only to the subscribers who do not have it yet', () => {
+  it('shows the shared shelf as radio chips and every subscriber as a checkbox chip, checked when granted', () => {
     const html = render({ ...ALL, q: 'elementaire' });
 
-    expect(html).toContain('<option value="u1">papa</option>');
-    expect(html).not.toContain('<option value="son">leo</option>');
+    expect(html).toContain('<input type="radio" name="shelf" value="auto" checked />');
+    expect(html).toContain('<input type="radio" name="shelf" value="kids" />');
+    expect(html).toContain('<input type="checkbox" name="userId" value="son" checked /><span>leo</span>');
+    expect(html).toContain('<input type="checkbox" name="userId" value="u1" /><span>papa</span>');
+  });
+
+  it('marks the admin’s choice among the shared shelf chips', () => {
+    expect(render({ ...ALL, q: 'cars' })).toContain('<input type="radio" name="shelf" value="kids" checked />');
   });
 
   it('warns when the shelves or the rules are not active yet', () => {
