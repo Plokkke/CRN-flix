@@ -1,5 +1,7 @@
 import { Logger } from '@nestjs/common';
 
+import { Placement } from '@crn-flix/policy';
+
 import { LibraryTitle, ShelfOverridesRepository } from '@/services/database/library';
 import { PolicyExemptionsRepository } from '@/services/database/policy';
 import { UsersRepository } from '@/services/database/users';
@@ -33,16 +35,22 @@ export class PolicyShelfResolver implements ShelfResolver {
     private readonly users: UsersRepository,
   ) {}
 
-  async shelvesOf(titles: LibraryTitle[]): Promise<(imdbId: string) => TitleShelves> {
+  /**
+   * `assess: false` (a page) only reads what is assessed already; otherwise (the reconciler) a
+   * title not assessed under the current rules is assessed now.
+   */
+  async shelvesOf(titles: LibraryTitle[], { assess = true } = {}): Promise<(imdbId: string) => TitleShelves> {
     const [overrides, personalGrants, users] = await Promise.all([
       this.overrides.list(),
       this.exemptions.listGrantedPersonal(),
       this.users.list(),
     ]);
+    const overrideOf = (imdbId: string): string | null => overrides.get(imdbId) ?? null;
+    const stored = this.policy.mode === 'enforce' ? await this.policy.storedPlacements(overrideOf) : new Map();
     const profileOf = new Map(users.map((user) => [user.id, user.profile]));
     const shared = new Map<string, string | null>();
     for (const imdbId of new Set(titles.map((title) => title.imdbId))) {
-      shared.set(imdbId, await this.sharedShelfOf(imdbId, overrides.get(imdbId) ?? null));
+      shared.set(imdbId, await this.sharedShelfOf(imdbId, overrideOf(imdbId), stored.get(imdbId), assess));
     }
     return (imdbId) => {
       const shelf = shared.get(imdbId) ?? null;
@@ -55,12 +63,17 @@ export class PolicyShelfResolver implements ShelfResolver {
   }
 
   /** A title that cannot be placed now (never assessed, source down) stays off the shared shelves until it can. */
-  private async sharedShelfOf(imdbId: string, override: string | null): Promise<string | null> {
+  private async sharedShelfOf(
+    imdbId: string,
+    override: string | null,
+    stored: Placement | undefined,
+    assess: boolean,
+  ): Promise<string | null> {
     if (this.policy.mode !== 'enforce') {
       return override === 'none' ? null : (override ?? STANDARD_SHELF);
     }
     try {
-      const placement = await this.policy.placementOf(imdbId, override);
+      const placement = stored ?? (assess ? await this.policy.placementOf(imdbId, override) : null);
       return placement?.kind === 'shelf' ? placement.shelf : null;
     } catch (error) {
       PolicyShelfResolver.logger.warn(`Cannot place ${imdbId} for now: ${describeError(error)}`);

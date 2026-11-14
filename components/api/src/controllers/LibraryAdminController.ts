@@ -31,6 +31,7 @@ import {
   LIBRARY_SORTS,
   LIBRARY_STATES,
   LibraryFilter,
+  LibraryRow,
   selectRows,
   SHELF_CHOICES,
   SHELF_LABELS,
@@ -39,7 +40,7 @@ import {
 import { PolicyShelfResolver } from '@/services/library/resolver';
 import { LibraryShelves } from '@/services/library/shelves';
 import { PolicyService } from '@/services/policy/policy';
-import { adminLibraryTemplate } from '@/web/templates/admin-library';
+import { adminLibraryTemplate, libraryRow, viewInput } from '@/web/templates/admin-library';
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -99,31 +100,7 @@ export class LibraryAdminController {
     @Query('error') error?: string,
   ): Promise<string> {
     const filter = parseFilter(query);
-    const stored = await this.titles.list();
-    const titles = [...new Map(stored.map((title) => [title.imdbId, title])).values()];
-    const imdbIds = titles.map((title) => title.imdbId);
-    const [shelvesOf, overrides, grants, users, names, computed] = await Promise.all([
-      this.resolver.shelvesOf(stored),
-      this.overrides.listAll(),
-      this.exemptions.listGrantedPersonal(),
-      this.users.list(),
-      Promise.all(imdbIds.map(async (imdbId) => [imdbId, await this.medias.titlesOf(imdbId)] as const)),
-      Promise.all(
-        imdbIds.map(async (imdbId) => [imdbId, await this.policy.placementOf(imdbId).catch(() => null)] as const),
-      ),
-    ]);
-    const nameOf = new Map(names.map(([imdbId, known]) => [imdbId, known?.frenchTitle ?? known?.title ?? imdbId]));
-    const placementOf = new Map(computed);
-    const userNames = new Map(users.map((user) => [user.id, user.name]));
-    const rows = buildLibraryView({
-      titles,
-      titleOf: (imdbId) => nameOf.get(imdbId) ?? imdbId,
-      computedOf: (imdbId) => placementOf.get(imdbId) ?? null,
-      overrides,
-      sharedOf: (imdbId) => shelvesOf(imdbId).shared,
-      grantsOf: (imdbId) => grants.get(imdbId) ?? [],
-      userNameOf: (userId) => userNames.get(userId) ?? userId,
-    });
+    const { rows, users } = await this.view();
     return adminLibraryTemplate({
       serviceName: this.contextService.name,
       layout: this.config.get('library').layout,
@@ -131,7 +108,7 @@ export class LibraryAdminController {
       filter,
       unplaced: rows.filter((row) => row.unplaced).length,
       ...selectRows(rows, filter),
-      users: users.filter((user) => user.status === 'active').map((user) => ({ id: user.id, name: user.name })),
+      users,
       flashMessage: message,
       flashError: error === '1',
     });
@@ -150,11 +127,11 @@ export class LibraryAdminController {
     } else if (isShelfChoice(shelf)) {
       await this.overrides.set({ imdbId, shelf, origin: 'admin' }, this.actor(req));
     } else {
-      back(res, view, 'Étagère inconnue', true);
+      await this.answer(req, res, imdbId, view, 'Étagère inconnue', true);
       return;
     }
     this.reshelve();
-    back(res, view, shelf === 'auto' ? 'Rendu aux règles' : `Placé : ${SHELF_LABELS[shelf]}`);
+    await this.answer(req, res, imdbId, view, shelf === 'auto' ? 'Rendu aux règles' : `Placé : ${SHELF_LABELS[shelf]}`);
   }
 
   @Post(':imdbId/personal')
@@ -168,7 +145,7 @@ export class LibraryAdminController {
   ): Promise<void> {
     const user = userId ? await this.users.get(userId) : null;
     if (!user || (action !== 'grant' && action !== 'revoke')) {
-      back(res, view, 'Abonné ou action inconnus', true);
+      await this.answer(req, res, imdbId, view, 'Abonné ou action inconnus', true);
       return;
     }
     if (action === 'grant') {
@@ -177,7 +154,53 @@ export class LibraryAdminController {
       await this.exemptions.revokePersonal(user.id, imdbId, this.actor(req));
     }
     this.reshelve();
-    back(res, view, action === 'grant' ? `Ajouté à l’étagère de ${user.name}` : `Retiré de l’étagère de ${user.name}`);
+    const done = action === 'grant' ? `Ajouté à l’étagère de ${user.name}` : `Retiré de l’étagère de ${user.name}`;
+    await this.answer(req, res, imdbId, view, done);
+  }
+
+  /** Every title and where it is, from a handful of batched reads: nothing is assessed here. */
+  private async view(): Promise<{ rows: LibraryRow[]; users: { id: string; name: string }[] }> {
+    const stored = await this.titles.list();
+    const titles = [...new Map(stored.map((title) => [title.imdbId, title])).values()];
+    const [shelvesOf, overrides, grants, users, nameOf, placementOf] = await Promise.all([
+      this.resolver.shelvesOf(stored, { assess: false }),
+      this.overrides.listAll(),
+      this.exemptions.listGrantedPersonal(),
+      this.users.list(),
+      this.medias.displayTitlesOf(titles.map((title) => title.imdbId)),
+      this.policy.storedPlacements(),
+    ]);
+    const userNames = new Map(users.map((user) => [user.id, user.name]));
+    const rows = buildLibraryView({
+      titles,
+      titleOf: (imdbId) => nameOf.get(imdbId) ?? imdbId,
+      computedOf: (imdbId) => placementOf.get(imdbId) ?? null,
+      overrides,
+      sharedOf: (imdbId) => shelvesOf(imdbId).shared,
+      grantsOf: (imdbId) => grants.get(imdbId) ?? [],
+      userNameOf: (userId) => userNames.get(userId) ?? userId,
+    });
+    const active = users.filter((user) => user.status === 'active').map((user) => ({ id: user.id, name: user.name }));
+    return { rows, users: active };
+  }
+
+  /** A chip (JSON) gets the message and its title's new line; a plain form goes back to the list. */
+  private async answer(
+    req: Request,
+    res: Response,
+    imdbId: string,
+    view: unknown,
+    message: string,
+    error = false,
+  ): Promise<void> {
+    if (!String(req.headers.accept ?? '').includes('application/json')) {
+      back(res, view, message, error);
+      return;
+    }
+    const { rows, users } = await this.view();
+    const row = rows.find((candidate) => candidate.imdbId === imdbId);
+    const filter = parseFilter(Object.fromEntries(new URLSearchParams(String(view ?? ''))));
+    res.json({ message, error, row: row ? libraryRow(row, users, viewInput(filter)) : null });
   }
 
   private actor(req: Request): string {

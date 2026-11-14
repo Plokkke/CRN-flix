@@ -184,6 +184,15 @@ export class MediasRepository {
       : null;
   }
 
+  /** The display title of each known imdb id, in one query. */
+  async displayTitlesOf(imdbIds: string[]): Promise<Map<string, string>> {
+    const { rows } = await this.pool.query<{ imdb_id: string; title: string; french_title: string | null }>(
+      `SELECT DISTINCT ON (imdb_id) imdb_id, title, french_title FROM medias WHERE imdb_id = ANY($1) ORDER BY imdb_id`,
+      [imdbIds],
+    );
+    return new Map(rows.map((row) => [row.imdb_id, displayTitle({ title: row.title, frenchTitle: row.french_title })]));
+  }
+
   async listImdbIdsWithoutFrenchTitle(limit: number): Promise<string[]> {
     const { rows } = await this.pool.query<{ imdb_id: string }>(
       `SELECT DISTINCT imdb_id FROM medias

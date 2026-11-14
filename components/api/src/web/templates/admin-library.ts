@@ -126,9 +126,10 @@ function filterForm(filter: LibraryFilter): string {
 
 /**
  * The list follows the filters as they change, without reloading the page (the search field
- * keeps its focus): typing waits for a pause, a select applies at once. A chip applies its
- * choice at once too. Only the results are replaced, the address keeps the filters, and a late
- * answer never overwrites a newer one.
+ * keeps its focus): typing waits for a pause, a select applies at once. Only the results are
+ * replaced, the address keeps the filters, and a late answer never overwrites a newer one. A
+ * chip applies its choice at once and replaces only its own line: scroll, filters and the
+ * other lines stay as they are.
  */
 const LIVE_LIBRARY_JS = `
   (() => {
@@ -167,7 +168,16 @@ const LIVE_LIBRARY_JS = `
       const url = '/admin/library' + (query ? '?' + query : '');
       return load(url, {}, url);
     };
-    const apply = (chips, input) => {
+    const showFlash = (message, error) => {
+      const slot = document.getElementById('library-flash');
+      slot.replaceChildren();
+      if (!message) return;
+      const box = document.createElement('div');
+      box.className = error ? 'flash error' : 'flash';
+      box.textContent = message;
+      slot.append(box);
+    };
+    const apply = async (chips, input) => {
       const body = new URLSearchParams({ view: chips.querySelector('input[name="view"]').value });
       if (input.name === 'shelf') {
         body.set('shelf', input.value);
@@ -176,7 +186,26 @@ const LIVE_LIBRARY_JS = `
         body.set('action', input.checked ? 'grant' : 'revoke');
       }
       chips.setAttribute('aria-busy', 'true');
-      return load(chips.action, { method: 'POST', body });
+      try {
+        const response = await fetch(chips.action, { method: 'POST', body, headers: { Accept: 'application/json' } });
+        if (!response.ok || !(response.headers.get('content-type') || '').includes('json')) {
+          location.reload();
+          return;
+        }
+        const { message, error, row } = await response.json();
+        showFlash(message, error);
+        const line = chips.closest('tr');
+        if (row && line) {
+          const holder = document.createElement('tbody');
+          holder.innerHTML = row;
+          line.replaceWith(holder.firstElementChild);
+        } else {
+          chips.removeAttribute('aria-busy');
+        }
+      } catch (error) {
+        console.warn('Library:', error);
+        chips.removeAttribute('aria-busy');
+      }
     };
     form.addEventListener('input', (event) => {
       if (event.target.name === 'q') {
@@ -209,6 +238,18 @@ function pager(filter: LibraryFilter, total: number): string {
     <span class="hint">Page ${filter.page} / ${pages}</span>${filter.page < pages ? link(filter.page + 1, 'Suivante →') : ''}</div>`;
 }
 
+/** One title's line; also sent alone after a chip, which replaces only that line. */
+export const libraryRow = (row: LibraryRow, users: { id: string; name: string }[], view: string): string =>
+  `<tr data-imdb-id="${escapeHtml(row.imdbId)}"${row.unplaced ? ' class="unplaced"' : ''}>
+    <td>${escapeHtml(row.title)}<div class="hint">${TYPE_LABELS[row.section] ?? row.section} · <a href="https://www.imdb.com/title/${encodeURIComponent(row.imdbId)}/">${escapeHtml(row.imdbId)}</a></div></td>
+    <td>${computedCell(row)}</td>
+    <td>${placementCell(row)}${sharedChips(row, view)}</td>
+    <td>${personalChips(row, users, view)}</td>
+  </tr>`;
+
+export const viewInput = (filter: LibraryFilter): string =>
+  `<input type="hidden" name="view" value="${escapeHtml(filterQuery(filter))}" />`;
+
 export type AdminLibraryParams = {
   serviceName: string;
   layout: string;
@@ -226,7 +267,7 @@ export type AdminLibraryParams = {
 
 export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
   const { unplaced, filter } = params;
-  const view = `<input type="hidden" name="view" value="${escapeHtml(filterQuery(filter))}" />`;
+  const view = viewInput(filter);
   const notes = [
     params.layout !== 'shelves'
       ? 'Les étagères ne sont pas actives (LIBRARY_LAYOUT=legacy) : tout le monde voit toute la bibliothèque, les choix ci-dessous serviront à la bascule.'
@@ -238,16 +279,7 @@ export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
     .filter(Boolean)
     .map((note) => `<p class="hint">${escapeHtml(note)}</p>`)
     .join('');
-  const rows = params.rows
-    .map(
-      (row) => `<tr${row.unplaced ? ' class="unplaced"' : ''}>
-        <td>${escapeHtml(row.title)}<div class="hint">${TYPE_LABELS[row.section] ?? row.section} · <a href="https://www.imdb.com/title/${encodeURIComponent(row.imdbId)}/">${escapeHtml(row.imdbId)}</a></div></td>
-        <td>${computedCell(row)}</td>
-        <td>${placementCell(row)}${sharedChips(row, view)}</td>
-        <td>${personalChips(row, params.users, view)}</td>
-      </tr>`,
-    )
-    .join('');
+  const rows = params.rows.map((row) => libraryRow(row, params.users, view)).join('');
   const content = `
     <p><a href="/admin">← Dashboard</a></p>
     <h2>📚 Bibliothèque</h2>
@@ -255,8 +287,8 @@ export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
     <p class="hint">Le choix de l’admin fait foi sur les règles. Un titre ajouté à l’étagère personnelle d’un abonné y apparaît sans quitter les étagères partagées.</p>
     ${unplaced > 0 ? `<p><a href="/admin/library?state=unplaced">${pill(`${unplaced} titre(s) sur aucune étagère`, 'warning')}</a></p>` : ''}
     ${filterForm(filter)}
+    <div id="library-flash">${flash(params.flashMessage, params.flashError)}</div>
     <div id="library-results">
-    ${flash(params.flashMessage, params.flashError)}
     <p class="hint">${params.total} titre(s)</p>
     ${pager(filter, params.total)}
     ${

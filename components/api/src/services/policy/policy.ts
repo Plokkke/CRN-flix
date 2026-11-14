@@ -87,6 +87,28 @@ export class PolicyService {
     return outcomes && this.classify(imdbId, outcomes, override);
   }
 
+  /**
+   * Every placement already assessed under the current rules, in three queries: a page never
+   * assesses (that may reach the metadata source per title), the job does. A title absent from
+   * the map is not assessed under these rules yet.
+   */
+  async storedPlacements(overrideOf: (imdbId: string) => ShelfOverride = () => null): Promise<Map<string, Placement>> {
+    const [rules, assessments, globals] = await Promise.all([
+      this.rules.listEnabled(),
+      this.assessments.listWithTitles(),
+      this.exemptions.listGrantedGlobal(),
+    ]);
+    const fingerprint = rulesFingerprint(rules);
+    return new Map(
+      assessments
+        .filter((assessment) => assessment.fingerprint === fingerprint)
+        .map(({ imdbId, outcomes }) => [
+          imdbId,
+          classify(outcomes, SHELVES, globals.get(imdbId) ?? [], overrideOf(imdbId)),
+        ]),
+    );
+  }
+
   async admissionOf(userId: string, profile: Profile, imdbId: string): Promise<Admission | null> {
     const admissions = await this.admissionsOf(imdbId, [{ id: userId, profile }]);
     return admissions?.get(userId) ?? null;

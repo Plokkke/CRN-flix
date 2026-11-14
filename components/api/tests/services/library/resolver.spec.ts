@@ -15,12 +15,17 @@ function build(opts: {
   placement?: Placement | Error;
   overrides?: Map<string, string>;
   personal?: Map<string, string[]>;
+  stored?: Map<string, Placement>;
 }) {
   const placementOf = jest.fn(() =>
     opts.placement instanceof Error ? Promise.reject(opts.placement) : Promise.resolve(opts.placement ?? null),
   );
   const resolver = new PolicyShelfResolver(
-    { mode: opts.mode, placementOf } as unknown as PolicyService,
+    {
+      mode: opts.mode,
+      placementOf,
+      storedPlacements: jest.fn().mockResolvedValue(opts.stored ?? new Map()),
+    } as unknown as PolicyService,
     {
       listGrantedPersonal: jest.fn().mockResolvedValue(opts.personal ?? new Map()),
     } as unknown as PolicyExemptionsRepository,
@@ -77,6 +82,21 @@ describe('PolicyShelfResolver', () => {
 
     expect((await resolver.shelvesOf([TITLE]))('tt1')).toEqual({ shared: null, personal: [] });
     expect(placementOf).toHaveBeenCalledWith('tt1', 'kids');
+  });
+});
+
+describe('PolicyShelfResolver on a page', () => {
+  it('reads the stored placements and never assesses a title not assessed yet', async () => {
+    const { resolver, placementOf } = build({
+      mode: 'enforce',
+      stored: new Map([['tt1', { kind: 'shelf', shelf: 'kids', forced: false } as Placement]]),
+    });
+
+    const shelvesOf = await resolver.shelvesOf([TITLE, { ...TITLE, imdbId: 'tt2', folder: 'New' }], { assess: false });
+
+    expect(shelvesOf('tt1').shared).toBe('kids');
+    expect(shelvesOf('tt2').shared).toBeNull();
+    expect(placementOf).not.toHaveBeenCalled();
   });
 });
 
