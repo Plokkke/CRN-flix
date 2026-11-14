@@ -138,6 +138,14 @@ describe('adminLibraryTemplate', () => {
     expect(html).toContain('action="/admin/library/tt2/shelf"');
   });
 
+  it('filters as the admin types or picks, with no button: only the results block is replaced', () => {
+    const html = render();
+
+    expect(html).not.toContain('>Filtrer</button>');
+    expect(html).toContain('<div id="library-results">');
+    expect(html).toContain('setTimeout(refresh, 300)');
+  });
+
   it('offers to add a title only to the subscribers who do not have it yet', () => {
     const html = render({ ...ALL, q: 'elementaire' });
 

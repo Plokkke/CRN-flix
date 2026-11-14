@@ -131,10 +131,64 @@ function filterForm(filter: LibraryFilter): string {
     ${select('shelf', 'Étagère partagée', 'Toutes les étagères', shelves, filter.shelf)}
     ${select('state', 'État', 'Tous les états', STATE_LABELS, filter.state)}
     ${select('sort', 'Tri', '', SORT_LABELS, filter.sort)}
-    <button type="submit">Filtrer</button>
     <a href="/admin/library">Réinitialiser</a>
   </form>`;
 }
+
+/**
+ * The list follows the filters as they change, without reloading the page (the search field
+ * keeps its focus): typing waits for a pause, a select applies at once. Only the results are
+ * replaced, the address keeps the filters, and a late answer never overwrites a newer one.
+ */
+const LIVE_FILTERS_JS = `
+  (() => {
+    const form = document.querySelector('form.filters');
+    if (!form) return;
+    let timer = null;
+    let pending = null;
+    const queryOf = () => {
+      const query = new URLSearchParams(new FormData(form));
+      [...query.entries()].forEach(([key, value]) => {
+        if (!value || (key === 'sort' && value === 'attention')) query.delete(key);
+      });
+      return query.toString();
+    };
+    const refresh = async () => {
+      clearTimeout(timer);
+      pending?.abort();
+      pending = new AbortController();
+      const query = queryOf();
+      const url = '/admin/library' + (query ? '?' + query : '');
+      try {
+        const response = await fetch(url, { signal: pending.signal });
+        if (response.redirected) {
+          location.href = response.url;
+          return;
+        }
+        const next = new DOMParser().parseFromString(await response.text(), 'text/html').getElementById('library-results');
+        if (next) {
+          document.getElementById('library-results').replaceWith(next);
+          history.replaceState(null, '', url);
+        }
+      } catch (error) {
+        if (error.name !== 'AbortError') console.warn('Library filters:', error);
+      }
+    };
+    form.addEventListener('input', (event) => {
+      if (event.target.name === 'q') {
+        clearTimeout(timer);
+        timer = setTimeout(refresh, 300);
+      }
+    });
+    form.addEventListener('change', (event) => {
+      if (event.target.name !== 'q') refresh();
+    });
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      refresh();
+    });
+  })();
+`;
 
 function pager(filter: LibraryFilter, total: number): string {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -195,6 +249,7 @@ export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
     <p class="hint">Le choix de l’admin fait foi sur les règles. Un titre ajouté à l’étagère personnelle d’un abonné y apparaît sans quitter les étagères partagées.</p>
     ${unplaced > 0 ? `<p><a href="/admin/library?state=unplaced">${pill(`${unplaced} titre(s) sur aucune étagère`, 'warning')}</a></p>` : ''}
     ${filterForm(filter)}
+    <div id="library-results">
     <p class="hint">${params.total} titre(s)</p>
     ${pager(filter, params.total)}
     ${
@@ -202,6 +257,7 @@ export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
         ? `<table><thead><tr><th>Titre</th><th>Selon les règles</th><th>Étagère partagée</th><th>Étagères personnelles</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`
         : '<p class="hint">Aucun titre ne correspond.</p>'
     }
-    ${pager(filter, params.total)}`;
-  return getWebTemplate('Bibliothèque', params.serviceName, content, CSS, '', 'dark');
+    ${pager(filter, params.total)}
+    </div>`;
+  return getWebTemplate('Bibliothèque', params.serviceName, content, CSS, LIVE_FILTERS_JS, 'dark');
 };
