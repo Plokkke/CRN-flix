@@ -227,10 +227,11 @@ Préalable : épingler l'image Jellyfin (`jellyfin/jellyfin` sans tag aujourd'hu
 | 6. Étagères `kids` / personnelles depuis la policy (`PolicyShelfResolver`), bibliothèques Jellyfin et accès par profil (`LibraryAccess`, `MaxParentalRating`), profil à l'acceptation et sur `/admin/users` | PR #35 (sur #34) |
 | 8. Appel : onglet Refusé + page d'appel sur `/me`, ticket `policy-appeal` (00034 ; accorder / exclure / rejeter / répondre), mail de réponse (exempté des quiet hours, comme toute décision d'admin) | PR #36 (sur #35) |
 | 9. Destination des téléchargements manuels (`ManualDestinations`, boutons Standard / Enfants / Ma collection, `ADMIN_USER_NAME`) | PR #37 (sur #36) |
-| 10. Ticket d'anomalie (`PolicyAnomalies`, override d'origin `anomaly`, 00035) : exclure / retirer, résolution automatique | en cours |
+| 10. Ticket d'anomalie (`PolicyAnomalies`, override d'origin `anomaly`, 00035) : exclure / retirer (mémorisé : override `none` d'origine `anomaly`, levé quand le titre ne viole plus de règle), résolution automatique | PR #38 (sur #37) |
+| 11. `/admin/library` : une ligne par titre du stock (calcul des règles et motif, étagère partagée réelle, choix imposé et son origine, étagères personnelles) ; placer sur Standard / Kids / aucune ou rendre aux règles, ajouter ou retirer de l'étagère personnelle d'un abonné ; titres sur aucune étagère signalés en tête | PR feat/admin-library (sur #38) |
 
 **Pas encore fait** :
-- `/admin/library` (tableau titre × étagère, changer l'étagère d'un titre déjà rangé) : aujourd'hui, l'étagère se choisit sur le ticket de téléchargement manuel, et une dérogation globale se donne par l'appel ou l'anomalie.
+- `/admin/library` : ajouter un titre à une règle `titles` depuis la ligne (aujourd'hui : sur `/admin/policies`, par son imdb id).
 - Variables Terraform `policy_mode`, `library_layout`, `admin_user_name` (les défauts du code sont `off`, `legacy`, aucun) : changement d'infrastructure laissé à l'admin.
 - Job Wikidata qui propose des entrées `credits` (optionnel).
 - Retour sur la page d'appel après connexion (aujourd'hui : connexion puis `/me`, où le titre refusé a son lien « Motif et recours »).
