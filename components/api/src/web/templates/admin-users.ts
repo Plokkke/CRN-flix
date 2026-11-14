@@ -28,6 +28,8 @@ const USERS_CSS = `
     background: var(--surface); color: var(--text); font-size: 14px;
   }
   table.users input[type='number'] { width: 70px; }
+  .guest { display: flex; gap: 8px; align-items: center; margin: 0 0 12px 0; font-size: 14px; }
+  .guest select { width: auto; margin: 0; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); }
   table.users button { width: auto; margin: 0; padding: 4px 12px; font-size: 13px; }
   ${LIVE_FORMS_CSS}
 `;
@@ -65,15 +67,20 @@ function adminCell(user: UserEntity, params: AdminUsersParams): string {
   );
 }
 
-const guestCell = (user: UserEntity): string =>
-  liveForm(
-    `/admin/users/${user.id}/guest`,
-    `<input type="checkbox" name="guest" value="on"${user.guest ? ' checked' : ''} aria-label="${escapeHtml(user.name)} est un compte invité" />`,
-  );
+/** The one guest account, picked among the accounts without messaging. */
+function guestForm(users: UserEntity[]): string {
+  const options = [
+    option('', '—', !users.some((user) => user.guest)),
+    ...users.filter((user) => user.messagingKey === null).map((user) => option(user.id, user.name, user.guest)),
+  ];
+  return `<div class="guest">Compte invité ${liveForm(
+    '/admin/users/guest',
+    `<select name="userId" aria-label="Compte invité">${options.join('')}</select>`,
+  )}<span class="hint">compte partagé : ni messagerie, ni étagère personnelle</span></div>`;
+}
 
 const userRow = (user: UserEntity, params: AdminUsersParams): string => `<tr>
-    <td>${escapeHtml(user.name)}</td>
-    <td>${guestCell(user)}</td>
+    <td>${escapeHtml(user.name)}${user.guest ? ' <span class="hint">(invité)</span>' : ''}</td>
     <td class="hint">${escapeHtml(user.messagingKey ?? '-')}</td>
     <td>${streamsCell(user)}</td>
     <td>${profileCell(user)}</td>
@@ -84,9 +91,10 @@ export const adminUsersTemplate = (params: AdminUsersParams): string => {
   const content = `
     <p><a href="/admin">← Dashboard</a></p>
     <h2>👥 Comptes de visionnage</h2>
-    <p class="hint">Chaque changement s’applique tout de suite. Tout compte du lecteur est un abonné, avec ou sans messagerie. Invité : compte partagé, sans étagère personnelle (en bas de la liste). Flux simultanés : 0 = illimité. Profil : les étagères visibles. Admin Discord : ce que cet admin garde pour lui (« Ma collection ») arrive sur l’étagère personnelle de ce compte. Un administrateur du lecteur garde ses droits : seules ses étagères (et une limite de flux fixée ici) suivent son profil.</p>
+    <p class="hint">Chaque changement s’applique tout de suite. Tout compte du lecteur est un abonné, avec ou sans messagerie. Flux simultanés : 0 = illimité. Profil : les étagères visibles. Admin Discord : ce que cet admin garde pour lui (« Ma collection ») arrive sur l’étagère personnelle de ce compte. Un administrateur du lecteur garde ses droits : seules ses étagères (et une limite de flux fixée ici) suivent son profil.</p>
     ${liveFlashSlot(params.flashMessage)}
-    <table class="users"><thead><tr><th>Compte</th><th>Invité</th><th>Messagerie</th><th>Flux simultanés</th><th>Profil</th><th>Admin Discord</th></tr></thead>
+    ${guestForm(params.users)}
+    <table class="users"><thead><tr><th>Compte</th><th>Messagerie</th><th>Flux simultanés</th><th>Profil</th><th>Admin Discord</th></tr></thead>
       <tbody>${params.users.map((user) => userRow(user, params)).join('')}</tbody></table>
   `;
   return adminPage('Comptes', params.serviceName, content, USERS_CSS, LIVE_FORMS_JS);
