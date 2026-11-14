@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Header, Param, Post, Query, Res, UseFilters, UseGuards } from '@nestjs/common';
-import { Response } from 'express';
+import { Body, Controller, Get, Header, Param, Post, Query, Req, Res, UseFilters, UseGuards } from '@nestjs/common';
+import { Request, Response } from 'express';
 import { z } from 'zod';
 
 import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
@@ -13,6 +13,15 @@ import { adminUsersTemplate, PROFILE_LABELS } from '@/web/templates/admin-users'
 
 const maxStreamsFormSchema = z.object({ maxStreams: z.coerce.number().int().min(0) });
 const profileFormSchema = z.object({ profile: z.enum(PROFILES) });
+
+/** A live form (JSON) gets the message; a plain form goes back to the page with it. */
+function answer(req: Request, res: Response, message: string, error = false): void {
+  if (String(req.headers.accept ?? '').includes('application/json')) {
+    res.status(error ? 400 : 200).json({ message, error });
+    return;
+  }
+  res.redirect(`/admin/users?message=${encodeURIComponent(message)}`);
+}
 
 @Controller('admin/users')
 @UseGuards(AdminSessionGuard)
@@ -36,38 +45,48 @@ export class UsersAdminController {
 
   /** Saved first, then applied: a player refusal is caught up by the next player-sync. */
   @Post(':id/max-streams')
-  async setMaxStreams(@Param('id') id: string, @Body() body: unknown, @Res() res: Response): Promise<void> {
-    const { maxStreams } = maxStreamsFormSchema.parse(body);
+  async setMaxStreams(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const form = maxStreamsFormSchema.safeParse(body);
     const user = await this.usersRepository.get(id);
-    if (!user) {
-      res.redirect('/admin/users?message=Utilisateur introuvable');
+    if (!form.success || !user) {
+      answer(req, res, user ? 'Nombre de flux invalide' : 'Utilisateur introuvable', true);
       return;
     }
+    const { maxStreams } = form.data;
     await this.usersRepository.setMaxStreams(id, maxStreams);
     const outcome = await this.playerAccounts
       .apply({ ...user, maxStreams })
       .then(() => 'appliqué')
       .catch(() => 'enregistré, appliqué au prochain passage');
-    res.redirect(`/admin/users?message=${encodeURIComponent(`${user.name} : ${maxStreams} flux (${outcome})`)}`);
+    answer(req, res, `${user.name} : ${maxStreams === 0 ? 'flux illimités' : `${maxStreams} flux`} (${outcome})`);
   }
 
   /** The profile decides the shelves the account sees; the planner applies it to requests on its next pass. */
   @Post(':id/profile')
-  async setProfile(@Param('id') id: string, @Body() body: unknown, @Res() res: Response): Promise<void> {
-    const { profile } = profileFormSchema.parse(body);
+  async setProfile(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const form = profileFormSchema.safeParse(body);
     const user = await this.usersRepository.get(id);
-    if (!user) {
-      res.redirect('/admin/users?message=Utilisateur introuvable');
+    if (!form.success || !user) {
+      answer(req, res, user ? 'Profil inconnu' : 'Utilisateur introuvable', true);
       return;
     }
+    const { profile } = form.data;
     await this.usersRepository.setProfile(id, profile);
     await this.shelves.reconcile().catch(() => undefined);
     const outcome = await this.playerAccounts
       .apply({ ...user, profile })
       .then(() => 'appliqué')
       .catch(() => 'enregistré, appliqué au prochain passage');
-    res.redirect(
-      `/admin/users?message=${encodeURIComponent(`${user.name} : profil ${PROFILE_LABELS[profile]} (${outcome})`)}`,
-    );
+    answer(req, res, `${user.name} : profil ${PROFILE_LABELS[profile]} (${outcome})`);
   }
 }

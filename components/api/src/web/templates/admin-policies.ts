@@ -1,9 +1,10 @@
 import { FieldSpec, PersonCandidate, PolicyKind } from '@crn-flix/contracts';
-import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { COLORS, escapeHtml } from '@crn-flix/design-system';
 
 import { PolicyRuleEntity, PolicyRuleEntryEntity } from '@/services/database/policy';
 import { formFromValues } from '@/services/policy/form';
 import { PolicyOverview, RuleCounts } from '@/services/policy/overview';
+import { adminPage } from '@/web/templates/admin-page';
 
 export const AUDIENCE_LABELS: Record<string, string> = {
   everyone: 'Tout le monde (refusé partout)',
@@ -127,7 +128,7 @@ export const adminPoliciesTemplate = (params: AdminPoliciesParams): string => {
     ${params.rules.map((rule) => ruleCard(rule, kindsByName.get(rule.kind), params.overview.counts.get(rule.id))).join('') || '<p class="hint">Aucune règle.</p>'}
     ${newRuleForm(params.kinds, params.audiences)}
     ${overviewSection(params.overview)}`;
-  return getWebTemplate('Politique', params.serviceName, content, CSS, '', 'dark');
+  return adminPage('Politique', params.serviceName, content, CSS);
 };
 
 function fieldInput(field: FieldSpec, value: string, prefix: string): string {
@@ -287,5 +288,5 @@ export const adminPolicyRuleTemplate = (params: AdminPolicyRuleParams): string =
     <form method="POST" action="/admin/policies/${id}/delete" onsubmit="return confirm('Supprimer cette règle et ses entrées ?')">
       <button class="danger" type="submit">Supprimer la règle</button>
     </form>`;
-  return getWebTemplate(rule.name, params.serviceName, content, CSS, ENTRY_DELETE_JS, 'dark');
+  return adminPage(rule.name, params.serviceName, content, CSS, ENTRY_DELETE_JS);
 };

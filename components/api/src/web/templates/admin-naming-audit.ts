@@ -1,6 +1,7 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { COLORS, escapeHtml } from '@crn-flix/design-system';
 
 import { NamingAuditItemEntity } from '@/services/database/naming-audit';
+import { adminPage } from '@/web/templates/admin-page';
 
 interface AdminNamingAuditParams {
   serviceName: string;
@@ -404,5 +405,5 @@ export const adminNamingAuditTemplate = (params: AdminNamingAuditParams): string
     applyFilters();
   `;
 
-  return getWebTemplate(`Naming audit - ${serviceName}`, serviceName, content, additionalCSS, additionalJS, 'dark');
+  return adminPage(`Naming audit - ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
 };

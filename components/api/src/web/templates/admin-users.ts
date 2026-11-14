@@ -1,7 +1,8 @@
-import { COLORS, escapeHtml, getWebTemplate } from '@crn-flix/design-system';
+import { escapeHtml, LIVE_FORMS_CSS, LIVE_FORMS_JS, liveFlashSlot } from '@crn-flix/design-system';
 
 import { UserEntity } from '@/services/database/users';
 import { Profile, PROFILES } from '@/services/policy/shelves';
+import { adminPage } from '@/web/templates/admin-page';
 
 export const PROFILE_LABELS: Record<Profile, string> = { adult: 'adulte', kids: 'enfant' };
 
@@ -14,65 +15,43 @@ interface AdminUsersParams {
 const USERS_CSS = `
   .container { max-width: 900px; }
   h2 { color: var(--text); margin: 20px 0 15px 0; font-size: 20px; }
-  .flash-message {
-    background-color: var(--tone-info-bg); padding: 12px 16px; border-left: 4px solid ${COLORS.info};
-    border-radius: 4px; margin-bottom: 20px; color: var(--text);
-  }
   .hint { font-size: 13px; color: var(--text-muted); }
-  .user-row {
-    display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 6px;
-    background: var(--surface-raised); border: 1px solid var(--border); margin-bottom: 8px;
+  table.users { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.users th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  table.users td { padding: 4px 8px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+  table.users input, table.users select {
+    width: auto; margin: 0; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); color: var(--text); font-size: 14px;
   }
-  .user-row .name { flex: 1; }
-  .user-row input {
-    width: 80px; padding: 8px; border: 1px solid var(--border); border-radius: 4px;
-    background-color: var(--surface); color: var(--text); font-size: 15px;
-  }
-  .user-row button { width: auto; padding: 8px 16px; }
-  .user-row select {
-    padding: 8px; border: 1px solid var(--border); border-radius: 4px; background-color: var(--surface); color: var(--text);
-  }
-  .user-forms { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
-  .user-forms .user-row { margin-bottom: 0; }
+  table.users input[type='number'] { width: 70px; }
+  ${LIVE_FORMS_CSS}
 `;
 
-const streamsLabel = (user: UserEntity): string => {
-  if (user.maxStreams === null) {
-    return 'pas encore relevé';
-  }
-  return user.maxStreams === 0 ? 'illimité' : `${user.maxStreams}`;
-};
+const streamsCell = (user: UserEntity): string => `
+  <form class="live" method="POST" action="/admin/users/${escapeHtml(user.id)}/max-streams">
+    <input type="number" min="0" name="maxStreams" required aria-label="Flux simultanés de ${escapeHtml(user.name)}"
+      value="${user.maxStreams ?? ''}"${user.maxStreams === null ? ' placeholder="?" title="Pas encore relevé sur le lecteur"' : ''} />
+  </form>`;
 
-const profileForm = (user: UserEntity): string => `
-  <form class="user-row" method="POST" action="/admin/users/${escapeHtml(user.id)}/profile">
-    <span class="name hint">Profil (étagères visibles)</span>
+const profileCell = (user: UserEntity): string => `
+  <form class="live" method="POST" action="/admin/users/${escapeHtml(user.id)}/profile">
     <select name="profile" aria-label="Profil de ${escapeHtml(user.name)}">${PROFILES.map(
       (profile) =>
         `<option value="${profile}"${profile === user.profile ? ' selected' : ''}>${PROFILE_LABELS[profile]}</option>`,
     ).join('')}</select>
-    <button type="submit">Enregistrer</button>
-  </form>
-`;
+  </form>`;
 
-const streamsForm = (user: UserEntity): string => `
-  <form class="user-row" method="POST" action="/admin/users/${escapeHtml(user.id)}/max-streams">
-    <span class="name">${escapeHtml(user.name)} <span class="hint">(${streamsLabel(user)})</span></span>
-    <label class="hint" for="streams-${escapeHtml(user.id)}">Flux simultanés</label>
-    <input type="number" min="0" id="streams-${escapeHtml(user.id)}" name="maxStreams" required
-      value="${user.maxStreams ?? ''}" />
-    <button type="submit">Enregistrer</button>
-  </form>
-`;
-
-const userRow = (user: UserEntity): string => `<div class="user-forms">${streamsForm(user)}${profileForm(user)}</div>`;
+const userRow = (user: UserEntity): string =>
+  `<tr><td>${escapeHtml(user.name)}</td><td>${streamsCell(user)}</td><td>${profileCell(user)}</td></tr>`;
 
 export const adminUsersTemplate = ({ serviceName, users, flashMessage }: AdminUsersParams): string => {
   const content = `
-    ${flashMessage ? `<div class="flash-message">${escapeHtml(flashMessage)}</div>` : ''}
     <p><a href="/admin">← Dashboard</a></p>
     <h2>👥 Comptes de visionnage</h2>
-    <p class="hint">Lectures simultanées autorisées sur le lecteur (0 = illimité). Les administrateurs du lecteur ne sont jamais modifiés.</p>
-    ${users.map(userRow).join('')}
+    <p class="hint">Chaque changement s’applique tout de suite. Flux simultanés : 0 = illimité. Profil : les étagères visibles. Les administrateurs du lecteur ne sont jamais modifiés.</p>
+    ${liveFlashSlot(flashMessage)}
+    <table class="users"><thead><tr><th>Compte</th><th>Flux simultanés</th><th>Profil</th></tr></thead>
+      <tbody>${users.map(userRow).join('')}</tbody></table>
   `;
-  return getWebTemplate('Comptes', serviceName, content, USERS_CSS, '', 'dark');
+  return adminPage('Comptes', serviceName, content, USERS_CSS, LIVE_FORMS_JS);
 };
