@@ -11,12 +11,6 @@ export const AUDIENCE_LABELS: Record<string, string> = {
   standard: 'Étagère standard (ce qu’elle admet)',
 };
 
-const MODE_LABELS: Record<string, string> = {
-  off: 'désactivée : rien n’est évalué',
-  'dry-run': 'dry-run : les titres sont évalués, personne n’est refusé',
-  enforce: 'appliquée',
-};
-
 const CSS = `
   .container { max-width: 960px; }
   h2 { color: var(--text); margin: 24px 0 12px 0; font-size: 20px; }
@@ -40,6 +34,12 @@ const CSS = `
   button.danger { background: ${COLORS.error}; }
   details summary { cursor: pointer; margin: 8px 0; }
   ul.titles { columns: 2; font-size: 14px; }
+  table.entries { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 12px; }
+  table.entries th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  table.entries td { padding: 3px 8px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+  table.entries td.actions { text-align: right; width: 1%; white-space: nowrap; }
+  table.entries form { margin: 0; }
+  table.entries button { margin: 0; padding: 2px 8px; font-size: 12px; background: transparent; color: var(--tone-danger-text); border: 1px solid var(--border); }
 `;
 
 const flash = (message?: string, error?: boolean): string =>
@@ -109,7 +109,6 @@ function overviewSection(overview: PolicyOverview): string {
 
 export type AdminPoliciesParams = {
   serviceName: string;
-  mode: string;
   rules: PolicyRuleEntity[];
   kinds: PolicyKind[];
   audiences: string[];
@@ -124,7 +123,6 @@ export const adminPoliciesTemplate = (params: AdminPoliciesParams): string => {
     ${flash(params.flashMessage, params.flashError)}
     <p><a href="/admin">← Dashboard</a></p>
     <h2>🛡️ Politique</h2>
-    <p>Politique ${escapeHtml(MODE_LABELS[params.mode] ?? params.mode)}.</p>
     <p class="hint">Une règle « tout le monde » qui ne peut pas trancher laisse passer ; une règle d’étagère qui ne peut pas trancher refuse.</p>
     ${params.rules.map((rule) => ruleCard(rule, kindsByName.get(rule.kind), params.overview.counts.get(rule.id))).join('') || '<p class="hint">Aucune règle.</p>'}
     ${newRuleForm(params.kinds, params.audiences)}
@@ -156,19 +154,69 @@ const fieldInputs = (fields: FieldSpec[], values: unknown, prefix: string): stri
   return fields.map((field) => fieldInput(field, shown[field.name], prefix)).join('');
 };
 
-function entryCard(ruleId: string, entry: PolicyRuleEntryEntity, fields: FieldSpec[]): string {
-  const data = (entry.data ?? {}) as Record<string, unknown>;
-  const heading = String(data.name ?? data.title ?? data.ref ?? data.imdbId ?? 'Entrée');
-  const reference = String(data.ref ?? data.imdbId ?? '');
-  const shown = formFromValues(fields, data);
-  return `
-    <div class="card">
-      <div class="row"><strong class="grow">${escapeHtml(heading)} <span class="hint">${escapeHtml(reference)}</span></strong>
-        <form method="POST" action="/admin/policies/${escapeHtml(ruleId)}/entries/${escapeHtml(entry.id)}/delete"
-          onsubmit="return confirm('Retirer cette entrée ?')"><button class="danger" type="submit">Retirer</button></form></div>
-      ${fields.map((field) => `<div class="hint">${escapeHtml(field.label)} : ${escapeHtml(shown[field.name]).replace(/\n/g, '<br>')}</div>`).join('')}
-    </div>`;
+const TMDB_PERSON = /^tmdb:person:(\d+)$/;
+
+/** The entry's page at its source, when its reference tells one. */
+function referenceLink(reference: string): string {
+  const person = TMDB_PERSON.exec(reference);
+  const url = person
+    ? `https://www.themoviedb.org/person/${person[1]}`
+    : /^tt\d+$/.test(reference)
+      ? `https://www.imdb.com/title/${reference}/`
+      : null;
+  return url ? `<a href="${escapeHtml(url)}">${escapeHtml(reference)}</a>` : escapeHtml(reference);
 }
+
+const entryName = (data: Record<string, unknown>): string =>
+  String(data.name ?? data.title ?? data.ref ?? data.imdbId ?? 'Entrée');
+
+function entryRow(ruleId: string, entry: PolicyRuleEntryEntity, fields: FieldSpec[]): string {
+  const data = (entry.data ?? {}) as Record<string, unknown>;
+  const shown = formFromValues(fields, data);
+  const extra = fields.map((field) => `<td>${escapeHtml(shown[field.name]).replace(/\n/g, '<br>')}</td>`).join('');
+  return `<tr><td>${escapeHtml(entryName(data))}</td><td class="hint">${referenceLink(String(data.ref ?? data.imdbId ?? ''))}</td>${extra}
+    <td class="actions"><form class="entry-delete" method="POST" action="/admin/policies/${escapeHtml(ruleId)}/entries/${escapeHtml(entry.id)}/delete">
+      <button type="submit" title="Retirer de la règle">Retirer</button></form></td></tr>`;
+}
+
+/** One line per entry, sorted by name; removing one keeps the page where it is. */
+function entriesTable(ruleId: string, entries: PolicyRuleEntryEntity[], fields: FieldSpec[]): string {
+  if (entries.length === 0) {
+    return '<p class="hint">Aucune entrée.</p>';
+  }
+  const sorted = [...entries].sort((a, b) =>
+    entryName((a.data ?? {}) as Record<string, unknown>).localeCompare(
+      entryName((b.data ?? {}) as Record<string, unknown>),
+      'fr',
+      { sensitivity: 'base' },
+    ),
+  );
+  const head = ['Nom', 'Référence', ...fields.map((field) => field.label), ''].map(
+    (label) => `<th>${escapeHtml(label)}</th>`,
+  );
+  return `<table class="entries"><thead><tr>${head.join('')}</tr></thead>
+    <tbody>${sorted.map((entry) => entryRow(ruleId, entry, fields)).join('')}</tbody></table>`;
+}
+
+const ENTRY_DELETE_JS = `
+  document.addEventListener('submit', async (event) => {
+    const form = event.target.closest('form.entry-delete');
+    if (!form) return;
+    event.preventDefault();
+    const line = form.closest('tr');
+    line.style.opacity = '0.4';
+    try {
+      const response = await fetch(form.action, { method: 'POST' });
+      if (!response.ok || response.url.includes('error=1')) throw new Error(String(response.status));
+      line.remove();
+      const title = document.getElementById('entries-title');
+      if (title) title.textContent = 'Entrées (' + document.querySelectorAll('table.entries tbody tr').length + ')';
+    } catch (error) {
+      console.warn('Entry removal:', error);
+      line.style.opacity = '';
+    }
+  });
+`;
 
 const candidateOption = (candidate: PersonCandidate, index: number): string => `
   <label><input type="radio" name="person" value="${escapeHtml(`${candidate.ref}|${candidate.name}`)}"${index === 0 ? ' checked' : ''} />
@@ -208,8 +256,8 @@ function entriesSection(params: AdminPolicyRuleParams, kind: PolicyKind): string
   }
   const id = escapeHtml(params.rule.id);
   return `
-    <h2>Entrées (${params.entries.length})</h2>
-    ${params.entries.map((entry) => entryCard(params.rule.id, entry, kind.entries!.fields)).join('')}
+    <h2 id="entries-title">Entrées (${params.entries.length})</h2>
+    ${entriesTable(params.rule.id, params.entries, kind.entries.fields)}
     <form id="person-search" method="GET" action="/admin/policies/${id}"></form>
     <form class="card" method="POST" action="/admin/policies/${id}/entries">
       <h3>Ajouter une entrée</h3>
@@ -239,5 +287,5 @@ export const adminPolicyRuleTemplate = (params: AdminPolicyRuleParams): string =
     <form method="POST" action="/admin/policies/${id}/delete" onsubmit="return confirm('Supprimer cette règle et ses entrées ?')">
       <button class="danger" type="submit">Supprimer la règle</button>
     </form>`;
-  return getWebTemplate(rule.name, params.serviceName, content, CSS, '', 'dark');
+  return getWebTemplate(rule.name, params.serviceName, content, CSS, ENTRY_DELETE_JS, 'dark');
 };

@@ -18,7 +18,7 @@ const sharedName = (shelf: string, section: LibrarySection): string =>
 type Fs = Pick<typeof fsPromises, 'mkdir' | 'stat'>;
 
 /**
- * Which player libraries exist and who sees them, with the shelves layout: every shared
+ * Which player libraries exist and who sees them: every shared
  * shelf is a pair of libraries (movies, series) seen by the profiles it lists, every personal
  * shelf a pair seen by its owner only, once it holds something. Kids accounts also get the
  * player's parental limit, a safety net under the kids shelf's own rules.
@@ -30,10 +30,6 @@ export class LibraryAccess {
     private readonly fs: Fs = fsPromises,
     private readonly images: ShelfImages = NO_IMAGES,
   ) {}
-
-  get enabled(): boolean {
-    return this.config.layout === 'shelves';
-  }
 
   /** Every library the shelves need; their folders are created so the player can serve them. */
   async libraries(users: UserEntity[]): Promise<PlayerLibrary[]> {
@@ -67,11 +63,8 @@ export class LibraryAccess {
     );
   }
 
-  /** What the account sees; nothing to decide with the legacy layout. */
+  /** What the account sees. */
   async policyOf(user: UserEntity): Promise<Pick<AccountPolicy, 'libraries' | 'maxParentalRating'>> {
-    if (!this.enabled) {
-      return {};
-    }
     const shared = SHELVES.filter((shelf) => shelf.profiles.includes(user.profile)).flatMap(({ key }) =>
       SECTIONS.map((section) => this.paths.shelf(key, section)),
     );

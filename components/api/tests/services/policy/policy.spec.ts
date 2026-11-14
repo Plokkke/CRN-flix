@@ -37,7 +37,6 @@ function build(opts: { stored?: StoredAssessment | null; exemptions?: Exemption[
   };
   const facts = { ensure: jest.fn().mockResolvedValue(null) };
   const service = new PolicyService(
-    { mode: 'dry-run' },
     new Map([['titles', titlesPolicy as PolicyKind]]),
     { listEnabled: jest.fn().mockResolvedValue([RULE]) } as unknown as PolicyRulesRepository,
     assessments as unknown as PolicyAssessmentsRepository,

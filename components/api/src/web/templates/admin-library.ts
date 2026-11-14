@@ -252,8 +252,6 @@ export const viewInput = (filter: LibraryFilter): string =>
 
 export type AdminLibraryParams = {
   serviceName: string;
-  layout: string;
-  mode: string;
   filter: LibraryFilter;
   /** The page of rows the filter keeps, and how many it keeps in all. */
   rows: LibraryRow[];
@@ -268,22 +266,10 @@ export type AdminLibraryParams = {
 export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
   const { unplaced, filter } = params;
   const view = viewInput(filter);
-  const notes = [
-    params.layout !== 'shelves'
-      ? 'Les étagères ne sont pas actives (LIBRARY_LAYOUT=legacy) : tout le monde voit toute la bibliothèque, les choix ci-dessous serviront à la bascule.'
-      : '',
-    params.mode !== 'enforce'
-      ? `Politique en mode ${params.mode} : les règles ne décident pas encore des étagères.`
-      : '',
-  ]
-    .filter(Boolean)
-    .map((note) => `<p class="hint">${escapeHtml(note)}</p>`)
-    .join('');
   const rows = params.rows.map((row) => libraryRow(row, params.users, view)).join('');
   const content = `
     <p><a href="/admin">← Dashboard</a></p>
     <h2>📚 Bibliothèque</h2>
-    ${notes}
     <p class="hint">Le choix de l’admin fait foi sur les règles. Un titre ajouté à l’étagère personnelle d’un abonné y apparaît sans quitter les étagères partagées.</p>
     ${unplaced > 0 ? `<p><a href="/admin/library?state=unplaced">${pill(`${unplaced} titre(s) sur aucune étagère`, 'warning')}</a></p>` : ''}
     ${filterForm(filter)}

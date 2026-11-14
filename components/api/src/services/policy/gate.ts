@@ -38,7 +38,7 @@ export class PolicyGate implements RequesterGate {
   }
 
   private async admitted(imdbId: string, userIds: string[]): Promise<Set<string>> {
-    if (this.policy.mode !== 'enforce' || userIds.length === 0) {
+    if (userIds.length === 0) {
       return new Set(userIds);
     }
     try {

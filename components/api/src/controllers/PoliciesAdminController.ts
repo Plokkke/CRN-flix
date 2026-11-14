@@ -72,7 +72,6 @@ export class PoliciesAdminController {
     ]);
     return adminPoliciesTemplate({
       serviceName: this.contextService.name,
-      mode: this.policy.mode,
       rules,
       kinds: [...this.kinds.values()],
       audiences: AUDIENCES,

@@ -9,7 +9,6 @@ import { PolicyService } from '@/services/policy/policy';
 import { Profile, SHELVES } from '@/services/policy/shelves';
 
 import { TitleShelves } from './links';
-import { STANDARD_SHELF } from './paths';
 import { ShelfResolver } from './shelves';
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -46,7 +45,7 @@ export class PolicyShelfResolver implements ShelfResolver {
       this.users.list(),
     ]);
     const overrideOf = (imdbId: string): string | null => overrides.get(imdbId) ?? null;
-    const stored = this.policy.mode === 'enforce' ? await this.policy.storedPlacements(overrideOf) : new Map();
+    const stored = await this.policy.storedPlacements(overrideOf);
     const profileOf = new Map(users.map((user) => [user.id, user.profile]));
     const shared = new Map<string, string | null>();
     for (const imdbId of new Set(titles.map((title) => title.imdbId))) {
@@ -69,9 +68,6 @@ export class PolicyShelfResolver implements ShelfResolver {
     stored: Placement | undefined,
     assess: boolean,
   ): Promise<string | null> {
-    if (this.policy.mode !== 'enforce') {
-      return override === 'none' ? null : (override ?? STANDARD_SHELF);
-    }
     try {
       const placement = stored ?? (assess ? await this.policy.placementOf(imdbId, override) : null);
       return placement?.kind === 'shelf' ? placement.shelf : null;

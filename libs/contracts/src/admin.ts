@@ -36,7 +36,7 @@ export const OPERATION_LABELS: Record<TicketOperationKind, string> = {
   grantExemption: 'Accorder la dérogation',
   excludeTitle: 'Exclure le titre de la règle (pour tous)',
   reply: 'Répondre à l’abonné',
-  unpublish: 'Retirer des étagères partagées',
+  unpublish: 'Supprimer les fichiers',
   shelveStandard: 'Étagère standard',
   shelveKids: 'Étagère enfants',
   shelvePersonal: 'Ma collection',

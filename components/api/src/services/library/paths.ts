@@ -6,9 +6,8 @@ import { LibrarySection } from '@crn-flix/contracts';
 
 export const SECTIONS: LibrarySection[] = ['movies', 'series'];
 
-/** `legacy`: files live in the section folders; `shelves`: in the store, every library is a set of links. */
+/** Files live in the store; every player library is a shelf of links to them. */
 export const libraryConfigSchema = z.object({
-  layout: z.enum(['legacy', 'shelves']),
   mediasPath: z.string(),
   moviesFolder: z.string(),
   seriesFolder: z.string(),

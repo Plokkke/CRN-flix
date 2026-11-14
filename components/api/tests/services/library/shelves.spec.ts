@@ -23,6 +23,9 @@ function memoryTitles(): LibraryTitlesRepository & { rows: LibraryTitle[] } {
       );
     },
     list: async () => [...rows],
+    remove: async (title: LibraryTitle) => {
+      rows.splice(0, rows.length, ...rows.filter((r) => r.folder !== title.folder || r.section !== title.section));
+    },
   } as unknown as LibraryTitlesRepository & { rows: LibraryTitle[] };
 }
 
@@ -34,7 +37,6 @@ describe('LibraryShelves', () => {
   beforeEach(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'crn-flix-shelves-'));
     paths = new LibraryPaths({
-      layout: 'shelves',
       mediasPath: root,
       moviesFolder: 'movies',
       seriesFolder: 'series',
@@ -63,6 +65,30 @@ describe('LibraryShelves', () => {
     await expect(fs.readFile(path.join(root, 'store', 'movies', MOVIE, 'War.mkv'), 'utf8')).resolves.toBe('video');
     expect(titles.rows).toEqual([{ section: 'movies', folder: MOVIE, imdbId: 'tt1' }]);
     expect((await fs.lstat(path.join(root, 'movies', 'No tag'))).isDirectory()).toBe(true);
+  });
+
+  it('deletes a title taken down: its store folder, its record and its links go, nothing else', async () => {
+    const other = 'Peace (2001) [imdbid-tt2]';
+    await fs.mkdir(path.join(root, 'store', 'movies', MOVIE), { recursive: true });
+    await fs.mkdir(path.join(root, 'store', 'movies', other), { recursive: true });
+    const titles = memoryTitles();
+    const library = shelves(titles);
+    await library.titlePlaced({ section: 'movies', folder: MOVIE, imdbId: 'tt1' });
+    await library.titlePlaced({ section: 'movies', folder: other, imdbId: 'tt2' });
+
+    await expect(library.discard('tt1')).resolves.toBe(1);
+
+    await expect(fs.access(path.join(root, 'store', 'movies', MOVIE))).rejects.toThrow();
+    await expect(fs.lstat(path.join(root, 'movies', MOVIE))).rejects.toThrow();
+    await fs.access(path.join(root, 'movies', other));
+    expect(titles.rows.map((row) => row.imdbId)).toEqual(['tt2']);
+  });
+
+  it('refuses to delete a recorded folder that is not a plain name', async () => {
+    const titles = memoryTitles();
+    await titles.record({ section: 'movies', folder: '../movies', imdbId: 'tt9' });
+
+    await expect(shelves(titles).discard('tt9')).rejects.toThrow(/unexpected store folder/);
   });
 
   it('is idempotent: a second adoption changes nothing', async () => {
