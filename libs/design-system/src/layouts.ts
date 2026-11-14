@@ -140,7 +140,7 @@ export const getWebTemplate = (
 <body>
     <div class="container">
         <div class="header">
-            ${wordmark(serviceName, 'var(--heading)')}
+            ${wordmark(serviceName, 'var(--heading)', 'var(--accent)')}
             <div class="tagline">${TAGLINE}</div>
         </div>
         <div class="content">

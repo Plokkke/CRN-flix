@@ -16,8 +16,12 @@ export const getEmailContainer = (content: string): string => `
 `;
 
 /** Quiet wordmark: the brand red is kept for the main action. */
-export const wordmark = (serviceName: string, color: string = COLORS.primary): string =>
-  `<span style="font-family: ${FONT_STACK}; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: ${color};">${serviceName}</span><span style="color: ${COLORS.secondary}; font-size: 20px; font-weight: 800;">.</span>`;
+export const wordmark = (
+  serviceName: string,
+  color: string = COLORS.primary,
+  accent: string = COLORS.secondary,
+): string =>
+  `<span style="font-family: ${FONT_STACK}; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: ${color};">${serviceName}</span><span style="color: ${accent}; font-size: 20px; font-weight: 800;">.</span>`;
 
 export const getHeaderSection = (serviceName: string): string => `
 <tr>

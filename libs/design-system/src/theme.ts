@@ -20,6 +20,8 @@ type Palette = {
   textLight: string;
   textMuted: string;
   link: string;
+  /** The brand red as text (the wordmark's dot). */
+  accent: string;
   tones: ToneVars;
 };
 
@@ -37,6 +39,7 @@ const LIGHT: Palette = {
   textLight: COLORS.textLight,
   textMuted: COLORS.textMuted,
   link: COLORS.info,
+  accent: COLORS.secondary,
   tones: TONES,
 };
 
@@ -55,6 +58,7 @@ const DARK: Palette = {
   textLight: '#c8cad6',
   textMuted: '#a1a4b8',
   link: '#8ab4ff',
+  accent: '#ff6b76',
   tones: {
     neutral: { bg: '#2a2a3e', text: '#d0d3e0', border: '#3a3a52' },
     info: { bg: '#1b2a4a', text: '#9dbcff', border: '#2c4580' },
