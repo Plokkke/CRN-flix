@@ -131,12 +131,12 @@ interface PolicyKind<Params, Entry> {
 
 | Plugin | Paramètres | Entrées |
 |---|---|---|
-| `credits` | départements / jobs visés, seuil d'épisodes pour une série | personne : réf., nom, faits, sources datées |
+| `credits` | départements / jobs visés, seuil d'épisodes pour une série | personne : réf. et nom, rien d'autre |
 | `adult` | certifications considérées comme adultes par pays | — |
 | `attributes` | conditions sur certification, durée, année, genre, pays, langue d'origine (sert aussi à définir `kids`) | — |
 | `titles` | — | titre : imdb id, motif (refuser un titre précis, sans critère général) |
 
-L'avis de `credits` ne cite que le contenu de l'entrée (faits, sources). **DÉCIDÉ (2026-11-14)** : pas de statut judiciaire (« condamné », « mis en cause ») : on applique une politique de filtrage, on ne juge pas ; une affaire qui se retourne remonte par une demande de dérogation, qui fait revoir l'entrée. Les entrées sont saisies à la main. Plus tard, éventuellement : un job Wikidata (P1399 « condamné pour ») qui **propose** des entrées par ticket, sans jamais les ajouter seul.
+L'avis de `credits` ne dit que la personne et ses rôles ; la nature du refus est le nom de la règle. **DÉCIDÉ (2026-11-14)** : ni statut judiciaire, ni faits, ni sources dans une entrée : la maison applique la liste que l'admin lui donne, elle ne la justifie pas ni ne recopie la justice. Qui conteste fait un recours (ou change de plateforme) ; une affaire qui se retourne remonte ainsi et fait revoir la règle.
 
 ### Persistance (migrations `00030` faits, `00031` policy)
 

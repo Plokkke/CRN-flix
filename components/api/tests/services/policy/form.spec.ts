@@ -62,10 +62,10 @@ describe('describeValidationError', () => {
   it('names the first invalid field', () => {
     let error: unknown;
     try {
-      personEntrySchema.parse({ ref: 'r', name: 'n', allegations: 'x', sources: [] });
+      personEntrySchema.parse({ ref: 'r', name: '' });
     } catch (caught) {
       error = caught;
     }
-    expect(describeValidationError(error)).toMatch(/^sources : /);
+    expect(describeValidationError(error)).toMatch(/^name : /);
   });
 });
