@@ -60,8 +60,6 @@ export class MailingController {
     const person = personEntrySchema.parse({
       ref: 'tmdb:person:0',
       name: 'Camille Exemple',
-      allegations: 'harcèlement moral (accusations publiques, enquête en cours)',
-      sources: [{ label: 'Article de presse (2026-01-15)', url: 'https://example.org/article' }],
     });
     const credit = {
       person,

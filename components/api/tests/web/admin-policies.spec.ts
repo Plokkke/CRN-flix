@@ -73,8 +73,6 @@ describe('adminPolicyRuleTemplate', () => {
           data: {
             ref: 'tmdb:person:1',
             name: 'Jo Example',
-            allegations: 'faits',
-            sources: [{ label: 'Journal', url: 'https://example.org' }],
           },
         },
       ],

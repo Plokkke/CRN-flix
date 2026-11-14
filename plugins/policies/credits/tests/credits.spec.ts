@@ -17,8 +17,6 @@ function credit(ref: string, name: string, extra: Partial<MediaCredit>): MediaCr
 const listed = personEntrySchema.parse({
   ref: 'tmdb:person:1',
   name: 'Jo Example',
-  allegations: 'harcèlement sexuel',
-  sources: [{ label: 'Journal (2024-01-02)', url: 'https://example.org/article' }],
 });
 
 function subject(credits: MediaCredit[] | null): PolicySubject {
@@ -46,7 +44,7 @@ const evaluate = (credits: MediaCredit[] | null, params: Record<string, unknown>
   creditsPolicy.evaluate(subject(credits), { params: creditsParamsSchema.parse(params), entries: [listed] });
 
 describe('creditsPolicy', () => {
-  it('refuses a title crediting a listed person, with roles, status, allegations and sources', () => {
+  it('refuses a title crediting a listed person, telling the roles only', () => {
     const matches = evaluate([
       credit('tmdb:person:1', 'Jo Example', { department: 'Directing', job: 'Director' }),
       credit('tmdb:person:1', 'Jo Example', { character: 'Sam', billingOrder: 2 }),
@@ -57,20 +55,7 @@ describe('creditsPolicy', () => {
         summary: 'Jo Example (Réalisation, Interprétation (Sam))',
         notice: {
           headline: 'Ce titre implique Jo Example',
-          blocks: [
-            {
-              type: 'facts',
-              items: [
-                { label: 'Rôle', value: 'Réalisation, Interprétation (Sam)' },
-                { label: 'Faits', value: 'harcèlement sexuel' },
-              ],
-            },
-            {
-              type: 'links',
-              title: 'Sources',
-              links: [{ label: 'Journal (2024-01-02)', url: 'https://example.org/article' }],
-            },
-          ],
+          blocks: [{ type: 'facts', items: [{ label: 'Rôle', value: 'Réalisation, Interprétation (Sam)' }] }],
         },
       },
     ]);
@@ -97,7 +82,7 @@ describe('creditsPolicy', () => {
     expect(evaluate(null)).toBeNull();
   });
 
-  it('requires at least one source per person', () => {
-    expect(() => personEntrySchema.parse({ ...listed, sources: [] })).toThrow();
+  it('keeps the person only, dropping any former details', () => {
+    expect(personEntrySchema.parse({ ...listed, allegations: 'x', sources: [] })).toEqual(listed);
   });
 });

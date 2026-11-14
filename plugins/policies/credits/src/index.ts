@@ -17,9 +17,6 @@ export const creditsParamsSchema = z.object({
 export const personEntrySchema = z.object({
   ref: z.string().min(1),
   name: z.string().min(1),
-  /** What the person did, as the sources report it: the reason of the house's policy, not a verdict. */
-  allegations: z.string().min(1),
-  sources: z.array(z.object({ label: z.string().min(1), url: z.url() })).min(1),
 });
 
 export type CreditsParams = z.infer<typeof creditsParamsSchema>;
@@ -58,22 +55,16 @@ function matchOf(person: PersonEntry, credits: MediaCredit[], message: string | 
   return {
     summary: `${person.name} (${roles})`,
     notice: noticeOf(`Ce titre implique ${person.name}`, message, [
-      {
-        type: 'facts',
-        items: [
-          { label: 'Rôle', value: roles },
-          { label: 'Faits', value: person.allegations },
-        ],
-      },
-      { type: 'links', title: 'Sources', links: person.sources },
+      { type: 'facts', items: [{ label: 'Rôle', value: roles }] },
     ]),
   };
 }
 
 /**
  * Refuses the titles that credit a listed person in a role the rule targets. People are
- * matched by the metadata source's reference, never by name, so namesakes are left alone;
- * the notice only states what the entry holds (facts, dated sources).
+ * matched by the metadata source's reference, never by name, so namesakes are left alone.
+ * An entry is the person only: the rule's name tells the nature of the refusal, the house
+ * does not argue its list (a subscriber who disagrees appeals).
  */
 export const creditsPolicy: PolicyKind<CreditsParams, PersonEntry> = {
   name: 'credits',
@@ -110,10 +101,7 @@ export const creditsPolicy: PolicyKind<CreditsParams, PersonEntry> = {
   entries: {
     key: 'person',
     schema: personEntrySchema,
-    fields: [
-      { name: 'allegations', label: 'Faits (tels que les sources les rapportent)', type: 'textarea' },
-      { name: 'sources', label: 'Sources datées', type: 'links', help: 'Une par ligne : libellé (date) | URL.' },
-    ],
+    fields: [],
   },
   evaluate(subject, { params, entries }) {
     const credits = subject.facts?.credits;
