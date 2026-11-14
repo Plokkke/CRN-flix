@@ -14,10 +14,11 @@ export class AnnouncementService {
     private readonly messaging: AllUserMessaging,
   ) {}
 
+  /** Active users with a messaging channel (a player account taken in by the admin has none). */
   async listRecipients(): Promise<UserEntity[]> {
     const users = await this.users.list();
     return users
-      .filter((user) => user.status === UserStatus.Active)
+      .filter((user) => user.status === UserStatus.Active && user.messagingKey !== null)
       .sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
   }
 

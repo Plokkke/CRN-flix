@@ -18,8 +18,11 @@ export type UserEntity = {
   catalogRelinkRequestedAt: Date | null;
   /** Which shared shelves the account sees. */
   profile: Profile;
-  messagingKey: string;
-  messagingId: string;
+  /** Null for a player account taken in by the admin: nobody to notify. */
+  messagingKey: string | null;
+  messagingId: string | null;
+  /** The Discord admin this account belongs to (their personal downloads land here). */
+  adminDiscordId: string | null;
   status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -32,8 +35,9 @@ type UserRecord = {
   max_streams: number | null;
   catalog_relink_requested_at: Date | null;
   profile: Profile;
-  messaging_key: string;
-  messaging_id: string;
+  messaging_key: string | null;
+  messaging_id: string | null;
+  admin_discord_id: string | null;
   status: UserStatus;
   created_at: Date;
   updated_at: Date;
@@ -49,6 +53,7 @@ function fromUserRecord(record: UserRecord): UserEntity {
     profile: record.profile,
     messagingKey: record.messaging_key,
     messagingId: record.messaging_id,
+    adminDiscordId: record.admin_discord_id,
     status: record.status,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
@@ -109,6 +114,43 @@ export class UsersRepository {
     `;
     const { rows } = await this.pool.query<UserRecord>(query, [messagingKey, messagingId, name]);
     return fromUserRecord(rows[0]);
+  }
+
+  /** Takes a player account in: active at once, no messaging channel. */
+  async createFromPlayerAccount(name: string, jellyfinId: string): Promise<UserEntity> {
+    const { rows } = await this.pool.query<UserRecord>(
+      `INSERT INTO users (name, jellyfin_id, status) VALUES ($1, $2, 'active') RETURNING *`,
+      [name, jellyfinId],
+    );
+    return fromUserRecord(rows[0]);
+  }
+
+  async getByAdminDiscordId(adminDiscordId: string): Promise<UserEntity | null> {
+    const { rows } = await this.pool.query<UserRecord>(`SELECT * FROM users WHERE admin_discord_id = $1`, [
+      adminDiscordId,
+    ]);
+    return rows.length ? fromUserRecord(rows[0]) : null;
+  }
+
+  /** Links the account to a Discord admin (null unlinks); an admin has one account, the previous one is unlinked. */
+  async setAdminDiscordId(userId: string, adminDiscordId: string | null): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (adminDiscordId) {
+        await client.query(`UPDATE users SET admin_discord_id = NULL WHERE admin_discord_id = $1`, [adminDiscordId]);
+      }
+      await client.query(`UPDATE users SET admin_discord_id = $2, updated_at = NOW() WHERE id = $1`, [
+        userId,
+        adminDiscordId,
+      ]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async remove(userId: string): Promise<void> {

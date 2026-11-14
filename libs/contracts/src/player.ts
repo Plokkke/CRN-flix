@@ -4,6 +4,9 @@ import { MediaItem } from './media';
 /** A media the player can serve right now; for an episode, `imdbId` is the show's. */
 export type PlayerAsset = MediaItem;
 
+/** A viewing account of the player; its administrators are the owner's own accounts. */
+export type PlayerAccount = { id: string; name: string; isAdministrator: boolean };
+
 /** Thrown by `upsertAccount` when the player refuses to create an account under this name. */
 export class AccountNameTakenError extends Error {
   constructor(readonly userName: string) {
@@ -70,7 +73,7 @@ export interface Player {
    */
   upsertAccount(userName: string, password: string, accountId: string | null): Promise<string>;
   /** Every viewing account, including those the engine did not create. */
-  listAccountIds(): Promise<string[]>;
+  listAccounts(): Promise<PlayerAccount[]>;
   /** The account's current stream limit, null when the player's own administrators manage it. */
   accountMaxStreams(accountId: string): Promise<number | null>;
   /** Applies the service's viewing rules to the account; false when nothing had to change. */

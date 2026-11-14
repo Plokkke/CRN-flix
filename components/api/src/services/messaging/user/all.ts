@@ -27,11 +27,20 @@ export type UserMessagingCtxt = {
   userId: string;
 };
 
-export const messagingContextOf = (user: UserEntity): UserMessagingCtxt => ({
-  key: user.messagingKey,
-  id: user.messagingId,
-  userId: user.id,
-});
+/** Thrown for a player account taken in by the admin: it has no channel to be reached on. */
+export class NoMessagingChannelError extends Error {
+  constructor(userName: string) {
+    super(`${userName} has no messaging channel`);
+    this.name = 'NoMessagingChannelError';
+  }
+}
+
+export const messagingContextOf = (user: UserEntity): UserMessagingCtxt => {
+  if (!user.messagingKey || !user.messagingId) {
+    throw new NoMessagingChannelError(user.name);
+  }
+  return { key: user.messagingKey, id: user.messagingId, userId: user.id };
+};
 
 /** `dry-run` logs what would reach users and sends nothing — nor records anything as sent. */
 export type UserMessagingMode = 'send' | 'dry-run';

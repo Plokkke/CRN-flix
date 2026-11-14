@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 
-import { CatalogAccountSource, Player } from '@crn-flix/contracts';
+import { CatalogAccountSource, Player, PlayerAccount } from '@crn-flix/contracts';
 
 import { UserEntity, UsersRepository, UserStatus } from '@/services/database/users';
 import { LibraryAccess } from '@/services/library/access';
@@ -23,8 +23,38 @@ export class PlayerAccountsService {
     private readonly access: LibraryAccess | null = null,
   ) {}
 
+  /** Viewing accounts the engine does not know (the player's administrators aside), to take in. */
+  async listUnlinked(): Promise<PlayerAccount[]> {
+    const [users, accounts] = await Promise.all([this.usersRepository.list(), this.player.listAccounts()]);
+    const linked = new Set(users.flatMap((user) => (user.jellyfinId ? [user.jellyfinId] : [])));
+    return accounts.filter((account) => !account.isAdministrator && !linked.has(account.id));
+  }
+
+  /**
+   * Takes a player account in: an active user without catalog nor messaging, administered like
+   * the others (profile, streams, personal shelf); its stream limit is adopted from the player.
+   */
+  async adopt(accountId: string): Promise<UserEntity> {
+    const account = (await this.listUnlinked()).find((candidate) => candidate.id === accountId);
+    if (!account) {
+      throw new Error('Compte introuvable ou déjà rattaché');
+    }
+    if (await this.usersRepository.existsByName(account.name)) {
+      throw new Error(`Le nom ${account.name} est déjà pris par un abonné`);
+    }
+    const user = await this.usersRepository.createFromPlayerAccount(account.name, account.id);
+    await this.apply(user).catch((error: unknown) => {
+      PlayerAccountsService.logger.warn(
+        `Account ${user.name}: taken in, policy on the next pass (${describeError(error)})`,
+      );
+    });
+    PlayerAccountsService.logger.log(`Player account ${account.name} taken in`);
+    return user;
+  }
+
   async applyAll(): Promise<void> {
-    const [users, accountIds] = await Promise.all([this.usersRepository.list(), this.player.listAccountIds()]);
+    const [users, accounts] = await Promise.all([this.usersRepository.list(), this.player.listAccounts()]);
+    const accountIds = accounts.map((account) => account.id);
     await this.ensureLibraries(users);
     for (const accountId of accountIds) {
       const user = users.find(

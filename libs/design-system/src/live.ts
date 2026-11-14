@@ -3,7 +3,8 @@ import { escapeHtml } from './text';
 /**
  * Live forms: a `<form class="live">` is sent as soon as one of its fields changes (typing in a
  * text or number field waits for a pause), without leaving the page. The server answers JSON
- * `{ message, error }`; the message shows in `#live-flash`. Without JavaScript the form still
+ * `{ message, error, reload? }`; the message shows in `#live-flash` (`reload`: the change reshapes
+ * the page, which is reloaded). Without JavaScript the form still
  * posts the usual way.
  */
 export const LIVE_FORMS_JS = `
@@ -35,7 +36,11 @@ export const LIVE_FORMS_JS = `
           location.reload();
           return;
         }
-        const { message, error } = await response.json();
+        const { message, error, reload } = await response.json();
+        if (reload && !error) {
+          location.reload();
+          return;
+        }
         flash(message, error || !response.ok);
       } catch (error) {
         flash('Échec de l’envoi, réessayez', true);

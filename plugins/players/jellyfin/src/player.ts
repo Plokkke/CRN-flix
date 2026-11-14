@@ -3,6 +3,7 @@ import {
   createLogger,
   MediaType,
   Player,
+  PlayerAccount,
   PlayerAsset,
   PlayerLibrary,
   ShowcaseItem,
@@ -170,8 +171,12 @@ export class JellyfinPlayer implements Player {
     return existing.Id;
   }
 
-  async listAccountIds(): Promise<string[]> {
-    return (await this.jellyfin.listUsers()).map((user) => user.Id);
+  async listAccounts(): Promise<PlayerAccount[]> {
+    return (await this.jellyfin.listUsers()).map((user) => ({
+      id: user.Id,
+      name: user.Name,
+      isAdministrator: user.Policy?.IsAdministrator === true,
+    }));
   }
 
   async accountMaxStreams(accountId: string): Promise<number | null> {

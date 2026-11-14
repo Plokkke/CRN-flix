@@ -81,7 +81,6 @@ export const libraryProviders: Provider[] = [
       users: UsersRepository,
       policy: PolicyService,
       shelves: LibraryShelves,
-    ): ManualDestinations =>
-      new ManualDestinations(overrides, exemptions, users, policy, shelves, configService.get('library').adminUserName),
+    ): ManualDestinations => new ManualDestinations(overrides, exemptions, users, policy, shelves),
   },
 ];

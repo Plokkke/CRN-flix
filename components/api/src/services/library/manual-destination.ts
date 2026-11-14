@@ -26,6 +26,9 @@ const describeError = (error: unknown): string => (error instanceof Error ? erro
  * Without a choice the rules place the title, and a title they restrict goes to the admin's
  * collection: never blocked, never exposed.
  */
+/** The Discord admin behind an actor (`discord:<id>`, or `dashboard:<id>` whose id is the same); null for the system. */
+export const adminIdOf = (actor: string): string | null => /^(?:discord|dashboard):(.+)$/.exec(actor)?.[1] ?? null;
+
 export class ManualDestinations {
   private static readonly logger = new Logger(ManualDestinations.name);
 
@@ -35,16 +38,15 @@ export class ManualDestinations {
     private readonly users: UsersRepository,
     private readonly policy: PolicyService,
     private readonly shelves: LibraryShelves,
-    /** The admin's own account (`users.name`), whose collection takes personal downloads. */
-    private readonly adminUserName: string | null,
   ) {}
 
   /** Null when applied, the reason otherwise. */
   async apply(imdbId: string, destination: ManualDestination, actor: string): Promise<string | null> {
     if (destination === 'personal') {
-      const admin = this.adminUserName ? await this.users.getByName(this.adminUserName) : null;
+      const adminId = adminIdOf(actor);
+      const admin = adminId ? await this.users.getByAdminDiscordId(adminId) : null;
       if (!admin) {
-        return 'Collection de l’admin introuvable : ADMIN_USER_NAME doit nommer son compte';
+        return 'Aucun compte lié à cet admin : à lier sur /admin/users';
       }
       await this.overrides.set({ imdbId, shelf: 'none', origin: 'manual-download' }, actor);
       await this.exemptions.grantPersonal(admin.id, imdbId, 'manual-download', actor);

@@ -236,6 +236,8 @@ Préalable : épingler l'image Jellyfin (`jellyfin/jellyfin` sans tag aujourd'hu
 - Job Wikidata qui propose des entrées `credits` (optionnel).
 - Retour sur la page d'appel après connexion (aujourd'hui : connexion puis `/me`, où le titre refusé a son lien « Motif et recours »).
 
+**DÉCIDÉ (2026-11-14)** : « Ma collection » = l'étagère personnelle du compte lié à l'admin Discord qui agit (`users.admin_discord_id`, choisi sur `/admin/users`), plus `ADMIN_USER_NAME`. Les comptes Jellyfin inconnus du moteur (Invité…) s'intègrent depuis `/admin/users`, sans messagerie.
+
 **DÉCIDÉ (2026-11-14) — en service, sans retour arrière** : étagères adoptées en prod (534 titres), policy appliquée ; `POLICY_MODE` et `LIBRARY_LAYOUT` supprimés du code et de Terraform. « Dépublier » une anomalie **supprime les fichiers** du stock (pas de stockage pour un titre inaccessible).
 
 ~~Mise en service~~ (historique) — **Mise en service** (dans l'ordre) : `ADMIN_USER_NAME` ; `LIBRARY_LAYOUT=shelves` (adoption de l'existant au démarrage, accès Jellyfin par profil) ; créer les règles sur `/admin/policies` ; `POLICY_MODE=dry-run` et relire « Où vont les titres » ; `POLICY_MODE=enforce` (mails de refus, étagère `kids`, anomalies).

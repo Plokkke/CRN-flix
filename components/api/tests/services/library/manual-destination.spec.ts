@@ -6,13 +6,17 @@ import { LibraryShelves } from '@/services/library/shelves';
 import { PolicyGate } from '@/services/policy/gate';
 import { PolicyService } from '@/services/policy/policy';
 
-function build(opts: { adminUserName?: string | null; restricted?: boolean } = {}) {
+function build(opts: { linked?: boolean; restricted?: boolean } = {}) {
   const overrides = { set: jest.fn().mockResolvedValue(undefined) };
   const exemptions = {
     grantGlobal: jest.fn().mockResolvedValue(undefined),
     grantPersonal: jest.fn().mockResolvedValue(undefined),
   };
-  const users = { getByName: jest.fn().mockResolvedValue({ id: 'admin-user' }) };
+  const users = {
+    getByAdminDiscordId: jest.fn((id: string) =>
+      Promise.resolve(opts.linked !== false && id === 'a' ? { id: 'admin-user' } : null),
+    ),
+  };
   const policy = {
     placementOf: jest
       .fn()
@@ -27,7 +31,6 @@ function build(opts: { adminUserName?: string | null; restricted?: boolean } = {
     users as unknown as UsersRepository,
     policy as unknown as PolicyService,
     shelves as unknown as LibraryShelves,
-    opts.adminUserName === undefined ? 'antoine' : opts.adminUserName,
   );
   return { destinations, overrides, exemptions, shelves };
 }
@@ -58,16 +61,25 @@ describe('ManualDestinations', () => {
     expect(exemptions.grantPersonal).toHaveBeenCalledWith('admin-user', 'tt1', 'manual-download', 'discord:a');
   });
 
-  it('says what is missing when the admin has no account of their own', async () => {
-    const { destinations, overrides } = build({ adminUserName: null });
+  it('finds the acting admin’s account from Discord or the dashboard, the same id', async () => {
+    const { destinations, exemptions } = build();
 
-    await expect(destinations.apply('tt1', 'personal', 'discord:a')).resolves.toMatch(/ADMIN_USER_NAME/);
+    await destinations.apply('tt1', 'personal', 'dashboard:a');
+
+    expect(exemptions.grantPersonal).toHaveBeenCalledWith('admin-user', 'tt1', 'manual-download', 'dashboard:a');
+  });
+
+  it('says what is missing when the admin has no account linked, or nobody acted', async () => {
+    const { destinations, overrides } = build({ linked: false });
+
+    await expect(destinations.apply('tt1', 'personal', 'discord:a')).resolves.toMatch(/\/admin\/users/);
+    await expect(destinations.apply('tt1', 'personal', 'system')).resolves.toMatch(/\/admin\/users/);
     expect(overrides.set).not.toHaveBeenCalled();
   });
 
   it('without a choice, sends what the rules restrict to the admin’s collection and leaves the rest to the rules', async () => {
     const restricted = build({ restricted: true });
-    await restricted.destinations.applyDefault('tt1', 'system');
+    await restricted.destinations.applyDefault('tt1', 'discord:a');
     expect(restricted.exemptions.grantPersonal).toHaveBeenCalled();
 
     const allowed = build();

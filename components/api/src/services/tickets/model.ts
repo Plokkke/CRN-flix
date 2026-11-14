@@ -61,6 +61,9 @@ export type TicketPayloadMap = {
     lastError?: string;
     /** The admin's choice of shelf; without one the rules place the title (restricted → the admin's collection). */
     destination?: 'standard' | 'kids' | 'personal';
+    /** Who posted the link, and who chose the destination: whose collection « personal » means. */
+    requestedBy?: string;
+    destinationBy?: string;
   } & IdentitySubmitted;
   [TicketCategory.MissingImdb]: {
     title: string;
