@@ -269,7 +269,6 @@ export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
   const view = viewInput(filter);
   const rows = params.rows.map((row) => libraryRow(row, params.users, view)).join('');
   const content = `
-    <p><a href="/admin">← Dashboard</a></p>
     <h2>📚 Bibliothèque</h2>
     <p class="hint">Le choix de l’admin fait foi sur les règles. Un titre ajouté à l’étagère personnelle d’un abonné y apparaît sans quitter les étagères partagées.</p>
     ${unplaced > 0 ? `<p><a href="/admin/library?state=unplaced">${pill(`${unplaced} titre(s) sur aucune étagère`, 'warning')}</a></p>` : ''}
@@ -285,5 +284,5 @@ export const adminLibraryTemplate = (params: AdminLibraryParams): string => {
     }
     ${pager(filter, params.total)}
     </div>`;
-  return adminPage('Bibliothèque', params.serviceName, content, CSS, LIVE_LIBRARY_JS);
+  return adminPage({ tab: 'library' }, 'Bibliothèque', params.serviceName, content, CSS, LIVE_LIBRARY_JS);
 };

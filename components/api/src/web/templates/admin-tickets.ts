@@ -55,7 +55,6 @@ export const adminTicketsTemplate = (params: AdminTicketsParams): string => {
 
   const content = `
     ${flashMessage ? `<div class="flash-message">${escapeHtml(flashMessage)}</div>` : ''}
-    <p><a href="/admin">← Dashboard</a></p>
     <h2>🎫 Tickets</h2>
     <form class="manual-download" method="POST" action="/admin/tickets/manual-download">
       <input type="url" name="url" placeholder="Lien à télécharger (comme un lien posté dans le salon admin)" required />
@@ -105,5 +104,5 @@ export const adminTicketsTemplate = (params: AdminTicketsParams): string => {
     .empty-state { color: var(--text-muted); font-style: italic; }
   `;
 
-  return adminPage(`Tickets - ${serviceName}`, serviceName, content, additionalCSS);
+  return adminPage({ tab: 'tickets' }, `Tickets - ${serviceName}`, serviceName, content, additionalCSS);
 };

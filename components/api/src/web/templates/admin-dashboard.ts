@@ -5,73 +5,26 @@ import { adminPage } from '@/web/templates/admin-page';
 
 import { ADMIN_REQUESTS_CSS, adminRequestsJs, adminRequestsSection } from './admin-requests';
 
-interface JobDefinition {
-  name: string;
-  schedule: string;
-}
-
 interface AdminDashboardParams {
   serviceName: string;
   dashboard: Dashboard;
   activeTab: DashboardTab;
-  jobs: JobDefinition[];
   flashMessage?: string;
 }
 
-const getJobsSection = (jobs: JobDefinition[]): string => {
-  const cards = jobs
-    .map(
-      (job) => `
-    <div class="job-card">
-      <div class="job-name">${job.name}</div>
-      <div class="job-schedule">${job.schedule}</div>
-      <form method="POST" action="/admin/jobs/${job.name}">
-        <button type="submit" onclick="return confirm('Run ${job.name}?')">Trigger</button>
-      </form>
-    </div>
-  `,
-    )
-    .join('');
-
-  return `
-    <h2>Jobs</h2>
-    <div class="jobs-grid">${cards}</div>
-  `;
-};
-
 export const adminDashboardTemplate = (params: AdminDashboardParams): string => {
-  const { serviceName, dashboard, activeTab, jobs, flashMessage } = params;
+  const { serviceName, dashboard, activeTab, flashMessage } = params;
 
   const flashHtml = flashMessage ? `<div class="flash-message">${escapeHtml(flashMessage)}</div>` : '';
 
   const content = `
     ${flashHtml}
-    <p><a href="/admin/tickets" style="color: var(--link);">🎫 Tickets</a> · <a href="/admin/announce" style="color: var(--link);">📣 Annonce aux abonnés</a> · <a href="/admin/users" style="color: var(--link);">👥 Comptes</a> · <a href="/admin/policies" style="color: var(--link);">🛡️ Politique</a> · <a href="/admin/library" style="color: var(--link);">📚 Bibliothèque</a> · <a href="/admin/messages" style="color: var(--link);">✉️ Messages</a></p>
-    ${getJobsSection(jobs)}
-    <h2>Requests</h2>
     ${adminRequestsSection({ dashboard, activeTab, returnTo: `/admin?tab=${activeTab}` })}
-    <form method="POST" action="/admin/logout" class="logout-form">
-      <button type="submit">Se déconnecter</button>
-    </form>
   `;
 
   const additionalCSS = `
     ${ADMIN_REQUESTS_CSS}
     .container { max-width: 900px; }
-
-    .logout-form {
-      margin-top: 40px;
-      text-align: right;
-    }
-
-    .logout-form button {
-      background-color: transparent;
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      width: auto;
-      padding: 8px 16px;
-      font-size: 13px;
-    }
 
     h2 {
       color: var(--text);
@@ -86,39 +39,6 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
       border-radius: 4px;
       margin-bottom: 20px;
       color: var(--text);
-    }
-
-    .jobs-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-    }
-
-    .job-card {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      background: var(--surface-raised);
-    }
-
-    .job-name {
-      font-weight: bold;
-      font-size: 14px;
-      color: var(--text);
-      margin-bottom: 4px;
-    }
-
-    .job-schedule {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-bottom: 12px;
-    }
-
-    .job-card button {
-      background-color: ${COLORS.secondary};
-      width: auto;
-      padding: 8px 16px;
-      font-size: 14px;
     }
 
     #user-filter {
@@ -151,5 +71,5 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
 
   const additionalJS = adminRequestsJs(activeTab);
 
-  return adminPage(`Admin - ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
+  return adminPage({ tab: 'requests' }, `Admin - ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
 };

@@ -70,10 +70,9 @@ const table = (rows: MessageStatsRow[]): string =>
 
 export const adminMessagesTemplate = ({ serviceName, rows }: AdminMessagesParams): string => {
   const content = `
-    <p><a href="/admin">← Dashboard</a></p>
     <h2>✉️ Messages délivrés</h2>
     <p class="hint">Par abonné et par type : dernières 24 h · 7 jours · depuis le début, puis le dernier envoi. Seuls les messages réellement délivrés comptent (rien en dry-run ni en cas d'échec). Une case est signalée au-delà de ${FLOOD_THRESHOLD_24H} envois en 24 h.</p>
     ${table(rows)}
   `;
-  return adminPage('Messages', serviceName, content, MESSAGES_CSS);
+  return adminPage({ tab: 'members', sub: 'messages' }, 'Messages', serviceName, content, MESSAGES_CSS);
 };

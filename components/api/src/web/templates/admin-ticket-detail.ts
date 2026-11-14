@@ -116,5 +116,5 @@ export const adminTicketDetailTemplate = (params: AdminTicketDetailParams): stri
     .empty-state { color: var(--text-muted); font-style: italic; }
   `;
 
-  return adminPage(`Ticket - ${serviceName}`, serviceName, content, additionalCSS);
+  return adminPage({ tab: 'tickets' }, `Ticket - ${serviceName}`, serviceName, content, additionalCSS);
 };
