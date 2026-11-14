@@ -177,6 +177,15 @@ export class PolicyExemptionsRepository {
     );
   }
 
+  /** Takes the title off the user's personal shelf: their granted exemptions on it are denied. */
+  async revokePersonal(userId: string, imdbId: string, decidedBy: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE policy_exemptions SET status = 'denied', decided_by = $3, decided_at = NOW()
+       WHERE user_id = $1 AND imdb_id = $2 AND status = 'granted'`,
+      [userId, imdbId, decidedBy],
+    );
+  }
+
   /** Lets the title through for everyone, from the given rules (null: every rule). */
   async grantGlobal(
     imdbId: string,

@@ -45,7 +45,7 @@ export const adminDashboardTemplate = (params: AdminDashboardParams): string => 
 
   const content = `
     ${flashHtml}
-    <p><a href="/admin/tickets" style="color: var(--link);">🎫 Tickets</a> · <a href="/admin/announce" style="color: var(--link);">📣 Annonce aux abonnés</a> · <a href="/admin/users" style="color: var(--link);">👥 Comptes</a> · <a href="/admin/policies" style="color: var(--link);">🛡️ Politique</a> · <a href="/admin/messages" style="color: var(--link);">✉️ Messages</a></p>
+    <p><a href="/admin/tickets" style="color: var(--link);">🎫 Tickets</a> · <a href="/admin/announce" style="color: var(--link);">📣 Annonce aux abonnés</a> · <a href="/admin/users" style="color: var(--link);">👥 Comptes</a> · <a href="/admin/policies" style="color: var(--link);">🛡️ Politique</a> · <a href="/admin/library" style="color: var(--link);">📚 Bibliothèque</a> · <a href="/admin/messages" style="color: var(--link);">✉️ Messages</a></p>
     ${getJobsSection(jobs)}
     <h2>Requests</h2>
     ${adminRequestsSection({ dashboard, activeTab, returnTo: `/admin?tab=${activeTab}` })}

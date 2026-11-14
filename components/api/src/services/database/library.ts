@@ -78,6 +78,14 @@ export class ShelfOverridesRepository {
     return (result.rowCount ?? 0) > 0;
   }
 
+  /** Every choice, with where it came from (the admin page shows it). */
+  async listAll(): Promise<ShelfOverride[]> {
+    const result = await this.pool.query<{ imdb_id: string; shelf: string; origin: ShelfOverrideOrigin }>(
+      `SELECT imdb_id, shelf, origin FROM shelf_overrides`,
+    );
+    return result.rows.map((row) => ({ imdbId: row.imdb_id, shelf: row.shelf, origin: row.origin }));
+  }
+
   async listByOrigin(origin: ShelfOverrideOrigin): Promise<ShelfOverride[]> {
     const result = await this.pool.query<{ imdb_id: string; shelf: string }>(
       `SELECT imdb_id, shelf FROM shelf_overrides WHERE origin = $1`,

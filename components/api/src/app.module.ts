@@ -18,6 +18,7 @@ import { AdminController } from '@/controllers/AdminController';
 import { AnnounceAdminController } from '@/controllers/AnnounceAdminController';
 import { AssetsController } from '@/controllers/AssetsController';
 import { HealthVersionController } from '@/controllers/HealthController';
+import { LibraryAdminController } from '@/controllers/LibraryAdminController';
 import { MailingController } from '@/controllers/MailingController';
 import { MeController } from '@/controllers/MeController';
 import { MessagesAdminController } from '@/controllers/MessagesAdminController';
@@ -152,6 +153,7 @@ export function configureAppModule(env: EnvironmentVariables): new () => NestMod
       AnnounceAdminController,
       UsersAdminController,
       PoliciesAdminController,
+      LibraryAdminController,
       MessagesAdminController,
       MeController,
     ],
