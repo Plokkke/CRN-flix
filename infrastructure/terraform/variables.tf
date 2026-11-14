@@ -139,7 +139,7 @@ variable "indexer_preferences" {
 variable "policy_mode" {
   description = "off, dry-run (titles assessed, nobody refused nor told) or enforce"
   type        = string
-  default     = "dry-run"
+  default     = "enforce"
 
   validation {
     condition     = contains(["off", "dry-run", "enforce"], var.policy_mode)

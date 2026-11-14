@@ -90,7 +90,9 @@ describe('adminPolicyRuleTemplate', () => {
 
     expect(html).toContain('value="tmdb:person:2|Jo Other"');
     expect(html).toContain('href="https://tmdb/p/2"');
-    expect(html).toContain('Jo Example');
+    expect(html).toContain('<table class="entries">');
+    expect(html).toContain('<td>Jo Example</td>');
+    expect(html).toContain('href="https://www.themoviedb.org/person/1"');
     expect(html).toContain('/admin/policies/rule-1/entries/e1/delete');
   });
 });
