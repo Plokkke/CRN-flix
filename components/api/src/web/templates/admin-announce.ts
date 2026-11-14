@@ -186,7 +186,6 @@ export const adminAnnounceFormTemplate = (params: AdminAnnounceFormParams): stri
 
   const content = `
     ${flashMessage ? `<div class="flash-message${flashError ? ' error' : ''}">${escapeHtml(flashMessage)}</div>` : ''}
-    <p><a href="/admin">← Dashboard</a></p>
     <h2>📣 Annonce aux abonnés</h2>
     <div class="filter-tabs">${presetTabs(preset)}</div>
     <form id="announce-form" method="POST" action="/admin/announce/send">
@@ -210,5 +209,12 @@ export const adminAnnounceFormTemplate = (params: AdminAnnounceFormParams): stri
     ${announcementLists(params.upcoming, params.sent, schedule.format)}
   `;
 
-  return adminPage(`Annonce - ${serviceName}`, serviceName, content, ADMIN_CSS, TOGGLE_JS);
+  return adminPage(
+    { tab: 'members', sub: 'announce' },
+    `Annonce - ${serviceName}`,
+    serviceName,
+    content,
+    ADMIN_CSS,
+    TOGGLE_JS,
+  );
 };

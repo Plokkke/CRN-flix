@@ -47,6 +47,7 @@ import { PolicyRefusalNotices } from '@/services/policy/refusal-notices';
 import { TicketReconcilerService } from '@/services/tickets/reconciler';
 import { truthy } from '@/utils';
 import { adminDashboardTemplate } from '@/web/templates/admin-dashboard';
+import { adminJobsTemplate } from '@/web/templates/admin-jobs';
 import { adminLoginTemplate } from '@/web/templates/admin-login';
 import { adminNamingAuditTemplate } from '@/web/templates/admin-naming-audit';
 
@@ -220,7 +221,6 @@ export class AdminController {
       serviceName: this.contextService.name,
       dashboard,
       activeTab: parseTab(tab),
-      jobs: [...JOBS],
       flashMessage: message,
     });
   }
@@ -235,11 +235,28 @@ export class AdminController {
     );
   }
 
+  @Get('jobs')
+  @Header('content-type', 'text/html')
+  jobsPage(@Query('message') message?: string): string {
+    return adminJobsTemplate({ serviceName: this.contextService.name, jobs: [...JOBS], flashMessage: message });
+  }
+
+  /** What the tabs show as badges. */
+  @Get('nav/counts')
+  async navCounts(): Promise<Record<string, number>> {
+    return { tickets: (await this.tickets.listOpen()).length };
+  }
+
   @Post('jobs/:name')
-  triggerJob(@Param('name') name: string, @Res() res: Response): void {
+  triggerJob(@Param('name') name: string, @Req() req: Request, @Res() res: Response): void {
+    const live = String(req.headers.accept ?? '').includes('application/json');
     const handler = this.jobHandlers[name as JobName];
     if (!handler) {
-      res.redirect(`/admin?message=Unknown job: ${name}`);
+      if (live) {
+        res.status(400).json({ message: `Job inconnu : ${name}`, error: true });
+        return;
+      }
+      res.redirect(`/admin/jobs?message=${encodeURIComponent(`Job inconnu : ${name}`)}`);
       return;
     }
 
@@ -247,12 +264,16 @@ export class AdminController {
       AdminController.logger.error(`Job "${name}" failed: ${error instanceof Error ? error.message : error}`);
     });
 
-    if (name === 'naming-audit') {
+    if (name === 'naming-audit' && !live) {
       res.redirect(`/admin/naming-audit?message=Audit started — refresh in a moment to see results`);
       return;
     }
-
-    res.redirect(`/admin?message=Job "${name}" triggered`);
+    const message = `Job « ${name} » lancé`;
+    if (live) {
+      res.json({ message, error: false });
+      return;
+    }
+    res.redirect(`/admin/jobs?message=${encodeURIComponent(message)}`);
   }
 
   @Get('requests')

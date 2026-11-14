@@ -122,13 +122,12 @@ export const adminPoliciesTemplate = (params: AdminPoliciesParams): string => {
   const kindsByName = new Map(params.kinds.map((kind) => [kind.name, kind]));
   const content = `
     ${flash(params.flashMessage, params.flashError)}
-    <p><a href="/admin">← Dashboard</a></p>
     <h2>🛡️ Politique</h2>
     <p class="hint">Une règle « tout le monde » qui ne peut pas trancher laisse passer ; une règle d’étagère qui ne peut pas trancher refuse.</p>
     ${params.rules.map((rule) => ruleCard(rule, kindsByName.get(rule.kind), params.overview.counts.get(rule.id))).join('') || '<p class="hint">Aucune règle.</p>'}
     ${newRuleForm(params.kinds, params.audiences)}
     ${overviewSection(params.overview)}`;
-  return adminPage('Politique', params.serviceName, content, CSS);
+  return adminPage({ tab: 'policies' }, 'Politique', params.serviceName, content, CSS);
 };
 
 function fieldInput(field: FieldSpec, value: string, prefix: string): string {
@@ -288,5 +287,5 @@ export const adminPolicyRuleTemplate = (params: AdminPolicyRuleParams): string =
     <form method="POST" action="/admin/policies/${id}/delete" onsubmit="return confirm('Supprimer cette règle et ses entrées ?')">
       <button class="danger" type="submit">Supprimer la règle</button>
     </form>`;
-  return adminPage(rule.name, params.serviceName, content, CSS, ENTRY_DELETE_JS);
+  return adminPage({ tab: 'policies' }, rule.name, params.serviceName, content, CSS, ENTRY_DELETE_JS);
 };

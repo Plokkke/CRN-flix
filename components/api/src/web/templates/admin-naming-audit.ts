@@ -160,7 +160,6 @@ export const adminNamingAuditTemplate = (params: AdminNamingAuditParams): string
 
   const content = `
     ${flashHtml}
-    <p><a href="/admin">&larr; Back to dashboard</a></p>
     <h2>Naming audit</h2>
     <p class="summary">${summary}</p>
 
@@ -405,5 +404,12 @@ export const adminNamingAuditTemplate = (params: AdminNamingAuditParams): string
     applyFilters();
   `;
 
-  return adminPage(`Naming audit - ${serviceName}`, serviceName, content, additionalCSS, additionalJS);
+  return adminPage(
+    { tab: 'system', sub: 'naming-audit' },
+    `Naming audit - ${serviceName}`,
+    serviceName,
+    content,
+    additionalCSS,
+    additionalJS,
+  );
 };
