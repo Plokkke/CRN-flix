@@ -107,7 +107,7 @@ describe('AdminTicketRelay', () => {
       expect(ack).toBe('succeeded');
     });
 
-    it('opens a manual download for a link posted on its own, hanging off the admin message', async () => {
+    it('opens a manual download for a link posted on its own, hanging off the admin message, remembering who posted it', async () => {
       const { relay, channel, tickets, ticketService } = build();
 
       const ack = await relay.message(message({ content: 'https://1fichier.com/?abc' }));
@@ -115,9 +115,7 @@ describe('AdminTicketRelay', () => {
       expect(ticketService.open).toHaveBeenCalledWith(
         TicketCategory.ManualDownload,
         null,
-        {
-          url: 'https://1fichier.com/?abc',
-        },
+        { url: 'https://1fichier.com/?abc', requestedBy: 'discord:admin' },
         expect.anything(),
       );
       expect(tickets.bind).toHaveBeenCalledWith('manual-1', 'discord', 'root', 'msg-1');

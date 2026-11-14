@@ -175,7 +175,7 @@ export class AdminTicketRelay implements AdminInbox, OnModuleInit, OnModuleDestr
     // Spontaneous message with a link in the channel itself → manual download ticket.
     const url = message.inConversation ? null : parseSpontaneousUrl(message.content);
     if (url) {
-      await this.openManualDownload(url, message.ref);
+      await this.openManualDownload(url, message.ref, this.actorOf(message.adminId));
     }
     return null;
   }
@@ -209,11 +209,11 @@ export class AdminTicketRelay implements AdminInbox, OnModuleInit, OnModuleDestr
     return outcome.status === 'failed' ? 'failed' : 'succeeded';
   }
 
-  private async openManualDownload(url: string, messageRef: string): Promise<void> {
+  private async openManualDownload(url: string, messageRef: string, requestedBy: string): Promise<void> {
     const ticket = await this.ticketService.open(
       TicketCategory.ManualDownload,
       null,
-      { url },
+      { url, requestedBy },
       { title: `Téléchargement manuel — ${url.slice(0, 80)}` },
     );
     // Bind the admin's own message as root before the created-event listener materializes

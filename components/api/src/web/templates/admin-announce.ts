@@ -83,7 +83,7 @@ const recipientRow = (user: UserEntity, checked: boolean): string => `
   <label class="recipient">
     <input type="checkbox" name="users" value="${escapeHtml(user.id)}" ${checked ? 'checked' : ''} />
     <span>${escapeHtml(user.name)}</span>
-    <span class="channel">${CHANNEL_ICONS[user.messagingKey] ?? ''} ${escapeHtml(user.messagingKey)}</span>
+    <span class="channel">${CHANNEL_ICONS[user.messagingKey ?? ''] ?? ''} ${escapeHtml(user.messagingKey ?? '')}</span>
   </label>
 `;
 

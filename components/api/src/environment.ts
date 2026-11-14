@@ -34,7 +34,6 @@ export const environmentVariablesSchema = z
     USER_MESSAGING_QUIET_HOURS: z.string().default('00:00-07:00'),
     USER_MESSAGING_TIMEZONE: z.string().default('Europe/Paris'),
     KIDS_MAX_PARENTAL_RATING: z.coerce.number().int().min(0).default(10),
-    ADMIN_USER_NAME: z.string().optional(),
     DATABASE_HOST: z.string(),
     DATABASE_PORT: z.coerce.number(),
     DATABASE_NAME: z.string(),
@@ -193,7 +192,6 @@ export const environmentVariablesSchema = z
       seriesFolder: env.SERIES_FOLDER,
       playerRoot: env.JELLYFIN_LIBRARY_ROOT,
       kidsMaxParentalRating: env.KIDS_MAX_PARENTAL_RATING,
-      adminUserName: env.ADMIN_USER_NAME ?? null,
     },
     namingAudit: {
       jellyfinLibraryRoot: env.JELLYFIN_LIBRARY_ROOT,

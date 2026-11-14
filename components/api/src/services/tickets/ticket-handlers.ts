@@ -324,7 +324,7 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
       return {
         status: 'progress',
         message: 'Destination notée : appliquée dès l’identification',
-        payloadPatch: { destination },
+        payloadPatch: { destination, destinationBy: actor },
       };
     }
     const problem = await this.destinations?.apply(payload.imdbId, destination, actor);
@@ -334,9 +334,10 @@ export class TicketHandlersService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async placeIdentified(payload: ManualDownloadPayload, imdbId: string): Promise<void> {
+    const actor = payload.destinationBy ?? payload.requestedBy ?? SYSTEM_ACTOR;
     const outcome = payload.destination
-      ? this.destinations?.apply(imdbId, payload.destination, SYSTEM_ACTOR)
-      : this.destinations?.applyDefault(imdbId, SYSTEM_ACTOR);
+      ? this.destinations?.apply(imdbId, payload.destination, actor)
+      : this.destinations?.applyDefault(imdbId, actor);
     await Promise.resolve(outcome).catch((error: unknown) => {
       TicketHandlersService.logger.warn(`Destination of ${imdbId} not applied: ${describeError(error)}`);
     });

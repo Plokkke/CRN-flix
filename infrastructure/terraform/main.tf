@@ -111,7 +111,7 @@ resource "docker_container" "api" {
   stop_timeout  = local.shutdown_timeout_s + 10
   security_opts = ["no-new-privileges:true"]
 
-  env = concat(local.engine_env, local.admin_env, local.indexer_env)
+  env = concat(local.engine_env, local.indexer_env)
 
   networks_advanced {
     name = docker_network.app.name

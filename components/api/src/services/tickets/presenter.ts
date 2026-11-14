@@ -164,7 +164,10 @@ function userApprovalView(ticket: TicketEntity, user: UserEntity | null | undefi
   return {
     title: ticket.title,
     tone: 'info',
-    fields: user ? [{ name: _.capitalize(user.messagingKey), value: user.messagingId }] : [],
+    fields:
+      user?.messagingKey && user.messagingId
+        ? [{ name: _.capitalize(user.messagingKey), value: user.messagingId }]
+        : [],
     footer: null,
     operations: OPERATIONS_BY_CATEGORY[TicketCategory.UserApproval],
   };

@@ -34,8 +34,6 @@ locals {
     "GMAIL_PASSWORD=${local.secrets["gmail_password"]}",
   ]
 
-  # The admin's own subscriber name (users.name), kept in sops: manual downloads kept for the admin go to its personal shelf.
-  admin_env = can(local.secrets["admin_user_name"]) ? ["ADMIN_USER_NAME=${local.secrets["admin_user_name"]}"] : []
 
   indexer_env = concat(
     [

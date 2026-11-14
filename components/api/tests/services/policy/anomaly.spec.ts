@@ -163,7 +163,6 @@ describe('LibraryShelves with the anomaly guard', () => {
       seriesFolder: 'series',
       playerRoot: '/medias',
       kidsMaxParentalRating: 10,
-      adminUserName: null,
     });
     const title: LibraryTitle = { section: 'movies', folder: 'Film [imdbid-tt1]', imdbId: 'tt1' };
     await fs.mkdir(path.join(root, 'store', 'movies', title.folder), { recursive: true });

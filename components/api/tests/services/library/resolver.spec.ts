@@ -91,7 +91,6 @@ describe('LibraryAccess', () => {
     seriesFolder: 'series',
     playerRoot: '/medias',
     kidsMaxParentalRating: 10,
-    adminUserName: null,
   };
   const fs = (personalOf: string[]) => ({
     mkdir: jest.fn().mockResolvedValue(undefined),

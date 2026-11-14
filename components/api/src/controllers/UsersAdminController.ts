@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Header, Param, Post, Query, Req, Res, UseFilters, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 
+import { Config } from '@/app.module';
 import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
 import { AdminSessionGuard } from '@/guards/admin-session.guard';
 import { ContextService } from '@/services/context';
@@ -15,19 +17,22 @@ const maxStreamsFormSchema = z.object({ maxStreams: z.coerce.number().int().min(
 const profileFormSchema = z.object({ profile: z.enum(PROFILES) });
 
 /** A live form (JSON) gets the message; a plain form goes back to the page with it. */
-function answer(req: Request, res: Response, message: string, error = false): void {
+function answer(req: Request, res: Response, message: string, error = false, reload = false): void {
   if (String(req.headers.accept ?? '').includes('application/json')) {
-    res.status(error ? 400 : 200).json({ message, error });
+    res.status(error ? 400 : 200).json({ message, error, reload });
     return;
   }
   res.redirect(`/admin/users?message=${encodeURIComponent(message)}`);
 }
+
+const adminOf = (req: Request): string | null => (req as Request & { adminUserId?: string }).adminUserId ?? null;
 
 @Controller('admin/users')
 @UseGuards(AdminSessionGuard)
 @UseFilters(SessionAuthRedirectFilter)
 export class UsersAdminController {
   constructor(
+    private readonly config: ConfigService<Config, true>,
     private readonly contextService: ContextService,
     private readonly usersRepository: UsersRepository,
     private readonly playerAccounts: PlayerAccountsService,
@@ -36,11 +41,65 @@ export class UsersAdminController {
 
   @Get()
   @Header('content-type', 'text/html')
-  async list(@Query('message') message?: string): Promise<string> {
-    const users = (await this.usersRepository.list())
+  async list(@Req() req: Request, @Query('message') message?: string): Promise<string> {
+    const [all, unlinked] = await Promise.all([
+      this.usersRepository.list(),
+      this.playerAccounts.listUnlinked().catch(() => null),
+    ]);
+    const users = all
       .filter((user) => user.status === UserStatus.Active)
       .sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
-    return adminUsersTemplate({ serviceName: this.contextService.name, users, flashMessage: message });
+    return adminUsersTemplate({
+      serviceName: this.contextService.name,
+      users,
+      unlinked,
+      adminIds: this.adminIds,
+      currentAdminId: adminOf(req),
+      flashMessage: message,
+    });
+  }
+
+  /** Takes a player account the engine does not know in; the page is reloaded (a new line). */
+  @Post('adopt')
+  async adopt(
+    @Body('accountId') accountId: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    try {
+      const user = await this.playerAccounts.adopt(String(accountId ?? ''));
+      answer(req, res, `${user.name} intégré`, false, true);
+    } catch (error) {
+      answer(req, res, error instanceof Error ? error.message : String(error), true);
+    }
+  }
+
+  /** The Discord admin this account belongs to; an admin has one account, the previous one is let go. */
+  @Post(':id/admin')
+  async setAdmin(
+    @Param('id') id: string,
+    @Body('adminId') adminId: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const user = await this.usersRepository.get(id);
+    const wanted = adminId ? adminId : null;
+    if (!user || (wanted !== null && !this.adminIds.includes(wanted))) {
+      answer(req, res, user ? 'Admin inconnu' : 'Utilisateur introuvable', true);
+      return;
+    }
+    await this.usersRepository.setAdminDiscordId(id, wanted);
+    answer(
+      req,
+      res,
+      wanted ? `${user.name} : compte de l’admin ${wanted}` : `${user.name} : plus lié à un admin`,
+      false,
+      wanted !== null,
+    );
+  }
+
+  private get adminIds(): string[] {
+    return this.config.get('administration').adminIds;
   }
 
   /** Saved first, then applied: a player refusal is caught up by the next player-sync. */

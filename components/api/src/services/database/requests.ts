@@ -262,6 +262,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                                     'jellyfinId', u.jellyfin_id,
                                     'messagingKey', u.messaging_key,
                                     'messagingId', u.messaging_id,
+                                    'adminDiscordId', u.admin_discord_id,
                                     'status', u.status,
                                     'createdAt', u.created_at,
                                     'updatedAt', u.updated_at
@@ -424,6 +425,7 @@ export class RequestsRepository extends Emitter<RequestEvents> implements OnModu
                   'jellyfinId', u.jellyfin_id,
                   'messagingKey', u.messaging_key,
                   'messagingId', u.messaging_id,
+                  'adminDiscordId', u.admin_discord_id,
                   'status', u.status,
                   'createdAt', u.created_at,
                   'updatedAt', u.updated_at

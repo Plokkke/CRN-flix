@@ -116,7 +116,11 @@ export class TicketsAdminController {
 
   /** Same as posting a link in the admin channel: the ticket's first attempt starts on its own. */
   @Post('manual-download')
-  async startManualDownload(@Body('url') url: string | undefined, @Res() res: Response): Promise<void> {
+  async startManualDownload(
+    @Body('url') url: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
     const link = url?.trim() ?? '';
     if (!/^https?:\/\//.test(link)) {
       res.redirect(`/admin/tickets?message=${encodeURIComponent('Lien invalide : http(s) attendu')}`);
@@ -125,7 +129,7 @@ export class TicketsAdminController {
     const ticket = await this.ticketService.open(
       TicketCategory.ManualDownload,
       null,
-      { url: link },
+      { url: link, requestedBy: `dashboard:${(req as Request & { adminUserId?: string }).adminUserId ?? 'unknown'}` },
       { title: `Téléchargement manuel — ${link.slice(0, 80)}` },
     );
     res.redirect(`/admin/tickets/${ticket.id}`);

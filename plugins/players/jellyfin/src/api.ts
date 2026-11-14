@@ -13,6 +13,7 @@ export type JellyfinUser = {
 export type JellyfinApiUser = {
   Id: string;
   Name: string;
+  Policy?: { IsAdministrator?: boolean };
 };
 
 export const jellyfinConfigSchema = z
