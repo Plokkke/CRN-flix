@@ -51,14 +51,14 @@ describe('PlayerAccountsService', () => {
     expect(player.applyAccountPolicy).toHaveBeenCalledWith('jf1', { maxStreams: 3 });
   });
 
-  it('leaves alone an account the player administers itself', async () => {
+  it('gives a player administrator its shelves like any viewer, without adopting nor imposing a stream limit', async () => {
     const { player, usersRepository, service } = build([]);
     player.accountMaxStreams.mockResolvedValue(null);
 
     await service.apply(user({ maxStreams: null }));
 
     expect(usersRepository.setMaxStreams).not.toHaveBeenCalled();
-    expect(player.applyAccountPolicy).not.toHaveBeenCalled();
+    expect(player.applyAccountPolicy).toHaveBeenCalledWith('jf1', {});
   });
 
   it('applies the rules to every player account, the stream limit only where the database knows it', async () => {

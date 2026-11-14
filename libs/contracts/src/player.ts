@@ -76,7 +76,10 @@ export interface Player {
   listAccounts(): Promise<PlayerAccount[]>;
   /** The account's current stream limit, null when the player's own administrators manage it. */
   accountMaxStreams(accountId: string): Promise<number | null>;
-  /** Applies the service's viewing rules to the account; false when nothing had to change. */
+  /**
+   * Applies the service's viewing rules to the account; false when nothing had to change. An
+   * administrator keeps its rights: only what it sees and a given stream limit apply.
+   */
   applyAccountPolicy(accountId: string, policy: AccountPolicy): Promise<boolean>;
   showcase(kind: ShowcaseKind, count: number): Promise<ShowcaseItem[]>;
 }

@@ -99,7 +99,7 @@ export const adminUsersTemplate = (params: AdminUsersParams): string => {
   const content = `
     <p><a href="/admin">← Dashboard</a></p>
     <h2>👥 Comptes de visionnage</h2>
-    <p class="hint">Chaque changement s’applique tout de suite. Flux simultanés : 0 = illimité. Profil : les étagères visibles. Admin Discord : ce que cet admin garde pour lui (« Ma collection ») arrive sur l’étagère personnelle de ce compte. Les administrateurs du lecteur ne sont jamais modifiés.</p>
+    <p class="hint">Chaque changement s’applique tout de suite. Flux simultanés : 0 = illimité. Profil : les étagères visibles. Admin Discord : ce que cet admin garde pour lui (« Ma collection ») arrive sur l’étagère personnelle de ce compte. Un administrateur du lecteur garde ses droits : seules ses étagères (et une limite de flux fixée ici) suivent son profil.</p>
     ${liveFlashSlot(params.flashMessage)}
     <table class="users"><thead><tr><th>Compte</th><th>Messagerie</th><th>Flux simultanés</th><th>Profil</th><th>Admin Discord</th></tr></thead>
       <tbody>${params.users.map((user) => userRow(user, params)).join('')}</tbody></table>

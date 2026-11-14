@@ -40,6 +40,8 @@ const sameValue = (a: unknown, b: unknown): boolean =>
 /**
  * The account's policy with the viewer rules applied, or null when it already complies.
  * `enabledFolders` (library ids) replaces "every library" when the engine decides the access.
+ * An administrator keeps its rights and its own settings: only what it sees (libraries,
+ * parental limit) and a stream limit the engine was given apply, like any viewer.
  */
 export function viewerPolicy(
   current: JellyfinUserPolicy,
@@ -47,7 +49,7 @@ export function viewerPolicy(
   enabledFolders?: string[],
 ): JellyfinUserPolicy | null {
   const wanted: Record<string, unknown> = {
-    ...VIEWER_POLICY,
+    ...(!current.IsAdministrator && VIEWER_POLICY),
     ...(policy.maxStreams !== undefined && { MaxActiveSessions: policy.maxStreams }),
     ...(enabledFolders && { EnableAllFolders: false, EnabledFolders: [...enabledFolders].sort() }),
     ...(policy.maxParentalRating !== undefined && { MaxParentalRating: policy.maxParentalRating }),
@@ -184,7 +186,6 @@ export class JellyfinPlayer implements Player {
     return policy.IsAdministrator ? null : policy.MaxActiveSessions;
   }
 
-  /** Administrators are the owner's own accounts: never touched. */
   async ensureLibraries(libraries: PlayerLibrary[]): Promise<number> {
     const folders = await this.jellyfin.listVirtualFolders();
     const served = new Set(folders.flatMap((folder) => folder.Locations.map(withoutTrailingSlash)));
@@ -217,9 +218,6 @@ export class JellyfinPlayer implements Player {
 
   async applyAccountPolicy(accountId: string, policy: AccountPolicy): Promise<boolean> {
     const current = await this.jellyfin.getUserPolicy(accountId);
-    if (current.IsAdministrator) {
-      return false;
-    }
     const enabled = policy.libraries && enabledFolderIds(await this.jellyfin.listVirtualFolders(), policy.libraries);
     const next = viewerPolicy(current, policy, enabled);
     if (!next) {

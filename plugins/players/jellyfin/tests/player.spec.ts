@@ -152,13 +152,27 @@ describe('JellyfinPlayer', () => {
       expect(jellyfin.setUserPolicy).not.toHaveBeenCalled();
     });
 
-    it('never touches an administrator, whose stream limit is not the engine’s', async () => {
+    it('gives an administrator the libraries of its profile, keeping its rights and its own settings', async () => {
       const { jellyfin, player } = buildPlayer();
-      jellyfin.getUserPolicy.mockResolvedValue({ ...viewer, IsAdministrator: true, MaxActiveSessions: 0 });
+      const admin = {
+        ...viewer,
+        IsAdministrator: true,
+        MaxActiveSessions: 0,
+        EnableAllFolders: true,
+        EnableVideoPlaybackTranscoding: true,
+      };
+      jellyfin.getUserPolicy.mockResolvedValue(admin);
 
-      await expect(player.applyAccountPolicy('jf-1', { maxStreams: 1 })).resolves.toBe(false);
+      await player.applyAccountPolicy('jf-1', {
+        libraries: { paths: ['/medias/shelves/kids/movies'], managedRoot: '/medias' },
+      });
+
+      expect(jellyfin.setUserPolicy).toHaveBeenCalledWith('jf-1', {
+        ...admin,
+        EnableAllFolders: false,
+        EnabledFolders: expect.any(Array),
+      });
       await expect(player.accountMaxStreams('jf-1')).resolves.toBeNull();
-      expect(jellyfin.setUserPolicy).not.toHaveBeenCalled();
     });
 
     it('limits the account to the libraries it is given, leaving the ones outside the engine’s root visible', async () => {
