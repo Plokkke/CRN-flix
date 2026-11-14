@@ -71,6 +71,8 @@ const WEB_CSS = `
         background: var(--input-bg);
         color: var(--text);
       }
+      input[type='checkbox'], input[type='radio'] { width: auto; margin: 0 8px 0 0; vertical-align: middle; }
+      label:has(> input[type='checkbox'], > input[type='radio']) { font-weight: 400; }
       input:focus, select:focus, textarea:focus {
         outline: none;
         border-color: var(--heading);
