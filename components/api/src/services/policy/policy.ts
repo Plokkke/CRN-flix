@@ -1,7 +1,6 @@
 import { createHash } from 'crypto';
 
 import { Logger } from '@nestjs/common';
-import { z } from 'zod';
 
 import {
   admit,
@@ -24,10 +23,6 @@ import {
 import { FACTS_SCHEMA_VERSION, MediaFactsService } from '@/services/media-facts';
 
 import { Profile, SHELVES } from './shelves';
-
-export const policyConfigSchema = z.object({ mode: z.enum(['off', 'dry-run', 'enforce']) });
-
-export type PolicyConfig = z.infer<typeof policyConfigSchema>;
 
 /** Bump when the assessment logic changes: every title is assessed again. */
 const ASSESSMENT_VERSION = 1;
@@ -57,7 +52,6 @@ export class PolicyService {
   private static readonly logger = new Logger(PolicyService.name);
 
   constructor(
-    private readonly config: PolicyConfig,
     private readonly kinds: PolicyKinds,
     private readonly rules: PolicyRulesRepository,
     private readonly assessments: PolicyAssessmentsRepository,
@@ -66,10 +60,6 @@ export class PolicyService {
     private readonly medias: MediasRepository,
     private readonly overrideOf: (imdbId: string) => Promise<ShelfOverride> = async () => null,
   ) {}
-
-  get mode(): PolicyConfig['mode'] {
-    return this.config.mode;
-  }
 
   /** The title's outcomes under the current rules, assessed now when stale; null when the title is unknown. */
   async outcomesOf(imdbId: string): Promise<RuleOutcome[] | null> {
@@ -150,7 +140,7 @@ export class PolicyService {
       }
     }
     if (imdbIds.length > 0) {
-      PolicyService.logger.log(`Assessed ${imdbIds.length - failed}/${imdbIds.length} title(s) (${this.mode})`);
+      PolicyService.logger.log(`Assessed ${imdbIds.length - failed}/${imdbIds.length} title(s)`);
     }
   }
 
@@ -177,7 +167,7 @@ export class PolicyService {
   /** Standard is where nearly everything goes: only the other placements are worth a line. */
   private logPlacement(imdbId: string, placement: Placement): void {
     if (!(placement.kind === 'shelf' && placement.shelf === 'standard')) {
-      PolicyService.logger.log(`Policy (${this.mode}): ${imdbId} → ${describePlacement(placement)}`);
+      PolicyService.logger.log(`Policy: ${imdbId} → ${describePlacement(placement)}`);
     }
   }
 }

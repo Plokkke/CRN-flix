@@ -22,7 +22,6 @@ describe('adminPoliciesTemplate', () => {
   it('lists the rules with what they hold back, and the restricted titles', () => {
     const html = adminPoliciesTemplate({
       serviceName: 'CRN-Flix',
-      mode: 'dry-run',
       rules: [rule],
       kinds: KINDS,
       audiences: ['everyone', 'kids', 'standard'],
@@ -39,7 +38,6 @@ describe('adminPoliciesTemplate', () => {
     expect(html).toContain('Politique &lt;violences&gt;');
     expect(html).toContain('1 refusé(s)');
     expect(html).toContain('2 invalide(s)');
-    expect(html).toContain('dry-run : les titres sont évalués, personne n’est refusé');
     expect(html).toContain('Restreints (1)');
   });
 });

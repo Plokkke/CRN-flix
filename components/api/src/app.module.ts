@@ -64,7 +64,6 @@ import { libraryConfigSchema } from '@/services/library/paths';
 import { mediaPathsConfigSchema } from '@/services/media-labelizer';
 import { quietHoursConfigSchema } from '@/services/messaging/user/quiet-hours';
 import { namingAuditConfigSchema } from '@/services/naming-audit';
-import { policyConfigSchema } from '@/services/policy/policy';
 import { StartupRecoveryService } from '@/services/startup-recovery';
 
 export const configSchema = z.object({
@@ -78,7 +77,6 @@ export const configSchema = z.object({
   jellyfin: jellyfinConfigSchema,
   mailing: emailConfigSchema,
   userMessaging: z.object({ mode: z.enum(['send', 'dry-run']), quietHours: quietHoursConfigSchema }),
-  policy: policyConfigSchema,
   library: libraryConfigSchema,
   discord: discordConfigSchema,
   indexer: z.object({
@@ -134,7 +132,6 @@ export function loadConfig(env: EnvironmentVariables): Config {
     },
     mailing: env.mailing,
     userMessaging: env.userMessaging,
-    policy: env.policy,
     library: env.library,
   });
 }

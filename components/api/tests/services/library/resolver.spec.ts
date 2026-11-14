@@ -11,7 +11,6 @@ import { PolicyService } from '@/services/policy/policy';
 const TITLE = { section: 'movies' as const, folder: 'War [imdbid-tt1]', imdbId: 'tt1' };
 
 function build(opts: {
-  mode: string;
   placement?: Placement | Error;
   overrides?: Map<string, string>;
   personal?: Map<string, string[]>;
@@ -22,7 +21,6 @@ function build(opts: {
   );
   const resolver = new PolicyShelfResolver(
     {
-      mode: opts.mode,
       placementOf,
       storedPlacements: jest.fn().mockResolvedValue(opts.stored ?? new Map()),
     } as unknown as PolicyService,
@@ -41,19 +39,8 @@ function build(opts: {
 }
 
 describe('PolicyShelfResolver', () => {
-  it('keeps everything on standard until the policy is enforced, the admin’s choice aside', async () => {
-    const { resolver, placementOf } = build({ mode: 'dry-run', overrides: new Map([['tt2', 'none']]) });
-
-    const shelvesOf = await resolver.shelvesOf([TITLE, { ...TITLE, imdbId: 'tt2', folder: 'Mine' }]);
-
-    expect(shelvesOf('tt1')).toEqual({ shared: 'standard', personal: [] });
-    expect(shelvesOf('tt2')).toEqual({ shared: null, personal: [] });
-    expect(placementOf).not.toHaveBeenCalled();
-  });
-
   it('gives the war film to the son on his own shelf, leaving it on standard for the others', async () => {
     const { resolver } = build({
-      mode: 'enforce',
       placement: { kind: 'shelf', shelf: 'standard', forced: false },
       personal: new Map([['tt1', ['son', 'dad']]]),
     });
@@ -65,7 +52,6 @@ describe('PolicyShelfResolver', () => {
 
   it('shows a restricted title on personal shelves only', async () => {
     const { resolver } = build({
-      mode: 'enforce',
       placement: { kind: 'restricted', refusals: [] },
       personal: new Map([['tt1', ['dad']]]),
     });
@@ -75,7 +61,6 @@ describe('PolicyShelfResolver', () => {
 
   it('passes the admin’s choice to the placement and keeps a title it cannot place off the shared shelves', async () => {
     const { resolver, placementOf } = build({
-      mode: 'enforce',
       placement: new Error('TMDB down'),
       overrides: new Map([['tt1', 'kids']]),
     });
@@ -88,7 +73,6 @@ describe('PolicyShelfResolver', () => {
 describe('PolicyShelfResolver on a page', () => {
   it('reads the stored placements and never assesses a title not assessed yet', async () => {
     const { resolver, placementOf } = build({
-      mode: 'enforce',
       stored: new Map([['tt1', { kind: 'shelf', shelf: 'kids', forced: false } as Placement]]),
     });
 
@@ -102,7 +86,6 @@ describe('PolicyShelfResolver on a page', () => {
 
 describe('LibraryAccess', () => {
   const config = {
-    layout: 'shelves' as const,
     mediasPath: '/data/medias',
     moviesFolder: 'movies',
     seriesFolder: 'series',
@@ -185,13 +168,6 @@ describe('LibraryAccess', () => {
         'Films · son: personal/movies',
         'Séries · son: personal/series',
       ],
-    );
-  });
-
-  it('decides nothing with the legacy layout', async () => {
-    const legacy = { ...config, layout: 'legacy' as const };
-    await expect(new LibraryAccess(legacy, new LibraryPaths(legacy)).policyOf(user('dad', 'adult'))).resolves.toEqual(
-      {},
     );
   });
 });

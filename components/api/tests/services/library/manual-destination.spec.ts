@@ -6,7 +6,7 @@ import { LibraryShelves } from '@/services/library/shelves';
 import { PolicyGate } from '@/services/policy/gate';
 import { PolicyService } from '@/services/policy/policy';
 
-function build(opts: { adminUserName?: string | null; mode?: string; restricted?: boolean } = {}) {
+function build(opts: { adminUserName?: string | null; restricted?: boolean } = {}) {
   const overrides = { set: jest.fn().mockResolvedValue(undefined) };
   const exemptions = {
     grantGlobal: jest.fn().mockResolvedValue(undefined),
@@ -14,7 +14,6 @@ function build(opts: { adminUserName?: string | null; mode?: string; restricted?
   };
   const users = { getByName: jest.fn().mockResolvedValue({ id: 'admin-user' }) };
   const policy = {
-    mode: opts.mode ?? 'enforce',
     placementOf: jest
       .fn()
       .mockResolvedValue(
@@ -74,20 +73,18 @@ describe('ManualDestinations', () => {
     const allowed = build();
     await allowed.destinations.applyDefault('tt1', 'system');
     expect(allowed.overrides.set).not.toHaveBeenCalled();
-
-    const dryRun = build({ mode: 'dry-run', restricted: true });
-    await dryRun.destinations.applyDefault('tt1', 'system');
-    expect(dryRun.overrides.set).not.toHaveBeenCalled();
   });
 });
 
 describe('PolicyGate and an admin personal download', () => {
-  it('publishes it once a subscriber’s request is admitted, in every mode', async () => {
+  it('publishes it once a subscriber’s request is admitted', async () => {
     const releaseManualHold = jest.fn().mockResolvedValue(true);
     const gate = new PolicyGate(
-      { mode: 'dry-run' } as unknown as PolicyService,
-      {} as unknown as UsersRepository,
-      {} as unknown as PolicyRefusalsRepository,
+      {
+        admissionsOf: jest.fn().mockResolvedValue(new Map([['u1', { admitted: true, via: 'shelf' }]])),
+      } as unknown as PolicyService,
+      { get: jest.fn().mockResolvedValue({ id: 'u1', profile: 'adult' }) } as unknown as UsersRepository,
+      { lift: jest.fn().mockResolvedValue(undefined) } as unknown as PolicyRefusalsRepository,
       releaseManualHold,
     );
 

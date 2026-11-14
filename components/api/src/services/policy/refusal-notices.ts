@@ -38,9 +38,6 @@ export class PolicyRefusalNotices {
   ) {}
 
   async notify(): Promise<void> {
-    if (this.policy.mode !== 'enforce') {
-      return;
-    }
     const pending = groupByUser(await this.refusals.listToNotify(BATCH));
     for (const [userId, refusals] of pending) {
       try {

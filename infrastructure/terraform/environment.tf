@@ -27,8 +27,6 @@ locals {
     "FETCHR_DOWNLOADS_PREFIX=${var.fetchr_downloads_prefix}",
     "DOWNLOADS_PATH=${local.data_path}/downloads",
     "MEDIAS_PATH=${local.data_path}/medias",
-    "POLICY_MODE=${var.policy_mode}",
-    "LIBRARY_LAYOUT=${var.library_layout}",
     "DISCORD_BOT_TOKEN=${local.secrets["discord_bot_token"]}",
     "DISCORD_CHANNEL_ID=${local.secrets["discord_channel_id"]}",
     "DISCORD_ADMIN_IDS=${local.secrets["discord_admin_ids"]}",

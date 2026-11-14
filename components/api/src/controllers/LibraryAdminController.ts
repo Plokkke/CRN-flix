@@ -12,11 +12,9 @@ import {
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 
-import { Config } from '@/app.module';
 import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
 import { AdminSessionGuard } from '@/guards/admin-session.guard';
 import { ContextService } from '@/services/context';
@@ -80,7 +78,6 @@ export class LibraryAdminController {
   private static readonly logger = new Logger(LibraryAdminController.name);
 
   constructor(
-    private readonly config: ConfigService<Config, true>,
     private readonly contextService: ContextService,
     private readonly titles: LibraryTitlesRepository,
     private readonly overrides: ShelfOverridesRepository,
@@ -103,8 +100,6 @@ export class LibraryAdminController {
     const { rows, users } = await this.view();
     return adminLibraryTemplate({
       serviceName: this.contextService.name,
-      layout: this.config.get('library').layout,
-      mode: this.policy.mode,
       filter,
       unplaced: rows.filter((row) => row.unplaced).length,
       ...selectRows(rows, filter),
@@ -207,11 +202,8 @@ export class LibraryAdminController {
     return `dashboard:${(req as Request & { adminUserId?: string }).adminUserId ?? 'unknown'}`;
   }
 
-  /** The links follow in the background (shelves layout only: legacy has no links); the page shows the decision at once. */
+  /** The links follow in the background; the page shows the decision at once. */
   private reshelve(): void {
-    if (this.config.get('library').layout !== 'shelves') {
-      return;
-    }
     this.shelves.reconcile().catch((error: unknown) => {
       LibraryAdminController.logger.warn(`Reshelving failed: ${describeError(error)}`);
     });

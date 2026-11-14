@@ -236,7 +236,9 @@ Préalable : épingler l'image Jellyfin (`jellyfin/jellyfin` sans tag aujourd'hu
 - Job Wikidata qui propose des entrées `credits` (optionnel).
 - Retour sur la page d'appel après connexion (aujourd'hui : connexion puis `/me`, où le titre refusé a son lien « Motif et recours »).
 
-**Mise en service** (dans l'ordre) : `ADMIN_USER_NAME` ; `LIBRARY_LAYOUT=shelves` (adoption de l'existant au démarrage, accès Jellyfin par profil) ; créer les règles sur `/admin/policies` ; `POLICY_MODE=dry-run` et relire « Où vont les titres » ; `POLICY_MODE=enforce` (mails de refus, étagère `kids`, anomalies).
+**DÉCIDÉ (2026-11-14) — en service, sans retour arrière** : étagères adoptées en prod (534 titres), policy appliquée ; `POLICY_MODE` et `LIBRARY_LAYOUT` supprimés du code et de Terraform. « Dépublier » une anomalie **supprime les fichiers** du stock (pas de stockage pour un titre inaccessible).
+
+~~Mise en service~~ (historique) — **Mise en service** (dans l'ordre) : `ADMIN_USER_NAME` ; `LIBRARY_LAYOUT=shelves` (adoption de l'existant au démarrage, accès Jellyfin par profil) ; créer les règles sur `/admin/policies` ; `POLICY_MODE=dry-run` et relire « Où vont les titres » ; `POLICY_MODE=enforce` (mails de refus, étagère `kids`, anomalies).
 
 Écarts d'implémentation : la policy ne touche jamais `media_requests.status` (un refus n'est pas un rejet admin : pas de notification « refusé » générique, un autre demandeur peut être admis) ; les règles actuelles jugent toutes le contenu, donc l'évaluation se fait **une fois par titre** (`policy_assessments`, clé = empreinte des règles et de leurs entrées) et l'admission d'un demandeur s'en déduit avec son profil et ses dérogations. Les règles `requester` sont refusées comme invalides tant qu'aucune n'existe. Les étagères sont une constante de l'engine (`services/policy/shelves.ts`) jusqu'à l'étape 2.
 

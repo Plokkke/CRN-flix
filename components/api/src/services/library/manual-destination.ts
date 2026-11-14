@@ -61,7 +61,7 @@ export class ManualDestinations {
   /** No choice made: what the rules restrict goes to the admin's collection, the rest where the rules put it. */
   async applyDefault(imdbId: string, actor: string): Promise<void> {
     const placement = await this.policy.placementOf(imdbId).catch(() => null);
-    if (this.policy.mode === 'enforce' && placement?.kind === 'restricted') {
+    if (placement?.kind === 'restricted') {
       const problem = await this.apply(imdbId, 'personal', actor);
       if (problem) {
         ManualDestinations.logger.warn(`Restricted manual download ${imdbId} left off the shelves: ${problem}`);

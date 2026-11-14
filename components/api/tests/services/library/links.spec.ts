@@ -2,7 +2,6 @@ import { desiredLinks, diffLinks, linkTo } from '@/services/library/links';
 import { LibraryPaths } from '@/services/library/paths';
 
 const paths = new LibraryPaths({
-  layout: 'shelves',
   mediasPath: '/data/medias',
   moviesFolder: 'movies',
   seriesFolder: 'series',

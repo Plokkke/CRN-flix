@@ -11,12 +11,6 @@ export const AUDIENCE_LABELS: Record<string, string> = {
   standard: 'Étagère standard (ce qu’elle admet)',
 };
 
-const MODE_LABELS: Record<string, string> = {
-  off: 'désactivée : rien n’est évalué',
-  'dry-run': 'dry-run : les titres sont évalués, personne n’est refusé',
-  enforce: 'appliquée',
-};
-
 const CSS = `
   .container { max-width: 960px; }
   h2 { color: var(--text); margin: 24px 0 12px 0; font-size: 20px; }
@@ -115,7 +109,6 @@ function overviewSection(overview: PolicyOverview): string {
 
 export type AdminPoliciesParams = {
   serviceName: string;
-  mode: string;
   rules: PolicyRuleEntity[];
   kinds: PolicyKind[];
   audiences: string[];
@@ -130,7 +123,6 @@ export const adminPoliciesTemplate = (params: AdminPoliciesParams): string => {
     ${flash(params.flashMessage, params.flashError)}
     <p><a href="/admin">← Dashboard</a></p>
     <h2>🛡️ Politique</h2>
-    <p>Politique ${escapeHtml(MODE_LABELS[params.mode] ?? params.mode)}.</p>
     <p class="hint">Une règle « tout le monde » qui ne peut pas trancher laisse passer ; une règle d’étagère qui ne peut pas trancher refuse.</p>
     ${params.rules.map((rule) => ruleCard(rule, kindsByName.get(rule.kind), params.overview.counts.get(rule.id))).join('') || '<p class="hint">Aucune règle.</p>'}
     ${newRuleForm(params.kinds, params.audiences)}

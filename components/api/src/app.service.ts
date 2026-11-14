@@ -93,24 +93,18 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       this.listenPlannedDownloadEvents(),
     );
 
-    if (this.config.get('library').layout === 'shelves') {
-      void this.shelveLibrary();
-    }
+    void this.shelveLibrary();
 
     if (process.env.NODE_ENV === 'production') {
-      if (this.config.get('library').layout === 'shelves') {
-        this.registerCronJob('library-shelves-job', '*/15 * * * *', () => this.libraryShelves.reconcile());
-      }
+      this.registerCronJob('library-shelves-job', '*/15 * * * *', () => this.libraryShelves.reconcile());
       this.registerCronJob('catalog-sync-job', '*/5 * * * *', () => this.runSync());
       this.registerCronJob('planner-job', '0 * * * *', () => this.planner.runAll());
       this.registerCronJob('player-sync-job', '*/15 * * * *', () => this.playerSync.sync());
       this.registerCronJob('ticket-sync-job', '*/5 * * * *', () => this.ticketReconciler.sync());
       this.registerCronJob('media-titles-job', '20 * * * *', () => this.mediaTitles.backfill());
       this.registerCronJob('media-facts-job', '40 * * * *', () => this.mediaFacts.refresh());
-      if (this.policy.mode !== 'off') {
-        this.registerCronJob('policy-assessment-job', '*/10 * * * *', () => this.policy.refresh());
-        this.registerCronJob('policy-refusal-notices-job', '*/5 * * * *', () => this.policyRefusalNotices.notify());
-      }
+      this.registerCronJob('policy-assessment-job', '*/10 * * * *', () => this.policy.refresh());
+      this.registerCronJob('policy-refusal-notices-job', '*/5 * * * *', () => this.policyRefusalNotices.notify());
       this.registerCronJob('notification-redelivery-job', '*/5 * * * *', () => this.redelivery.redeliver());
       this.registerCronJob('scheduled-announcements-job', '* * * * *', () => this.scheduledAnnouncements.sendDue());
     }

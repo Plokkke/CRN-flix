@@ -38,7 +38,7 @@ const IMDB_TAG = /\[imdbid-(tt\d+)\]/;
 
 type Fs = Pick<
   typeof fsPromises,
-  'readdir' | 'lstat' | 'readlink' | 'symlink' | 'unlink' | 'mkdir' | 'rename' | 'stat' | 'writeFile'
+  'readdir' | 'lstat' | 'readlink' | 'symlink' | 'unlink' | 'mkdir' | 'rename' | 'stat' | 'writeFile' | 'rm'
 >;
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -47,7 +47,8 @@ const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).
 
 /**
  * Keeps the shelves (the folders the player scans) in line with where each title should be
- * shown: links are created and removed, never a file of the store. Real folders found in the
+ * shown: links are created and removed, never a file of the store (except a title an admin
+ * takes down, see `discard`). Real folders found in the
  * standard shelf (the library as it was before the store) are adopted: moved to the store and
  * replaced by a link of the same name, so the player keeps seeing the very same paths.
  */
@@ -70,6 +71,24 @@ export class LibraryShelves {
   async titlePlaced(title: LibraryTitle): Promise<void> {
     await this.titles.record(title);
     await this.reconcile();
+  }
+
+  /**
+   * Deletes the title's folders from the store for good (an admin took it down), then the
+   * links follow. Only folders the store recorded, by their plain name, are ever removed.
+   */
+  async discard(imdbId: string): Promise<number> {
+    const theirs = (await this.titles.list()).filter((title) => title.imdbId === imdbId);
+    for (const title of theirs) {
+      if (!title.folder || path.basename(title.folder) !== title.folder || title.folder.startsWith('.')) {
+        throw new Error(`Refusing to delete an unexpected store folder: ${title.folder}`);
+      }
+      await this.fs.rm(path.join(this.paths.store(title.section), title.folder), { recursive: true, force: true });
+      await this.titles.remove(title);
+    }
+    LibraryShelves.logger.log(`Discarded ${imdbId}: ${theirs.length} store folder(s) deleted`);
+    await this.reconcile();
+    return theirs.length;
   }
 
   /** Coalesces concurrent requests: one pass at a time, plus one more if asked meanwhile. */

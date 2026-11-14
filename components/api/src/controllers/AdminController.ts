@@ -58,9 +58,9 @@ const JOBS = [
   { name: 'notification-redelivery', schedule: 'Every 5 minutes' },
   { name: 'scheduled-announcements', schedule: 'Every minute' },
   { name: 'media-facts', schedule: 'Every hour' },
-  { name: 'policy-assessment', schedule: 'Every 10 minutes (POLICY_MODE dry-run / enforce)' },
-  { name: 'policy-refusal-notices', schedule: 'Every 5 minutes (POLICY_MODE dry-run / enforce)' },
-  { name: 'library-shelves', schedule: 'Every 15 minutes (LIBRARY_LAYOUT=shelves)' },
+  { name: 'policy-assessment', schedule: 'Every 10 minutes' },
+  { name: 'policy-refusal-notices', schedule: 'Every 5 minutes' },
+  { name: 'library-shelves', schedule: 'Every 15 minutes' },
   { name: 'naming-audit', schedule: 'Manual only' },
   { name: 'admin-channel-cleanup', schedule: 'Manual only — wipes the admin channel (pins kept)' },
 ] as const;

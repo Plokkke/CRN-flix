@@ -15,7 +15,7 @@ const refusal = (userId: string, imdbId: string): PolicyRefusalEntity => ({
   notifiedAt: null,
 });
 
-function build(mode: string, pending: PolicyRefusalEntity[], policyRefused = jest.fn().mockResolvedValue(undefined)) {
+function build(pending: PolicyRefusalEntity[], policyRefused = jest.fn().mockResolvedValue(undefined)) {
   const refusals = {
     listToNotify: jest.fn().mockResolvedValue(pending),
     markNotified: jest.fn().mockResolvedValue(undefined),
@@ -33,7 +33,7 @@ function build(mode: string, pending: PolicyRefusalEntity[], policyRefused = jes
   };
   const medias = { titlesOf: jest.fn().mockResolvedValue({ title: 'Movie', frenchTitle: 'Film', year: 2001 }) };
   const notices = new PolicyRefusalNotices(
-    { mode } as unknown as PolicyService,
+    {} as unknown as PolicyService,
     refusals as unknown as PolicyRefusalsRepository,
     users as unknown as UsersRepository,
     medias as unknown as MediasRepository,
@@ -44,7 +44,7 @@ function build(mode: string, pending: PolicyRefusalEntity[], policyRefused = jes
 
 describe('PolicyRefusalNotices', () => {
   it('sends one message per user for every title refused since the last one', async () => {
-    const { notices, refusals, policyRefused } = build('enforce', [
+    const { notices, refusals, policyRefused } = build([
       refusal('u1', 'tt1'),
       refusal('u1', 'tt2'),
       refusal('u2', 'tt1'),
@@ -62,16 +62,9 @@ describe('PolicyRefusalNotices', () => {
 
   it('counts nothing as told when messaging holds it back', async () => {
     const held = jest.fn().mockRejectedValue(new UserMessagingDisabledError('policy refusal', 'in quiet hours'));
-    const { notices, refusals } = build('enforce', [refusal('u1', 'tt1')], held);
+    const { notices, refusals } = build([refusal('u1', 'tt1')], held);
 
     await notices.notify();
     expect(refusals.markNotified).not.toHaveBeenCalled();
-  });
-
-  it('stays silent until the policy is enforced', async () => {
-    const { notices, refusals } = build('dry-run', [refusal('u1', 'tt1')]);
-
-    await notices.notify();
-    expect(refusals.listToNotify).not.toHaveBeenCalled();
   });
 });

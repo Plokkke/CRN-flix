@@ -42,7 +42,7 @@ function build(
     open: jest.fn().mockResolvedValue({ id: 'ticket-1' }),
     resolveById: jest.fn().mockResolvedValue(undefined),
   };
-  const policy = { mode: 'enforce', placementOf: jest.fn().mockResolvedValue(opts.placement ?? RESTRICTED) };
+  const policy = { placementOf: jest.fn().mockResolvedValue(opts.placement ?? RESTRICTED) };
   const exemptions = { grantGlobal: jest.fn().mockResolvedValue(undefined) };
   const anomalies = new PolicyAnomalies(
     policy as unknown as PolicyService,
@@ -112,10 +112,10 @@ describe('PolicyAnomalies', () => {
     expect(pending.overrides.size).toBe(1);
   });
 
-  it('excludes the title from the refusing rules, or takes it down, then lets the shelves catch up', async () => {
+  it('excludes the title from the refusing rules, or takes it down by deleting its files', async () => {
     const exclude = build({ override: 'standard', openTicket: true });
     const reconcile = jest.fn().mockResolvedValue(undefined);
-    exclude.anomalies.onDecision(reconcile);
+    exclude.anomalies.wire({ reconcile, discard: jest.fn() });
 
     await expect(exclude.operate('excludeTitle')).resolves.toMatchObject({ status: 'resolved' });
     expect(exclude.exemptions.grantGlobal).toHaveBeenCalledWith('tt1', ['credits'], 'admin', 'discord:admin');
@@ -123,11 +123,15 @@ describe('PolicyAnomalies', () => {
     expect(reconcile).toHaveBeenCalled();
 
     const unpublish = build({ override: 'standard', openTicket: true });
+    const discard = jest.fn().mockResolvedValue(1);
+    unpublish.anomalies.wire({ reconcile, discard });
     await expect(unpublish.operate('unpublish')).resolves.toMatchObject({
-      message: 'Titre retiré des étagères partagées',
+      status: 'resolved',
+      message: 'Titre supprimé (1 dossier(s) effacé(s))',
     });
     expect(unpublish.exemptions.grantGlobal).not.toHaveBeenCalled();
-    expect(unpublish.overrides.get('tt1')).toMatchObject({ shelf: 'none', origin: 'anomaly' });
+    expect(discard).toHaveBeenCalledWith('tt1');
+    expect(unpublish.overrides.size).toBe(0);
   });
 
   it('remembers a title taken down: not frozen again, released once it breaks no rule', async () => {
@@ -154,7 +158,6 @@ describe('LibraryShelves with the anomaly guard', () => {
 
   it('does not take down a title the rules now restrict: it stays linked while the ticket is open', async () => {
     const paths = new LibraryPaths({
-      layout: 'shelves',
       mediasPath: root,
       moviesFolder: 'movies',
       seriesFolder: 'series',

@@ -40,9 +40,6 @@ export const placementProvider: Provider = {
     shelves: LibraryShelves,
   ): MediaLabelizerService => {
     const mediaPaths = configService.get('mediaPaths');
-    if (configService.get('library').layout === 'legacy') {
-      return new MediaLabelizerService(mediaPaths, titles, new JellyfinLayout());
-    }
     const store = { ...mediaPaths, movies: paths.store('movies'), series: paths.store('series') };
     return new MediaLabelizerService(store, titles, new JellyfinLayout(), (title) => shelves.titlePlaced(title));
   },

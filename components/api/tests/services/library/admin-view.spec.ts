@@ -112,12 +112,10 @@ describe('filterQuery', () => {
 });
 
 describe('adminLibraryTemplate', () => {
-  const render = (filter: LibraryFilter = { ...ALL, shelf: 'kids' }, layout = 'shelves', mode = 'enforce'): string => {
+  const render = (filter: LibraryFilter = { ...ALL, shelf: 'kids' }): string => {
     const rows = buildLibraryView(input());
     return adminLibraryTemplate({
       serviceName: 'CRN-Flix',
-      layout,
-      mode,
       filter,
       unplaced: rows.filter((row) => row.unplaced).length,
       ...selectRows(rows, filter),
@@ -157,11 +155,5 @@ describe('adminLibraryTemplate', () => {
 
   it('marks the admin’s choice among the shared shelf chips', () => {
     expect(render({ ...ALL, q: 'cars' })).toContain('<input type="radio" name="shelf" value="kids" checked />');
-  });
-
-  it('warns when the shelves or the rules are not active yet', () => {
-    expect(render(ALL, 'legacy', 'dry-run')).toContain('LIBRARY_LAYOUT=legacy');
-    expect(render(ALL, 'legacy', 'dry-run')).toContain('Politique en mode dry-run');
-    expect(render()).not.toContain('LIBRARY_LAYOUT=legacy');
   });
 });

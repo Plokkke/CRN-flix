@@ -9,7 +9,7 @@
 - Chaque règle vise `everyone` (refusé sur toutes les étagères) ou une étagère (ce qu'elle admet, `kids` aujourd'hui). Les règles `everyone` laissent passer quand elles ne peuvent pas trancher, les règles d'étagère refusent.
 - Le cœur pur est `libs/policy` : `assess`, `classify` (restreint / première étagère dont le titre passe les règles ; le choix de l'admin prime), `admit` (profil du demandeur + dérogations).
 - Les faits évalués (`media_facts`) viennent du metadata (`MetadataSource.facts`).
-- Les titres sont rangés sur des **étagères** (stock + liens, `LIBRARY_LAYOUT=shelves`) : `standard` et `kids` disjointes, plus une étagère personnelle par utilisateur.
+- Les titres sont rangés sur des **étagères** (stock + liens, toujours actif) : `standard` et `kids` disjointes, plus une étagère personnelle par utilisateur.
 
 ## À distinguer
 

@@ -61,7 +61,7 @@ export class PlayerAccountsService {
 
   /** The shelves' libraries must exist before accounts are given them. */
   private async ensureLibraries(users: UserEntity[]): Promise<void> {
-    if (!this.access?.enabled) {
+    if (!this.access) {
       return;
     }
     const active = users.filter((user) => user.status === UserStatus.Active);

@@ -26,6 +26,14 @@ export class LibraryTitlesRepository {
     );
   }
 
+  async remove(title: LibraryTitle): Promise<void> {
+    await withDbRetry(
+      () =>
+        this.pool.query(`DELETE FROM library_titles WHERE section = $1 AND folder = $2`, [title.section, title.folder]),
+      { label: 'libraryTitles.remove' },
+    );
+  }
+
   async list(): Promise<LibraryTitle[]> {
     const result = await withDbRetry(
       () =>

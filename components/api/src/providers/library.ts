@@ -60,7 +60,7 @@ export const libraryProviders: Provider[] = [
       anomalies: PolicyAnomalies,
     ): LibraryShelves => {
       const shelves = new LibraryShelves(paths, titles, resolver, player, () => accounts.applyAll(), anomalies);
-      anomalies.onDecision(() => shelves.reconcile());
+      anomalies.wire({ reconcile: () => shelves.reconcile(), discard: (imdbId) => shelves.discard(imdbId) });
       return shelves;
     },
   },

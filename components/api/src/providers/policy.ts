@@ -67,9 +67,7 @@ export const policyProviders: Provider[] = [
       medias: MediasRepository,
       overrides: ShelfOverridesRepository,
     ): PolicyService =>
-      new PolicyService(configService.get('policy'), kinds, rules, assessments, exemptions, facts, medias, (imdbId) =>
-        overrides.get(imdbId),
-      ),
+      new PolicyService(kinds, rules, assessments, exemptions, facts, medias, (imdbId) => overrides.get(imdbId)),
   },
   {
     provide: PolicyGate,
