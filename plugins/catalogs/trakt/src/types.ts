@@ -21,6 +21,7 @@ import {
   userSettingsSchema,
   watchedShowSchema,
   lastActivitiesSchema,
+  seasonEpisodeSchema,
 } from './schemas';
 
 export type Movie = z.infer<typeof movieSchema>;
@@ -30,6 +31,7 @@ export type ShowDetails = z.infer<typeof showDetailsSchema>;
 export type Season = z.infer<typeof seasonSchema>;
 export type SeasonDetails = z.infer<typeof seasonDetailsSchema>;
 export type Episode = z.infer<typeof episodeSchema>;
+export type SeasonEpisode = z.infer<typeof seasonEpisodeSchema>;
 export type Media = z.infer<typeof mediaSchema>;
 export type MediaDetails = z.infer<typeof mediaDetailsSchema>;
 export type WantedMedia = { media: Media; userIds: string[] };

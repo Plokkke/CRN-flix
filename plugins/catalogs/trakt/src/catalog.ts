@@ -7,6 +7,7 @@ import {
   CatalogAccount,
   CatalogAccountRevokedError,
   CatalogActivity,
+  CatalogEpisode,
   CatalogItem,
   createLogger,
   MediaType,
@@ -16,7 +17,7 @@ import {
 } from '@crn-flix/contracts';
 
 import { TraktApi, TraktDeviceAuthResult } from './api';
-import { Episode, Media, Movie, MovieDetails, ProgressShow, Show, UserAuthCtxt } from './types';
+import { Episode, Media, Movie, MovieDetails, ProgressShow, SeasonEpisode, Show, UserAuthCtxt } from './types';
 
 export type TraktCatalogConfig = {
   /** Minimum rating (1–10) for a rated title to count as a request. */
@@ -54,6 +55,20 @@ function episodeItem(episode: Pick<Episode, 'season' | 'number'>, show: Show, ru
     episodeNumber: episode.number,
     runtimeMinutes: runtime,
     catalogSlug: show.ids.slug ?? null,
+  };
+}
+
+/** Episode titles and overviews in French when Trakt has them: users read French. */
+const TRANSLATION_LANGUAGE = 'fr';
+
+function catalogEpisode(episode: SeasonEpisode): CatalogEpisode {
+  const french = episode.translations?.find((translation) => translation.language === TRANSLATION_LANGUAGE);
+  return {
+    number: episode.number,
+    title: episode.title,
+    frenchTitle: french?.title || null,
+    overview: french?.overview || episode.overview || null,
+    runtimeMinutes: episode.runtime ?? null,
   };
 }
 
@@ -138,6 +153,11 @@ export class TraktCatalog implements Catalog {
       throw new CatalogAccountRevokedError('Trakt refused the refresh token');
     }
     return renewed;
+  }
+
+  async season(showImdbId: string, seasonNumber: number): Promise<CatalogEpisode[]> {
+    const episodes = await this.api.requestSeasonEpisodes(showImdbId, seasonNumber, TRANSLATION_LANGUAGE);
+    return episodes.map(catalogEpisode);
   }
 
   private authOf(account: CatalogAccount): UserAuthCtxt {

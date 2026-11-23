@@ -239,10 +239,13 @@ function pager(filter: LibraryFilter, total: number): string {
     <span class="hint">Page ${filter.page} / ${pages}</span>${filter.page < pages ? link(filter.page + 1, 'Suivante →') : ''}</div>`;
 }
 
+const episodesLink = (row: LibraryRow): string =>
+  row.section === 'series' ? ` · <a href="/admin/library/${encodeURIComponent(row.imdbId)}/episodes">Épisodes</a>` : '';
+
 /** One title's line; also sent alone after a chip, which replaces only that line. */
 export const libraryRow = (row: LibraryRow, users: { id: string; name: string }[], view: string): string =>
   `<tr data-imdb-id="${escapeHtml(row.imdbId)}"${row.unplaced ? ' class="unplaced"' : ''}>
-    <td>${escapeHtml(row.title)}<div class="hint">${TYPE_LABELS[row.section] ?? row.section} · <a href="https://www.imdb.com/title/${encodeURIComponent(row.imdbId)}/">${escapeHtml(row.imdbId)}</a></div></td>
+    <td>${escapeHtml(row.title)}<div class="hint">${TYPE_LABELS[row.section] ?? row.section} · <a href="https://www.imdb.com/title/${encodeURIComponent(row.imdbId)}/">${escapeHtml(row.imdbId)}</a>${episodesLink(row)}</div></td>
     <td>${computedCell(row)}</td>
     <td>${placementCell(row)}${sharedChips(row, view)}</td>
     <td>${personalChips(row, users, view)}</td>

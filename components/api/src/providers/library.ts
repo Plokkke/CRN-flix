@@ -1,11 +1,15 @@
 import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { Player } from '@crn-flix/contracts';
+import { Catalog, MetadataSource, Player } from '@crn-flix/contracts';
+import { JellyfinLayout } from '@crn-flix/layout-jellyfin';
 
 import { Config } from '@/app.module';
+import { CATALOG } from '@/providers/catalog';
+import { METADATA } from '@/providers/media-titles';
 import { PLAYER } from '@/providers/player';
 import { LibraryTitlesRepository, ShelfOverridesRepository } from '@/services/database/library';
+import { MediasRepository } from '@/services/database/medias';
 import { PolicyExemptionsRepository } from '@/services/database/policy';
 import { UsersRepository } from '@/services/database/users';
 import { LibraryAccess } from '@/services/library/access';
@@ -13,12 +17,26 @@ import { BundledShelfImages } from '@/services/library/images';
 import { ManualDestinations } from '@/services/library/manual-destination';
 import { LibraryPaths } from '@/services/library/paths';
 import { PolicyShelfResolver } from '@/services/library/resolver';
+import { SeasonRemapService } from '@/services/library/season-remap';
 import { LibraryShelves } from '@/services/library/shelves';
 import { PlayerAccountsService } from '@/services/player-accounts';
 import { PolicyAnomalies } from '@/services/policy/anomaly';
 import { PolicyService } from '@/services/policy/policy';
 
 export const libraryProviders: Provider[] = [
+  {
+    provide: SeasonRemapService,
+    inject: [LibraryPaths, LibraryTitlesRepository, CATALOG, METADATA, MediasRepository, PLAYER],
+    useFactory: (
+      paths: LibraryPaths,
+      titles: LibraryTitlesRepository,
+      catalog: Catalog,
+      metadata: MetadataSource,
+      medias: MediasRepository,
+      player: Player,
+    ): SeasonRemapService =>
+      new SeasonRemapService(paths, titles, catalog, metadata, medias, new JellyfinLayout(), player),
+  },
   {
     provide: LibraryPaths,
     inject: [ConfigService],

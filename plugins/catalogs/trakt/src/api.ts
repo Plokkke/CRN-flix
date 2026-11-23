@@ -20,6 +20,7 @@ import {
   progressShowSchema,
   ratedMediaSchema,
   seasonDetailsSchema,
+  seasonEpisodeSchema,
   showDetailsSchema,
   userSettingsSchema,
   watchedShowSchema,
@@ -37,6 +38,7 @@ import {
   ProgressShowNoDetails,
   ReleasedMedia,
   SeasonDetails,
+  SeasonEpisode,
   ShowDetails,
   UserAuthCtxt,
   UserSettings,
@@ -325,6 +327,21 @@ export class TraktApi {
           params: { extended: 'episodes' },
         });
         return seasonDetailsSchema.array().parse(response.data);
+      },
+      60 * 60 * 24,
+    );
+  }
+
+  /** Trakt takes an IMDb id in place of its own; an unknown show or season is an empty list. */
+  async requestSeasonEpisodes(showImdbId: string, seasonNumber: number, language: string): Promise<SeasonEpisode[]> {
+    return this.cache.withCache(
+      `season-episodes-${showImdbId}-${seasonNumber}-${language}`,
+      async () => {
+        const response = await this.api.get<unknown>(`/shows/${showImdbId}/seasons/${seasonNumber}`, {
+          params: { extended: 'full', translations: language },
+          validateStatus: (status) => status === 200 || status === 404,
+        });
+        return response.status === 404 ? [] : seasonEpisodeSchema.array().parse(response.data);
       },
       60 * 60 * 24,
     );
