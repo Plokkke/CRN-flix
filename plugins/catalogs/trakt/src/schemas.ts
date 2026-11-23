@@ -66,6 +66,21 @@ export const seasonDetailsSchema = seasonSchema.extend({
   episodes: episodeSchema.array(),
 });
 
+const translationSchema = z.object({
+  title: z.string().nullable(),
+  overview: z.string().nullable(),
+  language: z.string(),
+});
+
+/** A season's episode with `extended=full` (titles may be missing before airing) and its translations. */
+export const seasonEpisodeSchema = z.object({
+  number: z.number().int(),
+  title: z.string().nullable(),
+  overview: z.string().nullable().optional(),
+  runtime: z.number().int().nonnegative().nullable().optional(),
+  translations: translationSchema.array().optional(),
+});
+
 const mediaAttrsSchema = z.object({
   type: mediaTypeSchema,
 });

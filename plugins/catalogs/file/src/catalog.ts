@@ -7,6 +7,7 @@ import {
   CatalogAccount,
   CatalogAccountSource,
   CatalogActivity,
+  CatalogEpisode,
   CatalogItem,
   LinkedCatalogAccount,
   MediaType,
@@ -122,5 +123,17 @@ export class FileCatalog implements Catalog, CatalogAccountSource {
 
   async renewCredentials(): Promise<unknown> {
     return null;
+  }
+
+  /** The file only knows episode numbers: every one any account requests in that season. */
+  async season(showImdbId: string, seasonNumber: number): Promise<CatalogEpisode[]> {
+    const numbers = (await this.read()).accounts
+      .flatMap((account) => Object.values(account.requests).flat())
+      .flatMap((item) =>
+        item.type === 'show' && item.imdbId === showImdbId && item.season === seasonNumber ? item.episodes : [],
+      );
+    return [...new Set(numbers)]
+      .sort((a, b) => a - b)
+      .map((number) => ({ number, title: null, frenchTitle: null, overview: null, runtimeMinutes: null }));
   }
 }
