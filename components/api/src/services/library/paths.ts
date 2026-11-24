@@ -6,6 +6,14 @@ import { LibrarySection } from '@crn-flix/contracts';
 
 export const SECTIONS: LibrarySection[] = ['movies', 'series'];
 
+/** The deepest folder holding both paths (`/data` for `/data/medias` and `/data/downloads`). */
+export function commonRoot(first: string, second: string): string {
+  const a = path.resolve(first).split(path.sep);
+  const b = path.resolve(second).split(path.sep);
+  const shared = a.findIndex((segment, index) => segment !== b[index]);
+  return a.slice(0, shared === -1 ? a.length : shared).join(path.sep) || path.sep;
+}
+
 /** Files live in the store; every player library is a shelf of links to them. */
 export const libraryConfigSchema = z.object({
   mediasPath: z.string(),

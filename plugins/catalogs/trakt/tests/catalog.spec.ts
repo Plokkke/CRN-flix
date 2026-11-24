@@ -37,6 +37,7 @@ function buildApi() {
     requestUserWatched: jest.fn().mockResolvedValue([{ show }]),
     listExcludedShowIds: jest.fn().mockResolvedValue(new Set()),
     requestShowProgress: jest.fn().mockResolvedValue({ aired: 10, completed: 3, next_episode: null }),
+    requestSeasonNumbers: jest.fn().mockResolvedValue([]),
     requestSeasonEpisodes: jest.fn().mockResolvedValue([]),
     refreshTokens: jest.fn().mockResolvedValue({ accessToken: 'new', refreshToken: 'r2', accessTokenExpiration: 'x' }),
   };
@@ -174,29 +175,36 @@ describe('TraktCatalog', () => {
     });
   });
 
-  describe('season', () => {
-    it('numbers episodes as Trakt does, French title and overview when translated', async () => {
+  describe('episodes', () => {
+    it('lists every season in order, French title and overview when translated', async () => {
       const { api, catalog } = buildCatalog();
-      api.requestSeasonEpisodes.mockResolvedValue([
-        {
-          number: 1,
-          title: 'Magic Xylophone',
-          overview: 'Bluey and Bingo…',
-          runtime: 7,
-          translations: [{ title: 'Le xylophone magique', overview: 'Bluey et Bingo…', language: 'fr' }],
-        },
-        { number: 2, title: null, overview: 'English only', runtime: null, translations: [] },
-      ]);
+      api.requestSeasonNumbers.mockResolvedValue([1, 0]);
+      api.requestSeasonEpisodes.mockImplementation(async (_id: string, season: number) =>
+        season === 0
+          ? [{ number: 1, title: 'Special', overview: null, runtime: null }]
+          : [
+              {
+                number: 1,
+                title: 'Magic Xylophone',
+                overview: 'Bluey and Bingo…',
+                runtime: 7,
+                translations: [{ title: 'Le xylophone magique', overview: 'Bluey et Bingo…', language: 'fr' }],
+              },
+              { number: 2, title: null, overview: 'English only', runtime: null, translations: [] },
+            ],
+      );
 
-      await expect(catalog.season('tt7678620', 1)).resolves.toEqual([
+      await expect(catalog.episodes('tt7678620')).resolves.toEqual([
+        { season: 0, number: 1, title: 'Special', frenchTitle: null, overview: null, runtimeMinutes: null },
         {
+          season: 1,
           number: 1,
           title: 'Magic Xylophone',
           frenchTitle: 'Le xylophone magique',
           overview: 'Bluey et Bingo…',
           runtimeMinutes: 7,
         },
-        { number: 2, title: null, frenchTitle: null, overview: 'English only', runtimeMinutes: null },
+        { season: 1, number: 2, title: null, frenchTitle: null, overview: 'English only', runtimeMinutes: null },
       ]);
       expect(api.requestSeasonEpisodes).toHaveBeenCalledWith('tt7678620', 1, 'fr');
     });

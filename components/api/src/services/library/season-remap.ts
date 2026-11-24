@@ -31,22 +31,30 @@ export class RemapRefusedError extends Error {
   }
 }
 
+/** `diskPath` is relative to the disk the store and the downloads share: what a preview link serves. */
+export type PageFile = EpisodeFile & { diskPath: string };
+
 export type SeasonPage = {
   imdbId: string;
   title: string;
   seasons: number[];
   season: number;
   /** The season's files, and those whose name tells no season. */
-  files: EpisodeFile[];
+  files: PageFile[];
+  /** The show's other files, which a file of this page may collide with once moved to another season. */
+  others: EpisodeFile[];
+  /** The whole show: the page lists its season, the search looks everywhere. */
   episodes: CatalogEpisode[];
   catalogError: string | null;
 };
 
 /** A file whose episodes do not change keeps its name, whatever it looks like. */
-const keepsItsTag = (files: EpisodeFile[], { relativePath, start, end }: Assignment, season: number): boolean => {
+const keepsItsTag = (files: EpisodeFile[], { relativePath, season, start, end }: Assignment): boolean => {
   const tag = files.find((file) => file.relativePath === relativePath)?.tag;
   return tag?.season === season && tag.start === start && tag.end === end;
 };
+
+const sortedUnique = (values: number[]): number[] => [...new Set(values)].sort((a, b) => a - b);
 
 const exists = (target: string): Promise<boolean> =>
   fs.access(target).then(
@@ -74,6 +82,8 @@ export class SeasonRemapService {
     private readonly medias: MediasRepository,
     private readonly layout: LibraryLayout,
     private readonly player: Player,
+    /** The common root of the store and the downloads, as the engine sees it. */
+    private readonly diskRoot: string,
   ) {}
 
   private get root(): string {
@@ -101,60 +111,59 @@ export class SeasonRemapService {
     if (files.length === 0) {
       return null;
     }
-    const seasons = [...new Set(files.map(seasonOf).filter((value): value is number => value !== null))].sort(
-      (a, b) => a - b,
-    );
-    const current = season ?? seasons[0] ?? 1;
-    const [titles, episodes] = await Promise.all([
-      this.medias.displayTitlesOf([imdbId]),
-      this.episodes(imdbId, current),
-    ]);
+    const [titles, catalog] = await Promise.all([this.medias.displayTitlesOf([imdbId]), this.episodes(imdbId)]);
+    const onDisk = sortedUnique(files.map(seasonOf).filter((value): value is number => value !== null));
+    const current = season ?? onDisk[0] ?? catalog.episodes[0]?.season ?? 1;
+    const shown = files.filter((file) => [current, null].includes(seasonOf(file)));
     return {
       imdbId,
       title: titles.get(imdbId) ?? imdbId,
-      seasons: [...new Set([...seasons, current])].sort((a, b) => a - b),
+      seasons: sortedUnique([...onDisk, ...catalog.episodes.map((episode) => episode.season), current]),
       season: current,
-      files: this.ofSeason(files, current),
-      ...episodes,
+      files: shown.map((file) => ({
+        ...file,
+        diskPath: path.relative(this.diskRoot, path.join(this.root, file.relativePath)),
+      })),
+      others: files.filter((file) => !shown.includes(file)),
+      ...catalog,
     };
   }
 
-  private ofSeason(files: EpisodeFile[], season: number): EpisodeFile[] {
-    return files.filter((file) => [season, null].includes(seasonOf(file)));
-  }
-
-  private async episodes(imdbId: string, season: number): Promise<Pick<SeasonPage, 'episodes' | 'catalogError'>> {
+  private async episodes(imdbId: string): Promise<Pick<SeasonPage, 'episodes' | 'catalogError'>> {
     try {
-      return { episodes: await this.catalog.season(imdbId, season), catalogError: null };
+      return { episodes: await this.catalog.episodes(imdbId), catalogError: null };
     } catch (error) {
-      SeasonRemapService.logger.warn(`Season ${season} of ${imdbId} unavailable: ${describeError(error)}`);
+      SeasonRemapService.logger.warn(`Episodes of ${imdbId} unavailable: ${describeError(error)}`);
       return { episodes: [], catalogError: describeError(error) };
     }
   }
 
-  /** Renames the files whose episodes changed; returns how many videos moved. */
-  async apply(imdbId: string, season: number, assignments: Assignment[]): Promise<number> {
-    const files = this.ofSeason(await this.files(imdbId), season);
+  /** Renames the files whose episodes changed, across seasons; returns how many videos moved. */
+  async apply(imdbId: string, assignments: Assignment[]): Promise<number> {
+    const files = await this.files(imdbId);
     const problems = remapProblems(files, assignments);
     if (problems.length > 0) {
       throw new RemapRefusedError(problems);
     }
-    const changed = assignments.filter((assignment) => !keepsItsTag(files, assignment, season));
-    const videos = await this.videoMoves(imdbId, season, changed);
+    const changed = assignments.filter((assignment) => !keepsItsTag(files, assignment));
+    const videos = await this.videoMoves(imdbId, changed);
     const moves = [...videos, ...(await this.sideMoves(videos))];
     await this.refuseCollisions(moves);
     await this.execute(moves);
     await this.removeEmptyFolders(moves);
-    SeasonRemapService.logger.log(`Season ${season} of ${imdbId}: ${videos.length} file(s) renamed`);
+    SeasonRemapService.logger.log(`${imdbId}: ${videos.length} file(s) renamed`);
     if (videos.length > 0) {
       this.refreshInBackground();
     }
     return videos.length;
   }
 
-  private async videoMoves(imdbId: string, season: number, assignments: Assignment[]): Promise<Move[]> {
+  private async videoMoves(imdbId: string, assignments: Assignment[]): Promise<Move[]> {
+    if (assignments.length === 0) {
+      return [];
+    }
     const { title, year } = await this.identity(imdbId);
-    return assignments.flatMap(({ relativePath, start, end }) => {
+    return assignments.flatMap(({ relativePath, season, start, end }) => {
       const placement = this.layout.place({
         imdbId,
         type: MediaType.Episode,

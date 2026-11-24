@@ -61,9 +61,10 @@ function episodeItem(episode: Pick<Episode, 'season' | 'number'>, show: Show, ru
 /** Episode titles and overviews in French when Trakt has them: users read French. */
 const TRANSLATION_LANGUAGE = 'fr';
 
-function catalogEpisode(episode: SeasonEpisode): CatalogEpisode {
+function catalogEpisode(season: number, episode: SeasonEpisode): CatalogEpisode {
   const french = episode.translations?.find((translation) => translation.language === TRANSLATION_LANGUAGE);
   return {
+    season,
     number: episode.number,
     title: episode.title,
     frenchTitle: french?.title || null,
@@ -155,9 +156,17 @@ export class TraktCatalog implements Catalog {
     return renewed;
   }
 
-  async season(showImdbId: string, seasonNumber: number): Promise<CatalogEpisode[]> {
-    const episodes = await this.api.requestSeasonEpisodes(showImdbId, seasonNumber, TRANSLATION_LANGUAGE);
-    return episodes.map(catalogEpisode);
+  /** One call per season (each cached a day): the only listing that carries the translations. */
+  async episodes(showImdbId: string): Promise<CatalogEpisode[]> {
+    const seasons = [...(await this.api.requestSeasonNumbers(showImdbId))].sort((a, b) => a - b);
+    const listed = await Promise.all(
+      seasons.map(async (season) =>
+        (await this.api.requestSeasonEpisodes(showImdbId, season, TRANSLATION_LANGUAGE)).map((episode) =>
+          catalogEpisode(season, episode),
+        ),
+      ),
+    );
+    return listed.flat();
   }
 
   private authOf(account: CatalogAccount): UserAuthCtxt {

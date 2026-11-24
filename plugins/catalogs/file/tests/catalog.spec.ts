@@ -81,13 +81,13 @@ describe('FileCatalog', () => {
     await expect(new FileCatalog(file).listAccounts()).rejects.toThrow();
   });
 
-  it('lists a season with the episode numbers the accounts request, nothing else known', async () => {
+  it('lists a show with the episode numbers the accounts request, nothing else known', async () => {
     const catalog = new FileCatalog(file);
 
-    await expect(catalog.season('tt7678620', 1)).resolves.toEqual([
-      { number: 1, title: null, frenchTitle: null, overview: null, runtimeMinutes: null },
-      { number: 2, title: null, frenchTitle: null, overview: null, runtimeMinutes: null },
+    await expect(catalog.episodes('tt7678620')).resolves.toEqual([
+      { season: 1, number: 1, title: null, frenchTitle: null, overview: null, runtimeMinutes: null },
+      { season: 1, number: 2, title: null, frenchTitle: null, overview: null, runtimeMinutes: null },
     ]);
-    await expect(catalog.season('tt7678620', 2)).resolves.toEqual([]);
+    await expect(catalog.episodes('tt0000000')).resolves.toEqual([]);
   });
 });

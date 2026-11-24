@@ -3,129 +3,59 @@ import * as path from 'path';
 import { CatalogEpisode } from '@crn-flix/contracts';
 import { escapeHtml } from '@crn-flix/design-system';
 
-import { EpisodeFile } from '@/services/library/episode-remap';
-import { SeasonPage } from '@/services/library/season-remap';
+import { episodeKey, EpisodeTag } from '@/services/library/episode-remap';
+import { PageFile, SeasonPage } from '@/services/library/season-remap';
 import { adminPage } from '@/web/templates/admin-page';
-
-const CSS = `
-  .container { max-width: 1400px; }
-  .flash { background: var(--tone-info-bg); color: var(--tone-info-text); padding: 12px 16px; border-left: 4px solid var(--tone-info-border); border-radius: 4px; margin-bottom: 16px; }
-  .flash.error { background: var(--tone-danger-bg); color: var(--tone-danger-text); border-left-color: var(--tone-danger-border); }
-  .hint { font-size: 13px; color: var(--text-muted); }
-  .seasons { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
-  .seasons a { padding: 4px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; text-decoration: none; color: var(--text-light); }
-  .seasons a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .remap { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; align-items: start; }
-  @media (max-width: 900px) { .remap { grid-template-columns: 1fr; } }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 6px; border-bottom: 1px solid var(--border); }
-  td { padding: 6px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
-  td.name { word-break: break-all; }
-  tr.changed td { background: var(--tone-info-bg); }
-  input.ep { width: 64px; padding: 4px 6px; margin: 0; font-size: 14px; }
-  .tag { font-family: monospace; font-size: 13px; }
-  .actions { display: flex; gap: 8px; margin: 12px 0; }
-  .actions button { width: auto; margin: 0; padding: 8px 16px; }
-  .actions button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text-light); }
-  ol.episodes { list-style: none; padding: 0; margin: 0; font-size: 14px; }
-  ol.episodes li { padding: 6px 8px; border-left: 4px solid var(--border); margin-bottom: 4px; background: var(--surface); }
-  ol.episodes li.covered { border-left-color: var(--tone-success-border); }
-  ol.episodes li.missing { border-left-color: var(--tone-warning-border); }
-  ol.episodes li.conflict { border-left-color: var(--tone-danger-border); background: var(--tone-danger-bg); }
-  ol.episodes .holder { display: block; font-size: 12px; color: var(--text-muted); word-break: break-all; }
-  ol.episodes details { font-size: 12px; color: var(--text-light); }
-`;
-
-/**
- * Follows the fields as they change: which file each episode is in (a conflict blocks the
- * submission), the tag each file will carry, and which lines change.
- */
-const LIVE_JS = `
-  (() => {
-    const form = document.getElementById('remap-form');
-    if (!form) return;
-    const season = String(form.dataset.season).padStart(2, '0');
-    const pad = (value) => String(value).padStart(2, '0');
-    const rangeOf = (row) => {
-      const start = Number(row.querySelector('input[name="start"]').value);
-      const end = Number(row.querySelector('input[name="end"]').value) || start;
-      return start > 0 && end >= start ? { start, end } : null;
-    };
-    const update = () => {
-      const holders = new Map();
-      form.querySelectorAll('tr[data-file]').forEach((row) => {
-        const range = rangeOf(row);
-        row.querySelector('.tag.next').textContent = range
-          ? 'S' + season + 'E' + pad(range.start) + (range.end > range.start ? '-E' + pad(range.end) : '')
-          : '—';
-        row.classList.toggle('changed', (range ? range.start + '-' + range.end : '') !== row.dataset.initial);
-        for (let episode = range?.start ?? 1; range && episode <= range.end; episode++) {
-          holders.set(episode, [...(holders.get(episode) || []), row.dataset.name]);
-        }
-      });
-      let conflicts = 0;
-      document.querySelectorAll('ol.episodes li[data-number]').forEach((item) => {
-        const files = holders.get(Number(item.dataset.number)) || [];
-        conflicts += files.length > 1 ? 1 : 0;
-        item.className = files.length > 1 ? 'conflict' : files.length === 1 ? 'covered' : 'missing';
-        item.querySelector('.holder').textContent = files.join(' · ') || 'Aucun fichier';
-      });
-      const submit = form.querySelector('button[type="submit"]');
-      submit.disabled = conflicts > 0;
-      submit.textContent = conflicts > 0 ? conflicts + ' épisode(s) en conflit' : 'Appliquer';
-    };
-    form.addEventListener('input', update);
-    update();
-  })();
-`;
+import { SEASON_REMAP_CSS, SEASON_REMAP_JS } from '@/web/templates/admin-season-remap-assets';
 
 const flash = (message?: string, error?: boolean): string =>
   message ? `<div class="flash${error ? ' error' : ''}">${escapeHtml(message)}</div>` : '';
 
-const pad = (value: number): string => String(value).padStart(2, '0');
+const tagLabel = (tag: EpisodeTag | null): string =>
+  tag
+    ? `${episodeKey(tag.season, tag.start)}${tag.end > tag.start ? `-E${String(tag.end).padStart(2, '0')}` : ''}`
+    : 'sans étiquette';
 
-function currentTag(file: EpisodeFile): string {
-  if (!file.tag) {
-    return 'sans étiquette';
-  }
-  const { season, start, end } = file.tag;
-  return `S${pad(season)}E${pad(start)}${end > start ? `-E${pad(end)}` : ''}`;
-}
+const displayTitle = (episode: CatalogEpisode): string => episode.frenchTitle ?? episode.title ?? 'Sans titre';
 
-function fileRow(file: EpisodeFile): string {
+const field = (name: string, value: number | undefined, label: string, min: number): string =>
+  `<input class="ep" type="number" min="${min}" name="${name}" value="${value ?? ''}" aria-label="${label}" />`;
+
+function fileRow(file: PageFile, season: number): string {
   const name = path.basename(file.relativePath);
-  const initial = file.tag ? `${file.tag.start}-${file.tag.end}` : '';
-  const field = (fieldName: string, value: number | undefined): string =>
-    `<input class="ep" type="number" min="1" name="${fieldName}" value="${value ?? ''}" aria-label="${fieldName === 'start' ? 'Premier épisode' : 'Dernier épisode'}" />`;
-  return `<tr data-file data-name="${escapeHtml(name)}" data-initial="${initial}">
+  const tag = file.tag;
+  const initial = tag ? `${tag.season}:${tag.start}-${tag.end}` : '';
+  return `<tr data-file data-name="${escapeHtml(name)}" data-initial="${initial}" data-disk-path="${escapeHtml(file.diskPath)}">
     <td class="name">${escapeHtml(name)}<div class="hint">${escapeHtml(path.dirname(file.relativePath))}</div>
       <input type="hidden" name="file" value="${escapeHtml(file.relativePath)}" /></td>
-    <td class="tag">${currentTag(file)}</td>
-    <td>${field('start', file.tag?.start)}</td>
-    <td>${field('end', file.tag && file.tag.end > file.tag.start ? file.tag.end : undefined)}</td>
+    <td class="tag">${tagLabel(tag)}</td>
+    <td>${field('season', tag?.season ?? season, 'Saison', 0)}</td>
+    <td>${field('start', tag?.start, 'Premier épisode', 1)}</td>
+    <td>${field('end', tag && tag.end > tag.start ? tag.end : undefined, 'Dernier épisode', 1)}</td>
     <td class="tag next"></td>
+    <td class="play"><button type="button" class="link" data-play title="Ouvrir dans VLC">▶ VLC</button>
+      <button type="button" class="link" data-copy title="Copier le lien">Lien</button></td>
   </tr>`;
 }
 
 function episodeItem(episode: CatalogEpisode): string {
-  const title = episode.frenchTitle ?? episode.title ?? 'Sans titre';
   const english =
     episode.frenchTitle && episode.title ? ` <span class="hint">(${escapeHtml(episode.title)})</span>` : '';
   const runtime = episode.runtimeMinutes ? ` <span class="hint">· ${episode.runtimeMinutes} min</span>` : '';
   const overview = episode.overview
     ? `<details><summary>Résumé</summary>${escapeHtml(episode.overview)}</details>`
     : '';
-  return `<li data-number="${episode.number}"><strong>E${pad(episode.number)}</strong> ${escapeHtml(title)}${english}${runtime}
+  return `<li data-key="${episodeKey(episode.season, episode.number)}"><strong>E${String(episode.number).padStart(2, '0')}</strong> ${escapeHtml(displayTitle(episode))}${english}${runtime}
     <span class="holder"></span>${overview}</li>`;
 }
 
 function seasonTabs(page: SeasonPage): string {
   const base = `/admin/library/${encodeURIComponent(page.imdbId)}/episodes`;
   const tabs = page.seasons
-    .map(
-      (season) =>
-        `<a href="${base}?season=${season}"${season === page.season ? ' class="active"' : ''}>Saison ${season}</a>`,
-    )
+    .map((season) => {
+      const label = season === 0 ? 'Spéciaux' : `Saison ${season}`;
+      return `<a href="${base}?season=${season}"${season === page.season ? ' class="active"' : ''}>${label}</a>`;
+    })
     .join('');
   return `<nav class="seasons">${tabs}</nav>`;
 }
@@ -134,11 +64,36 @@ function episodesColumn(page: SeasonPage): string {
   if (page.catalogError) {
     return `<div class="flash error">Épisodes du catalogue indisponibles : ${escapeHtml(page.catalogError)}</div>`;
   }
-  if (page.episodes.length === 0) {
-    return '<p class="hint">Le catalogue ne connaît pas cette saison.</p>';
-  }
-  return `<ol class="episodes">${page.episodes.map(episodeItem).join('')}</ol>`;
+  const ofSeason = page.episodes.filter((episode) => episode.season === page.season);
+  const list = ofSeason.length
+    ? `<ol class="episodes">${ofSeason.map(episodeItem).join('')}</ol>`
+    : '<p class="hint">Le catalogue ne connaît pas cette saison.</p>';
+  return `<input type="search" id="episode-search" placeholder="Chercher un titre dans toute la série…" aria-label="Chercher un épisode" />
+    <ul id="search-results"></ul>
+    <h3>Épisodes de la saison ${page.season}</h3>${list}`;
 }
+
+/** What the live script needs: every episode for the search, the files of other seasons for conflicts. */
+function pageData(page: SeasonPage): string {
+  const data = {
+    episodes: page.episodes.map((episode) => ({
+      key: episodeKey(episode.season, episode.number),
+      season: episode.season,
+      number: episode.number,
+      title: displayTitle(episode),
+      english: episode.title,
+    })),
+    others: page.others.flatMap((file) => (file.tag ? [{ name: path.basename(file.relativePath), ...file.tag }] : [])),
+  };
+  return `<script type="application/json" id="remap-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+}
+
+const previewSettings = `<details class="preview-settings"><summary>Lecture des fichiers</summary>
+  <p class="hint">Les boutons ▶ VLC lisent le fichier par un serveur HTTP local qui passe par SSH, par exemple :
+  <code>rclone serve http :sftp:&lt;dossier du disque sur le serveur&gt; --sftp-ssh "ssh &lt;hôte&gt;" --read-only --addr 127.0.0.1:8765</code>.
+  Son adresse est gardée dans ce navigateur seulement.</p>
+  <label>Adresse du disque <input type="url" id="preview-base" placeholder="http://127.0.0.1:8765" /></label>
+</details>`;
 
 export type AdminSeasonRemapParams = {
   serviceName: string;
@@ -157,21 +112,30 @@ export const adminSeasonRemapTemplate = ({
   const content = `
     <p><a href="/admin/library?type=series">← Bibliothèque</a></p>
     <h2>🎞️ ${escapeHtml(page.title)} — épisodes</h2>
-    <p class="hint">Indiquez les épisodes que contient chaque fichier (le dernier seulement s’il en contient plusieurs). Les fichiers sont renommés dans leur dossier, sous-titres compris, puis Jellyfin réanalyse la bibliothèque. Numérotation : celle du catalogue, celle des demandes.</p>
+    <p class="hint">Indiquez la saison et les épisodes que contient chaque fichier (le dernier seulement s’il en contient plusieurs), dans la numérotation du catalogue. Les fichiers sont renommés dans leur dossier, sous-titres compris, puis Jellyfin réanalyse la bibliothèque.</p>
     ${seasonTabs(page)}
     ${flash(flashMessage, flashError)}
+    ${previewSettings}
     <div class="remap">
-      <form id="remap-form" method="POST" action="${action}/apply" data-season="${page.season}">
-        <input type="hidden" name="season" value="${page.season}" />
-        <table><thead><tr><th>Fichier</th><th>Actuel</th><th>Du</th><th>Au</th><th>Nouveau</th></tr></thead>
-        <tbody>${page.files.map(fileRow).join('')}</tbody></table>
+      <form id="remap-form" method="POST" action="${action}/apply">
+        <input type="hidden" name="view" value="${page.season}" />
+        <table><thead><tr><th>Fichier</th><th>Actuel</th><th>Saison</th><th>Du</th><th>Au</th><th>Nouveau</th><th></th></tr></thead>
+        <tbody>${page.files.map((file) => fileRow(file, page.season)).join('')}</tbody></table>
         <div class="actions"><button type="submit">Appliquer</button></div>
       </form>
-      <section><h3>Épisodes de la saison ${page.season}</h3>${episodesColumn(page)}</section>
+      <section>${episodesColumn(page)}</section>
     </div>
     <form method="POST" action="${action}/refresh" class="actions">
       <input type="hidden" name="season" value="${page.season}" />
       <button type="submit" class="secondary">Rafraîchir Jellyfin</button>
-    </form>`;
-  return adminPage({ tab: 'library' }, `${page.title} — épisodes`, serviceName, content, CSS, LIVE_JS);
+    </form>
+    ${pageData(page)}`;
+  return adminPage(
+    { tab: 'library' },
+    `${page.title} — épisodes`,
+    serviceName,
+    content,
+    SEASON_REMAP_CSS,
+    SEASON_REMAP_JS,
+  );
 };
