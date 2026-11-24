@@ -1,6 +1,6 @@
 import { MediaType } from '@crn-flix/contracts';
 
-import { JellyfinMedia, JellyfinMediaService, JellyfinPlayer, toPlayerAsset } from '../src';
+import { JellyfinMedia, JellyfinMediaService, JellyfinPlayer, toPlayerAssets } from '../src';
 
 function media(overrides: Partial<JellyfinMedia>): JellyfinMedia {
   return { Id: 'id', Name: 'Name', ProductionYear: 2023, Type: 'Movie', ProviderIds: { Imdb: '' }, ...overrides };
@@ -43,24 +43,28 @@ function buildPlayer() {
   return { jellyfin, player: new JellyfinPlayer(jellyfin as unknown as JellyfinMediaService) };
 }
 
-describe('toPlayerAsset', () => {
+describe('toPlayerAssets', () => {
   it('files an episode under its series imdb id, not its own', () => {
-    expect(toPlayerAsset(episode, new Map([['series-1', 'tt14688458']]))).toMatchObject({
-      imdbId: 'tt14688458',
-      type: MediaType.Episode,
-      title: 'Silo',
-      seasonNumber: 1,
-      episodeNumber: 1,
-    });
+    expect(toPlayerAssets(episode, new Map([['series-1', 'tt14688458']]))).toMatchObject([
+      { imdbId: 'tt14688458', type: MediaType.Episode, title: 'Silo', seasonNumber: 1, episodeNumber: 1 },
+    ]);
   });
 
   it('falls back on the episode imdb id when its series has none', () => {
-    expect(toPlayerAsset(episode, new Map())?.imdbId).toBe('tt-episode');
+    expect(toPlayerAssets(episode, new Map())[0]?.imdbId).toBe('tt-episode');
+  });
+
+  it('makes every episode of a multi-episode file available', () => {
+    const double = { ...episode, IndexNumber: 14, IndexNumberEnd: 15 };
+
+    expect(toPlayerAssets(double, new Map([['series-1', 'tt14688458']])).map((asset) => asset.episodeNumber)).toEqual([
+      14, 15,
+    ]);
   });
 
   it('skips series and medias without any imdb id', () => {
-    expect(toPlayerAsset(series, new Map())).toBeNull();
-    expect(toPlayerAsset(media({ Type: 'Movie' }), new Map())).toBeNull();
+    expect(toPlayerAssets(series, new Map())).toEqual([]);
+    expect(toPlayerAssets(media({ Type: 'Movie' }), new Map())).toEqual([]);
   });
 });
 
