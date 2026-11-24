@@ -11,6 +11,8 @@ export enum DownloadJobStatus {
   Identifying = 'identifying',
   Completed = 'completed',
   Failed = 'failed',
+  /** Its show is numbered by hand: the files wait in the download folder for the admin. */
+  AwaitingMapping = 'awaiting-mapping',
 }
 
 export type DownloadJobEntity = {
@@ -22,6 +24,8 @@ export type DownloadJobEntity = {
   sourcePaths: string[];
   errorMessage: string | null;
   metadata: Record<string, string> | null;
+  /** The show a parked job's files belong to. */
+  mappingImdbId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -35,6 +39,7 @@ type DownloadJobRecord = {
   source_paths: string[];
   error_message: string | null;
   metadata: Record<string, string> | null;
+  mapping_imdb_id: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -49,6 +54,7 @@ function mapRecord(record: DownloadJobRecord): DownloadJobEntity {
     sourcePaths: record.source_paths,
     errorMessage: record.error_message,
     metadata: record.metadata,
+    mappingImdbId: record.mapping_imdb_id ?? null,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -180,6 +186,31 @@ export class DownloadJobsRepository extends Emitter<DownloadJobEvents> implement
         ]),
       { label: 'downloadJobs.updateStatus' },
     );
+  }
+
+  /** Leaves `sourcePaths` waiting for the admin, filed under the show they belong to. */
+  async park(id: string, imdbId: string, sourcePaths: string[]): Promise<void> {
+    await withDbRetry(
+      () =>
+        this.pool.query(
+          `UPDATE download_jobs SET status = $2, mapping_imdb_id = $3, source_paths = $4, error_message = NULL,
+             updated_at = NOW() WHERE id = $1`,
+          [id, DownloadJobStatus.AwaitingMapping, imdbId, sourcePaths],
+        ),
+      { label: 'downloadJobs.park' },
+    );
+  }
+
+  async listAwaitingMapping(imdbId: string): Promise<DownloadJobEntity[]> {
+    const result = await withDbRetry(
+      () =>
+        this.pool.query<DownloadJobRecord>(
+          `SELECT * FROM download_jobs WHERE status = $1 AND mapping_imdb_id = $2 ORDER BY created_at`,
+          [DownloadJobStatus.AwaitingMapping, imdbId],
+        ),
+      { label: 'downloadJobs.listAwaitingMapping' },
+    );
+    return result.rows.map(mapRecord);
   }
 
   /** Post-download jobs still being processed (detected / identifying). */

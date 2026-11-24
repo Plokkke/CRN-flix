@@ -9,14 +9,17 @@ import { Config } from '@/app.module';
 import { METADATA } from '@/providers/media-titles';
 import { SYNC_DATASOURCE } from '@/providers/syncDataSource';
 import { DownloadJobsRepository } from '@/services/database/download-jobs';
+import { ManualNumberingRepository } from '@/services/database/manual-numbering';
 import { MediasRepository } from '@/services/database/medias';
 import { RequestsRepository } from '@/services/database/requests';
 import { TicketsRepository } from '@/services/database/tickets';
+import { ParkedDownloads } from '@/services/downloads/parked';
 import { LibraryPaths } from '@/services/library/paths';
 import { LibraryShelves } from '@/services/library/shelves';
 import { MediaIdentifierService } from '@/services/media-identifier';
 import { MediaLabelizerService } from '@/services/media-labelizer';
 import { PostDownloadPipeline } from '@/services/post-download-pipeline';
+import { TicketService } from '@/services/tickets/ticket.service';
 
 export const identificationProvider: Provider = {
   provide: MediaIdentifierService,
@@ -45,19 +48,42 @@ export const placementProvider: Provider = {
   },
 };
 
+export const parkedDownloadsProvider: Provider = {
+  provide: ParkedDownloads,
+  inject: [
+    ConfigService,
+    DownloadJobsRepository,
+    ManualNumberingRepository,
+    MediasRepository,
+    MediaLabelizerService,
+    TicketService,
+  ],
+  useFactory: (
+    configService: ConfigService<Config, true>,
+    jobs: DownloadJobsRepository,
+    numbering: ManualNumberingRepository,
+    medias: MediasRepository,
+    placement: MediaLabelizerService,
+    tickets: TicketService,
+  ): ParkedDownloads =>
+    new ParkedDownloads(jobs, numbering, medias, placement, tickets, configService.get('server').url),
+};
+
 export const postDownloadPipelineProvider: Provider = {
   provide: PostDownloadPipeline,
-  inject: [DownloadJobsRepository, MediaIdentifierService, MediaLabelizerService, TicketsRepository],
+  inject: [DownloadJobsRepository, MediaIdentifierService, MediaLabelizerService, TicketsRepository, ParkedDownloads],
   useFactory: (
     downloadJobs: DownloadJobsRepository,
     identification: MediaIdentifierService,
     placement: MediaLabelizerService,
     tickets: TicketsRepository,
-  ): PostDownloadPipeline => new PostDownloadPipeline(downloadJobs, identification, placement, tickets),
+    parking: ParkedDownloads,
+  ): PostDownloadPipeline => new PostDownloadPipeline(downloadJobs, identification, placement, tickets, parking),
 };
 
 export const postDownloadProviders: Provider[] = [
   identificationProvider,
   placementProvider,
+  parkedDownloadsProvider,
   postDownloadPipelineProvider,
 ];

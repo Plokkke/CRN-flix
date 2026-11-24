@@ -7,11 +7,12 @@ import {
   Param,
   Post,
   Query,
+  Req,
   Res,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { z } from 'zod';
 
 import { SessionAuthRedirectFilter } from '@/filters/session-auth-redirect.filter';
@@ -102,6 +103,24 @@ export class SeasonRemapAdminController {
         true,
       );
     }
+  }
+
+  @Post('manual')
+  async manual(
+    @Param('imdbId') imdbId: string,
+    @Body('manual') manual: string | undefined,
+    @Body('season') season: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const on = manual === 'on';
+    const actor = `dashboard:${(req as Request & { adminUserId?: string }).adminUserId ?? 'unknown'}`;
+    await this.remap.setManual(imdbId, on, actor);
+    const parsed = seasonSchema.safeParse(season);
+    const message = on
+      ? 'Numérotation manuelle : les prochains téléchargements de cette série attendront ici'
+      : 'Numérotation du catalogue : les prochains téléchargements seront rangés automatiquement';
+    back(res, imdbId, parsed.success ? parsed.data : null, message);
   }
 
   @Post('refresh')

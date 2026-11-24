@@ -9,9 +9,11 @@ import { CATALOG } from '@/providers/catalog';
 import { METADATA } from '@/providers/media-titles';
 import { PLAYER } from '@/providers/player';
 import { LibraryTitlesRepository, ShelfOverridesRepository } from '@/services/database/library';
+import { ManualNumberingRepository } from '@/services/database/manual-numbering';
 import { MediasRepository } from '@/services/database/medias';
 import { PolicyExemptionsRepository } from '@/services/database/policy';
 import { UsersRepository } from '@/services/database/users';
+import { ParkedDownloads } from '@/services/downloads/parked';
 import { LibraryAccess } from '@/services/library/access';
 import { BundledShelfImages } from '@/services/library/images';
 import { ManualDestinations } from '@/services/library/manual-destination';
@@ -26,7 +28,17 @@ import { PolicyService } from '@/services/policy/policy';
 export const libraryProviders: Provider[] = [
   {
     provide: SeasonRemapService,
-    inject: [ConfigService, LibraryPaths, LibraryTitlesRepository, CATALOG, METADATA, MediasRepository, PLAYER],
+    inject: [
+      ConfigService,
+      LibraryPaths,
+      LibraryTitlesRepository,
+      CATALOG,
+      METADATA,
+      MediasRepository,
+      PLAYER,
+      ParkedDownloads,
+      ManualNumberingRepository,
+    ],
     useFactory: (
       configService: ConfigService<Config, true>,
       paths: LibraryPaths,
@@ -35,6 +47,8 @@ export const libraryProviders: Provider[] = [
       metadata: MetadataSource,
       medias: MediasRepository,
       player: Player,
+      parked: ParkedDownloads,
+      numbering: ManualNumberingRepository,
     ): SeasonRemapService =>
       new SeasonRemapService(
         paths,
@@ -44,6 +58,8 @@ export const libraryProviders: Provider[] = [
         medias,
         new JellyfinLayout(),
         player,
+        parked,
+        numbering,
         commonRoot(configService.get('library').mediasPath, configService.get('mediaPaths').downloads),
       ),
   },

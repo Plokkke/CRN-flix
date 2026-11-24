@@ -76,14 +76,23 @@ export class MediaLabelizerService {
     return section === 'series' ? this.config.series : this.config.movies;
   }
 
-  /** Never replaces a file: a target already taken fails the placement, the admin decides. */
-  async move(sourcePath: string, identity: IdentificationResult): Promise<void> {
-    const canonical = await this.toCanonicalIdentity(identity);
+  /** Where `move` would put the file: the layout's name, the source file's extension. */
+  async destinationOf(sourcePath: string, identity: MediaIdentity): Promise<string> {
+    return this.destinationFor(sourcePath, await this.toCanonicalIdentity(identity));
+  }
+
+  private destinationFor(sourcePath: string, canonical: MediaIdentity): string {
     const [folderName, fileName] = this.generateDestination(canonical);
-    const destinationPath = path.join(folderName, `${fileName}${path.extname(sourcePath)}`);
+    return path.join(folderName, `${fileName}${path.extname(sourcePath)}`);
+  }
+
+  /** Never replaces a file: a target already taken fails the placement, the admin decides. */
+  async move(sourcePath: string, identity: MediaIdentity): Promise<void> {
+    const canonical = await this.toCanonicalIdentity(identity);
+    const destinationPath = this.destinationFor(sourcePath, canonical);
 
     MediaLabelizerService.logger.log(`Moving "${path.basename(sourcePath)}" → "${destinationPath}"`);
-    await fs.mkdir(folderName, { recursive: true });
+    await fs.mkdir(path.dirname(destinationPath), { recursive: true });
     if (await exists(destinationPath)) {
       throw new PlacementTakenError(destinationPath);
     }

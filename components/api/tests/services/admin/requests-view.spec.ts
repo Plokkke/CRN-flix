@@ -238,6 +238,7 @@ describe('buildDashboard', () => {
       sourcePaths: [],
       errorMessage: null,
       metadata: { [PLANNED_DOWNLOAD_ID_METADATA_KEY]: 'a1' },
+      mappingImdbId: null,
       createdAt: now,
       updatedAt: now,
     };

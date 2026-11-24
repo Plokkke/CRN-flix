@@ -6,7 +6,9 @@ import { Logger } from '@nestjs/common';
 import { Catalog, CatalogEpisode, LibraryLayout, MediaType, MetadataSource, Player } from '@crn-flix/contracts';
 
 import { LibraryTitlesRepository } from '@/services/database/library';
+import { ManualNumberingRepository } from '@/services/database/manual-numbering';
 import { MediasRepository } from '@/services/database/medias';
+import { ParkedDownloads, PENDING_PREFIX, PendingFile } from '@/services/downloads/parked';
 import {
   Assignment,
   EpisodeFile,
@@ -19,6 +21,7 @@ import {
   twoPhase,
 } from '@/services/library/episode-remap';
 import { LibraryPaths } from '@/services/library/paths';
+import { MediaIdentity } from '@/services/media-labelizer';
 import { isVideoFile } from '@/services/video-files';
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -31,16 +34,21 @@ export class RemapRefusedError extends Error {
   }
 }
 
-/** `diskPath` is relative to the disk the store and the downloads share: what a preview link serves. */
-export type PageFile = EpisodeFile & { diskPath: string };
+/**
+ * `diskPath` is relative to the disk the store and the downloads share: what a preview link serves.
+ * A file waiting in the download folder has no tag (it holds nothing yet) and tells its package.
+ */
+export type PageFile = EpisodeFile & { diskPath: string; pendingFrom?: string };
 
 export type SeasonPage = {
   imdbId: string;
   title: string;
   seasons: number[];
   season: number;
-  /** The season's files, and those whose name tells no season. */
+  /** Files waiting in the download folder (manual numbering), then the season's files and those whose name tells no season. */
   files: PageFile[];
+  /** The show's downloads wait for the admin instead of being placed. */
+  manual: boolean;
   /** The show's other files, which a file of this page may collide with once moved to another season. */
   others: EpisodeFile[];
   /** The whole show: the page lists its season, the search looks everywhere. */
@@ -82,6 +90,8 @@ export class SeasonRemapService {
     private readonly medias: MediasRepository,
     private readonly layout: LibraryLayout,
     private readonly player: Player,
+    private readonly parked: ParkedDownloads,
+    private readonly numbering: ManualNumberingRepository,
     /** The common root of the store and the downloads, as the engine sees it. */
     private readonly diskRoot: string,
   ) {}
@@ -107,8 +117,12 @@ export class SeasonRemapService {
   }
 
   async page(imdbId: string, season: number | null): Promise<SeasonPage | null> {
-    const files = await this.files(imdbId);
-    if (files.length === 0) {
+    const [files, pending, manual] = await Promise.all([
+      this.files(imdbId),
+      this.parked.pending(imdbId),
+      this.numbering.isManual(imdbId),
+    ]);
+    if (files.length === 0 && pending.length === 0) {
       return null;
     }
     const [titles, catalog] = await Promise.all([this.medias.displayTitlesOf([imdbId]), this.episodes(imdbId)]);
@@ -120,13 +134,28 @@ export class SeasonRemapService {
       title: titles.get(imdbId) ?? imdbId,
       seasons: sortedUnique([...onDisk, ...catalog.episodes.map((episode) => episode.season), current]),
       season: current,
-      files: shown.map((file) => ({
-        ...file,
-        diskPath: path.relative(this.diskRoot, path.join(this.root, file.relativePath)),
-      })),
+      files: [...pending.map((file) => this.pendingRow(file)), ...shown.map((file) => this.storeRow(file))],
+      manual,
       others: files.filter((file) => !shown.includes(file)),
       ...catalog,
     };
+  }
+
+  private storeRow(file: EpisodeFile): PageFile {
+    return { ...file, diskPath: path.relative(this.diskRoot, path.join(this.root, file.relativePath)) };
+  }
+
+  private pendingRow(file: PendingFile): PageFile {
+    return {
+      relativePath: file.key,
+      tag: null,
+      diskPath: path.relative(this.diskRoot, file.absolutePath),
+      pendingFrom: file.packageName,
+    };
+  }
+
+  async setManual(imdbId: string, manual: boolean, actor: string): Promise<void> {
+    await (manual ? this.numbering.set(imdbId, actor) : this.numbering.clear(imdbId));
   }
 
   private async episodes(imdbId: string): Promise<Pick<SeasonPage, 'episodes' | 'catalogError'>> {
@@ -138,24 +167,62 @@ export class SeasonRemapService {
     }
   }
 
-  /** Renames the files whose episodes changed, across seasons; returns how many videos moved. */
+  /**
+   * Renames the files whose episodes changed, across seasons, then places the waiting files the
+   * admin classified; returns how many videos moved. Everything is checked before anything moves.
+   */
   async apply(imdbId: string, assignments: Assignment[]): Promise<number> {
-    const files = await this.files(imdbId);
-    const problems = remapProblems(files, assignments);
+    const [files, pending] = await Promise.all([this.files(imdbId), this.parked.pending(imdbId)]);
+    const waiting = pending.map((file): EpisodeFile => ({ relativePath: file.key, tag: null }));
+    const problems = remapProblems([...files, ...waiting], assignments);
     if (problems.length > 0) {
       throw new RemapRefusedError(problems);
     }
-    const changed = assignments.filter((assignment) => !keepsItsTag(files, assignment));
+    const isPending = (assignment: Assignment): boolean => assignment.relativePath.startsWith(PENDING_PREFIX);
+    const changed = assignments.filter((assignment) => !isPending(assignment) && !keepsItsTag(files, assignment));
     const videos = await this.videoMoves(imdbId, changed);
+    const placements = await this.placements(imdbId, pending, assignments.filter(isPending));
     const moves = [...videos, ...(await this.sideMoves(videos))];
-    await this.refuseCollisions(moves);
+    await this.refuseCollisions([...moves, ...placements.map(({ move }) => move)]);
     await this.execute(moves);
     await this.removeEmptyFolders(moves);
-    SeasonRemapService.logger.log(`${imdbId}: ${videos.length} file(s) renamed`);
+    await this.parked.place(placements);
+    SeasonRemapService.logger.log(`${imdbId}: ${videos.length} file(s) renamed, ${placements.length} placed`);
     if (videos.length > 0) {
       this.refreshInBackground();
     }
-    return videos.length;
+    return videos.length + placements.length;
+  }
+
+  private async placements(
+    imdbId: string,
+    pending: PendingFile[],
+    assignments: Assignment[],
+  ): Promise<{ file: PendingFile; identity: MediaIdentity; move: Move }[]> {
+    if (assignments.length === 0) {
+      return [];
+    }
+    const { title, year } = await this.identity(imdbId);
+    const byKey = new Map(pending.map((file) => [file.key, file]));
+    return Promise.all(
+      assignments.map(async ({ relativePath, season, start, end }) => {
+        const file = byKey.get(relativePath)!;
+        const identity: MediaIdentity = {
+          imdbId,
+          title,
+          year,
+          mediaType: 'episode',
+          seasonNumber: season,
+          episodeNumber: start,
+          episodeNumberEnd: end,
+        };
+        return {
+          file,
+          identity,
+          move: { from: file.absolutePath, to: await this.parked.destinationOf(file, identity) },
+        };
+      }),
+    );
   }
 
   private async videoMoves(imdbId: string, assignments: Assignment[]): Promise<Move[]> {
