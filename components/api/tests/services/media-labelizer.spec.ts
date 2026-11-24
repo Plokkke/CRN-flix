@@ -1,7 +1,7 @@
 import { MetadataSource } from '@crn-flix/contracts';
 import { JellyfinLayout } from '@crn-flix/layout-jellyfin';
 
-import { MediaIdentity, MediaLabelizerService } from '@/services/media-labelizer';
+import { MediaIdentity, MediaLabelizerService, PlacementTakenError } from '@/services/media-labelizer';
 
 const config = {
   downloads: '/data/downloads',
@@ -98,6 +98,31 @@ describe('MediaLabelizerService.move', () => {
       section: 'movies',
       folder: 'Charlie.and.the.Chocolate.Factory.(2005).[imdbid-tt0367594]',
     });
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('never replaces a file already at the destination, and leaves the download in place', async () => {
+    const fs = await import('fs/promises');
+    const os = await import('os');
+    const path = await import('path');
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'crn-flix-placement-'));
+    const source = path.join(root, 'downloads', 'Charlie.mkv');
+    await fs.mkdir(path.dirname(source), { recursive: true });
+    await fs.writeFile(source, 'new');
+    const store = {
+      downloads: path.join(root, 'downloads'),
+      movies: path.join(root, 'store', 'movies'),
+      series: path.join(root, 'store', 'series'),
+    };
+    const service = new MediaLabelizerService(store, resolver('Charlie and the Chocolate Factory'), layout);
+    const [folder, file] = service.generateDestination({ ...frenchMovie, title: 'Charlie and the Chocolate Factory' });
+    await fs.mkdir(folder, { recursive: true });
+    await fs.writeFile(path.join(folder, `${file}.mkv`), 'corrected');
+
+    await expect(service.move(source, { ...frenchMovie, confidence: 1 } as never)).rejects.toThrow(PlacementTakenError);
+
+    await expect(fs.readFile(path.join(folder, `${file}.mkv`), 'utf8')).resolves.toBe('corrected');
+    await expect(fs.readFile(source, 'utf8')).resolves.toBe('new');
     await fs.rm(root, { recursive: true, force: true });
   });
 });

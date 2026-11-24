@@ -1,3 +1,4 @@
+import { constants } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -27,6 +28,20 @@ export type PlacedTitle = { imdbId: string; section: LibrarySection; folder: str
 export type PlacementResult = {
   destinationPath: string;
 };
+
+/** The placement target is already a file: replacing it could lose a corrected or better copy. */
+export class PlacementTakenError extends Error {
+  constructor(readonly destinationPath: string) {
+    super(`Destination already taken, nothing replaced: ${destinationPath}`);
+    this.name = 'PlacementTakenError';
+  }
+}
+
+const exists = (target: string): Promise<boolean> =>
+  fs.access(target).then(
+    () => true,
+    () => false,
+  );
 
 export class MediaLabelizerService {
   private static readonly logger = new Logger(MediaLabelizerService.name);
@@ -61,40 +76,46 @@ export class MediaLabelizerService {
     return section === 'series' ? this.config.series : this.config.movies;
   }
 
+  /** Never replaces a file: a target already taken fails the placement, the admin decides. */
   async move(sourcePath: string, identity: IdentificationResult): Promise<void> {
     const canonical = await this.toCanonicalIdentity(identity);
     const [folderName, fileName] = this.generateDestination(canonical);
-    const ext = path.extname(sourcePath);
-    const destinationPath = path.join(folderName, `${fileName + ext}`);
+    const destinationPath = path.join(folderName, `${fileName}${path.extname(sourcePath)}`);
 
     MediaLabelizerService.logger.log(`Moving "${path.basename(sourcePath)}" → "${destinationPath}"`);
     await fs.mkdir(folderName, { recursive: true });
-
-    try {
-      await fs.rename(sourcePath, destinationPath);
-      MediaLabelizerService.logger.log(`Renamed successfully`);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EXDEV') {
-        MediaLabelizerService.logger.log(
-          `Cross-device move, copying ${sourcePath} (this may take a while for large files)`,
-        );
-        try {
-          await fs.copyFile(sourcePath, destinationPath);
-        } catch (copyErr) {
-          await fs.unlink(destinationPath).catch(() => {});
-          throw copyErr;
-        }
-        MediaLabelizerService.logger.log(`Copy complete, removing source`);
-        await fs.unlink(sourcePath);
-      } else {
-        MediaLabelizerService.logger.error(`Move failed: ${(error as Error).message}`);
-        throw error;
-      }
+    if (await exists(destinationPath)) {
+      throw new PlacementTakenError(destinationPath);
     }
+    await this.transfer(sourcePath, destinationPath);
 
     await this.cleanupEmptyParents(path.dirname(sourcePath), this.config.downloads);
     MediaLabelizerService.logger.log(`Placed: ${path.basename(sourcePath)} → ${destinationPath}`);
     await this.announcePlaced(canonical);
+  }
+
+  private async transfer(sourcePath: string, destinationPath: string): Promise<void> {
+    try {
+      await fs.rename(sourcePath, destinationPath);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EXDEV') {
+        MediaLabelizerService.logger.error(`Move failed: ${(error as Error).message}`);
+        throw error;
+      }
+    }
+    MediaLabelizerService.logger.log(
+      `Cross-device move, copying ${sourcePath} (this may take a while for large files)`,
+    );
+    try {
+      await fs.copyFile(sourcePath, destinationPath, constants.COPYFILE_EXCL);
+    } catch (copyErr) {
+      if ((copyErr as NodeJS.ErrnoException).code !== 'EEXIST') {
+        await fs.unlink(destinationPath).catch(() => {});
+      }
+      throw copyErr;
+    }
+    await fs.unlink(sourcePath);
   }
 
   /** The file is in place whatever happens next: a failing hook is logged, never a failed placement. */
