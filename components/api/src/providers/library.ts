@@ -15,7 +15,7 @@ import { UsersRepository } from '@/services/database/users';
 import { LibraryAccess } from '@/services/library/access';
 import { BundledShelfImages } from '@/services/library/images';
 import { ManualDestinations } from '@/services/library/manual-destination';
-import { LibraryPaths } from '@/services/library/paths';
+import { commonRoot, LibraryPaths } from '@/services/library/paths';
 import { PolicyShelfResolver } from '@/services/library/resolver';
 import { SeasonRemapService } from '@/services/library/season-remap';
 import { LibraryShelves } from '@/services/library/shelves';
@@ -26,8 +26,9 @@ import { PolicyService } from '@/services/policy/policy';
 export const libraryProviders: Provider[] = [
   {
     provide: SeasonRemapService,
-    inject: [LibraryPaths, LibraryTitlesRepository, CATALOG, METADATA, MediasRepository, PLAYER],
+    inject: [ConfigService, LibraryPaths, LibraryTitlesRepository, CATALOG, METADATA, MediasRepository, PLAYER],
     useFactory: (
+      configService: ConfigService<Config, true>,
       paths: LibraryPaths,
       titles: LibraryTitlesRepository,
       catalog: Catalog,
@@ -35,7 +36,16 @@ export const libraryProviders: Provider[] = [
       medias: MediasRepository,
       player: Player,
     ): SeasonRemapService =>
-      new SeasonRemapService(paths, titles, catalog, metadata, medias, new JellyfinLayout(), player),
+      new SeasonRemapService(
+        paths,
+        titles,
+        catalog,
+        metadata,
+        medias,
+        new JellyfinLayout(),
+        player,
+        commonRoot(configService.get('library').mediasPath, configService.get('mediaPaths').downloads),
+      ),
   },
   {
     provide: LibraryPaths,

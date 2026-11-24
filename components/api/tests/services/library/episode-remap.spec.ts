@@ -32,10 +32,21 @@ describe('episode remap', () => {
   it('lets assignments override tags, and a file left out keep its own episodes', () => {
     const files = [file('B/S01/B.S01E01-E02.mkv'), file('B/S01/B.S01E03-E04.mkv')];
 
-    const held = claims(files, [{ relativePath: 'B/S01/B.S01E01-E02.mkv', start: 4, end: 5 }]);
+    const held = claims(files, [{ relativePath: 'B/S01/B.S01E01-E02.mkv', season: 1, start: 4, end: 5 }]);
 
-    expect(held.get(1)).toBeUndefined();
-    expect(held.get(4)).toEqual(['B/S01/B.S01E01-E02.mkv', 'B/S01/B.S01E03-E04.mkv']);
+    expect(held.get('S01E01')).toBeUndefined();
+    expect(held.get('S01E04')).toEqual(['B/S01/B.S01E01-E02.mkv', 'B/S01/B.S01E03-E04.mkv']);
+  });
+
+  it('checks conflicts in the season a file moves to', () => {
+    const files = [file('P/Season08/P.S08E02-E03.mkv'), file('P/Season07/P.S07E40.mkv')];
+
+    expect(
+      remapProblems(files, [{ relativePath: 'P/Season08/P.S08E02-E03.mkv', season: 7, start: 40, end: 41 }]),
+    ).toEqual(['S07E40 revendiqué par 2 fichiers']);
+    expect(
+      remapProblems(files, [{ relativePath: 'P/Season08/P.S08E02-E03.mkv', season: 7, start: 41, end: 42 }]),
+    ).toEqual([]);
   });
 
   it('refuses conflicts, invalid ranges and files it does not know', () => {
@@ -43,15 +54,15 @@ describe('episode remap', () => {
 
     expect(
       remapProblems(files, [
-        { relativePath: 'B/S01/B.S01E01-E02.mkv', start: 3, end: 4 },
-        { relativePath: 'B/S01/B.S01E05.mkv', start: 2, end: 1 },
-        { relativePath: '../../etc/passwd', start: 1, end: 1 },
+        { relativePath: 'B/S01/B.S01E01-E02.mkv', season: 1, start: 3, end: 4 },
+        { relativePath: 'B/S01/B.S01E05.mkv', season: 1, start: 2, end: 1 },
+        { relativePath: '../../etc/passwd', season: 1, start: 1, end: 1 },
       ]),
     ).toEqual([
       'Fichier inconnu : ../../etc/passwd',
-      'Plage invalide pour B.S01E05.mkv',
-      'E3 revendiqué par 2 fichiers',
-      'E4 revendiqué par 2 fichiers',
+      'Saison ou épisodes invalides pour B.S01E05.mkv',
+      'S01E03 revendiqué par 2 fichiers',
+      'S01E04 revendiqué par 2 fichiers',
     ]);
   });
 
@@ -60,8 +71,8 @@ describe('episode remap', () => {
 
     expect(
       remapProblems(files, [
-        { relativePath: 'B/S01/B.S01E01-E02.mkv', start: 3, end: 4 },
-        { relativePath: 'B/S01/B.S01E03-E04.mkv', start: 1, end: 2 },
+        { relativePath: 'B/S01/B.S01E01-E02.mkv', season: 1, start: 3, end: 4 },
+        { relativePath: 'B/S01/B.S01E03-E04.mkv', season: 1, start: 1, end: 2 },
       ]),
     ).toEqual([]);
   });

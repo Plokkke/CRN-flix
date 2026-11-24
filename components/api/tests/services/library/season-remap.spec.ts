@@ -42,14 +42,16 @@ describe('SeasonRemapService', () => {
       }),
       { list: async () => [{ section: 'series', folder: FOLDER, imdbId: IMDB }] } as unknown as LibraryTitlesRepository,
       {
-        season: async () => [
-          { number: 1, title: 'Magic Xylophone', frenchTitle: null, overview: null, runtimeMinutes: 7 },
+        episodes: async () => [
+          { season: 1, number: 1, title: 'Magic Xylophone', frenchTitle: null, overview: null, runtimeMinutes: 7 },
+          { season: 2, number: 1, title: 'Dance Mode', frenchTitle: null, overview: null, runtimeMinutes: 7 },
         ],
       } as unknown as Catalog,
       { describe: async () => ({ title: 'Bluey', year: 2018 }) } as unknown as MetadataSource,
       { displayTitlesOf: async () => new Map([[IMDB, 'Bluey']]) } as unknown as MediasRepository,
       new JellyfinLayout(),
       { refreshLibrary } as unknown as Player,
+      media,
     );
   });
 
@@ -60,18 +62,19 @@ describe('SeasonRemapService', () => {
   it('shows the season files next to the catalog episodes', async () => {
     const page = await service.page(IMDB, null);
 
-    expect(page).toMatchObject({ title: 'Bluey', season: 1, seasons: [1] });
+    expect(page).toMatchObject({ title: 'Bluey', season: 1, seasons: [1, 2] });
+    expect(page?.files[0].diskPath).toBe(path.join('store', 'series', FOLDER, 'Season01', name('S01E01-E02')));
     expect(page?.files.map((file) => file.tag)).toEqual([
       { season: 1, start: 1, end: 2 },
       { season: 1, start: 3, end: 4 },
     ]);
-    expect(page?.episodes).toHaveLength(1);
+    expect(page?.episodes).toHaveLength(2);
   });
 
   it('swaps two files with their subtitles, then asks the player to rescan', async () => {
-    const moved = await service.apply(IMDB, 1, [
-      { relativePath: relative(name('S01E01-E02')), start: 3, end: 4 },
-      { relativePath: relative(name('S01E03-E04')), start: 1, end: 2 },
+    const moved = await service.apply(IMDB, [
+      { relativePath: relative(name('S01E01-E02')), season: 1, start: 3, end: 4 },
+      { relativePath: relative(name('S01E03-E04')), season: 1, start: 1, end: 2 },
     ]);
 
     expect(moved).toBe(2);
@@ -85,14 +88,14 @@ describe('SeasonRemapService', () => {
 
   it('leaves unchanged files alone and does not rescan for nothing', async () => {
     await expect(
-      service.apply(IMDB, 1, [{ relativePath: relative(name('S01E01-E02')), start: 1, end: 2 }]),
+      service.apply(IMDB, [{ relativePath: relative(name('S01E01-E02')), season: 1, start: 1, end: 2 }]),
     ).resolves.toBe(0);
     expect(refreshLibrary).not.toHaveBeenCalled();
   });
 
   it('refuses a mapping where two files hold the same episode, moving nothing', async () => {
     await expect(
-      service.apply(IMDB, 1, [{ relativePath: relative(name('S01E01-E02')), start: 4, end: 5 }]),
+      service.apply(IMDB, [{ relativePath: relative(name('S01E01-E02')), season: 1, start: 4, end: 5 }]),
     ).rejects.toThrow(RemapRefusedError);
     expect(await listSeason()).toEqual([name('S01E01-E02'), name('S01E01-E02', 'fr.srt'), name('S01E03-E04')].sort());
   });
@@ -102,9 +105,20 @@ describe('SeasonRemapService', () => {
     await fs.mkdir(old);
     await fs.writeFile(path.join(old, 'Bluey - 05.mkv'), 'x');
 
-    await service.apply(IMDB, 1, [{ relativePath: path.join(FOLDER, 'Season 1', 'Bluey - 05.mkv'), start: 5, end: 6 }]);
+    await service.apply(IMDB, [
+      { relativePath: path.join(FOLDER, 'Season 1', 'Bluey - 05.mkv'), season: 1, start: 5, end: 6 },
+    ]);
 
     expect(await listSeason()).toContain(name('S01E05-E06'));
     await expect(fs.access(old)).rejects.toThrow();
+  });
+
+  it('moves a file to another season, in its own season folder', async () => {
+    await service.apply(IMDB, [{ relativePath: relative(name('S01E03-E04')), season: 2, start: 5, end: 6 }]);
+
+    await expect(fs.readdir(path.join(media, 'store', 'series', FOLDER, 'Season02'))).resolves.toEqual([
+      name('S02E05-E06'),
+    ]);
+    expect((await service.page(IMDB, 2))?.files.map((file) => file.tag?.season)).toEqual([2]);
   });
 });

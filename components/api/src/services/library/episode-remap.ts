@@ -10,8 +10,8 @@ export type EpisodeTag = EpisodeRange & { season: number };
 /** A video of a title folder; `relativePath` is relative to the series store, title folder first. */
 export type EpisodeFile = { relativePath: string; tag: EpisodeTag | null };
 
-/** What the admin wants a file to hold; a file left out keeps its name. */
-export type Assignment = EpisodeRange & { relativePath: string };
+/** What the admin wants a file to hold, in any season; a file left out keeps its name. */
+export type Assignment = EpisodeTag & { relativePath: string };
 
 export type Move = { from: string; to: string };
 
@@ -39,29 +39,41 @@ export function seasonOf(file: EpisodeFile): number | null {
 export const episodesOf = ({ start, end }: EpisodeRange): number[] =>
   Array.from({ length: end - start + 1 }, (_, index) => start + index);
 
-/** Every episode number and the files that claim it once the assignments apply. */
-export function claims(files: EpisodeFile[], assignments: Assignment[]): Map<number, string[]> {
+const pad = (value: number): string => String(value).padStart(2, '0');
+
+/** `S07E40`: how an episode is named in messages and keyed in claims. */
+export const episodeKey = (season: number, episode: number): string => `S${pad(season)}E${pad(episode)}`;
+
+/** Every episode and the files that claim it once the assignments apply, whatever their season. */
+export function claims(files: EpisodeFile[], assignments: Assignment[]): Map<string, string[]> {
   const assigned = new Map(assignments.map((assignment) => [assignment.relativePath, assignment]));
-  const byEpisode = new Map<number, string[]>();
+  const byEpisode = new Map<string, string[]>();
   files.forEach((file) => {
-    const range = assigned.get(file.relativePath) ?? file.tag;
-    (range ? episodesOf(range) : []).forEach((episode) => {
-      byEpisode.set(episode, [...(byEpisode.get(episode) ?? []), file.relativePath]);
+    const tag = assigned.get(file.relativePath) ?? file.tag;
+    if (!tag) {
+      return;
+    }
+    episodesOf(tag).forEach((episode) => {
+      const key = episodeKey(tag.season, episode);
+      byEpisode.set(key, [...(byEpisode.get(key) ?? []), file.relativePath]);
     });
   });
   return byEpisode;
 }
 
-/** Why the assignments cannot apply; empty when they can. */
+const isValid = ({ season, start, end }: Assignment): boolean =>
+  [season, start, end].every(Number.isInteger) && season >= 0 && start >= 1 && end >= start;
+
+/** Why the assignments cannot apply; empty when they can. `files` are every file of the show. */
 export function remapProblems(files: EpisodeFile[], assignments: Assignment[]): string[] {
   const known = new Set(files.map((file) => file.relativePath));
   const unknown = assignments.filter((assignment) => !known.has(assignment.relativePath));
-  const invalid = assignments.filter(({ start, end }) => !Number.isInteger(start) || start < 1 || end < start);
+  const invalid = assignments.filter((assignment) => !isValid(assignment));
   const conflicts = [...claims(files, assignments).entries()].filter(([, holders]) => holders.length > 1);
   return [
     ...unknown.map((assignment) => `Fichier inconnu : ${assignment.relativePath}`),
-    ...invalid.map((assignment) => `Plage invalide pour ${path.basename(assignment.relativePath)}`),
-    ...conflicts.map(([episode, holders]) => `E${episode} revendiqué par ${holders.length} fichiers`),
+    ...invalid.map((assignment) => `Saison ou épisodes invalides pour ${path.basename(assignment.relativePath)}`),
+    ...conflicts.map(([episode, holders]) => `${episode} revendiqué par ${holders.length} fichiers`),
   ];
 }
 

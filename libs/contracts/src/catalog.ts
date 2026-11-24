@@ -48,10 +48,11 @@ export type CatalogItem = MediaItem & {
 };
 
 /**
- * One episode of a season as the catalog numbers it (the numbering requests use). `title` is the
+ * One episode of a show as the catalog numbers it (the numbering requests use). `title` is the
  * English one, `overview` the French one when the catalog has it; nulls when unknown.
  */
 export type CatalogEpisode = {
+  season: number;
   number: number;
   title: string | null;
   frenchTitle: string | null;
@@ -79,6 +80,6 @@ export interface Catalog {
    * throws `CatalogAccountRevokedError` when the catalog refuses to renew them.
    */
   renewCredentials(credentials: unknown, now: Date): Promise<unknown>;
-  /** Every episode of a show's season, aired or not, in order; empty when the catalog does not know it. */
-  season(showImdbId: string, seasonNumber: number): Promise<CatalogEpisode[]>;
+  /** Every episode of a show, specials (season 0) included, aired or not, in order; empty when unknown. */
+  episodes(showImdbId: string): Promise<CatalogEpisode[]>;
 }

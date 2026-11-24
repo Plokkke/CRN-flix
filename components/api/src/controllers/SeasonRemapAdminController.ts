@@ -30,19 +30,22 @@ const repeated = z
   .transform((value) => (value === undefined ? [] : [value].flat()));
 
 const applySchema = z
-  .object({ season: seasonSchema, file: repeated, start: repeated, end: repeated })
-  .refine((form) => form.file.length === form.start.length && form.file.length === form.end.length, {
+  .object({ view: seasonSchema, file: repeated, season: repeated, start: repeated, end: repeated })
+  .refine((form) => [form.season, form.start, form.end].every((values) => values.length === form.file.length), {
     message: 'Formulaire incomplet',
   });
 
+const numberOrNull = (value: string | undefined): number | null => (value?.trim() ? Number(value) : null);
+
 /** A line without a first episode is left alone; a missing last episode means a single one. */
-const assignmentsOf = ({ file, start, end }: z.infer<typeof applySchema>): Assignment[] =>
+const assignmentsOf = ({ file, season, start, end }: z.infer<typeof applySchema>): Assignment[] =>
   file.flatMap((relativePath, index) => {
-    const first = Number(start[index]);
-    if (!start[index]?.trim() || !Number.isFinite(first)) {
+    const first = numberOrNull(start[index]);
+    const inSeason = numberOrNull(season[index]);
+    if (first === null || inSeason === null) {
       return [];
     }
-    return [{ relativePath, start: first, end: end[index]?.trim() ? Number(end[index]) : first }];
+    return [{ relativePath, season: inSeason, start: first, end: numberOrNull(end[index]) ?? first }];
   });
 
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -86,15 +89,15 @@ export class SeasonRemapAdminController {
       return;
     }
     try {
-      const moved = await this.remap.apply(imdbId, form.data.season, assignmentsOf(form.data));
+      const moved = await this.remap.apply(imdbId, assignmentsOf(form.data));
       const done = moved > 0 ? `${moved} fichier(s) renommé(s), Jellyfin réanalyse la bibliothèque` : 'Rien à renommer';
-      back(res, imdbId, form.data.season, done);
+      back(res, imdbId, form.data.view, done);
     } catch (error) {
       const refused = error instanceof RemapRefusedError;
       back(
         res,
         imdbId,
-        form.data.season,
+        form.data.view,
         refused ? error.message : `Échec, renommages annulés : ${describeError(error)}`,
         true,
       );
