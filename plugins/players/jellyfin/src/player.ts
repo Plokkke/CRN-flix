@@ -95,18 +95,19 @@ const KIND_BY_ITEM_TYPE: Record<JellyfinMedia['Type'], ShowcaseKind> = {
 /**
  * Episode-level `ProviderIds.Imdb` is the episode's own imdb, not the show's:
  * episodes are resolved through their series (falling back on their own imdb, as
- * the engine always did). Null when no identity is known.
+ * the engine always did). A file holding several episodes (`S01E03-E04`) is one item
+ * with `IndexNumberEnd`: every episode it holds is available. Empty when no identity is known.
  */
-export function toPlayerAsset(media: JellyfinMedia, seriesImdbById: Map<string, string>): PlayerAsset | null {
+export function toPlayerAssets(media: JellyfinMedia, seriesImdbById: Map<string, string>): PlayerAsset[] {
   if (media.Type === 'Series') {
-    return null;
+    return [];
   }
   const seriesImdb = media.Type === 'Episode' && media.SeriesId ? seriesImdbById.get(media.SeriesId) : undefined;
   const imdbId = seriesImdb ?? media.ProviderIds?.Imdb;
   if (!imdbId) {
-    return null;
+    return [];
   }
-  return {
+  const asset: PlayerAsset = {
     imdbId,
     type: media.Type === 'Movie' ? MediaType.Movie : MediaType.Episode,
     title: media.SeriesName ?? media.Name,
@@ -118,6 +119,16 @@ export function toPlayerAsset(media: JellyfinMedia, seriesImdbById: Map<string, 
     episodeNumber: media.IndexNumber ?? null,
     runtimeMinutes: null,
   };
+  return episodeNumbersOf(media).map((episodeNumber) => ({ ...asset, episodeNumber }));
+}
+
+function episodeNumbersOf(media: JellyfinMedia): (number | null)[] {
+  const first = media.IndexNumber;
+  const last = media.IndexNumberEnd;
+  if (media.Type !== 'Episode' || first === undefined || last === undefined || last <= first) {
+    return [first ?? null];
+  }
+  return Array.from({ length: last - first + 1 }, (_, index) => first + index);
 }
 
 function shuffled<T>(items: T[]): T[] {
@@ -148,7 +159,7 @@ export class JellyfinPlayer implements Player {
     const seriesImdbById = new Map(
       medias.filter((m) => m.Type === 'Series' && m.ProviderIds?.Imdb).map((m) => [m.Id, m.ProviderIds.Imdb]),
     );
-    const assets = medias.flatMap((media) => toPlayerAsset(media, seriesImdbById) ?? []);
+    const assets = medias.flatMap((media) => toPlayerAssets(media, seriesImdbById));
     const playable = medias.filter((m) => m.Type !== 'Series').length;
     JellyfinPlayer.logger.log(
       `${assets.length}/${playable} Jellyfin assets identified (${seriesImdbById.size} series with an imdb id)`,
