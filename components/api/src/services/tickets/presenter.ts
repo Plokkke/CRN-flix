@@ -311,6 +311,21 @@ function policyAnomalyView(ticket: TicketEntity): TicketView {
   };
 }
 
+function episodeMappingView(ticket: TicketEntity): TicketView {
+  const payload = ticket.payload as TicketPayloadMap[TicketCategory.EpisodeMapping];
+  return {
+    title: ticket.title,
+    tone: 'info',
+    fields: [
+      { name: 'Série', value: `${payload.title} (${payload.imdbId})` },
+      { name: 'Fichiers', value: payload.fileNames.join('\n').slice(0, 1024) },
+      { name: 'À classer sur', value: payload.pageUrl },
+    ],
+    footer: 'Numérotation manuelle · se résout seul une fois tous les fichiers classés',
+    operations: OPERATIONS_BY_CATEGORY[TicketCategory.EpisodeMapping],
+  };
+}
+
 export function buildTicketView(ticket: TicketEntity, context: TicketContext = {}): TicketView {
   if (ticket.status !== TicketStatus.Open) {
     return closedView(ticket);
@@ -335,6 +350,8 @@ export function buildTicketView(ticket: TicketEntity, context: TicketContext = {
       return policyAnomalyView(ticket);
     case TicketCategory.IntegrationFailure:
       return integrationFailureView(ticket);
+    case TicketCategory.EpisodeMapping:
+      return episodeMappingView(ticket);
   }
 }
 

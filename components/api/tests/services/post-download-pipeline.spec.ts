@@ -15,6 +15,7 @@ function buildJob(metadata: Record<string, string>): DownloadJobEntity {
     sourcePaths: ['/downloads/Movie.2020.1080p/Movie.2020.1080p.mkv'],
     errorMessage: null,
     metadata,
+    mappingImdbId: null,
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };
@@ -26,6 +27,7 @@ function buildStubs(job: DownloadJobEntity, ticket: { category: TicketCategory; 
       get: jest.fn().mockResolvedValue(job),
       updateStatus: jest.fn().mockResolvedValue(undefined),
       updateSourcePaths: jest.fn().mockResolvedValue(undefined),
+      park: jest.fn().mockResolvedValue(undefined),
     },
     identification: {
       identifyFromRequest: jest.fn().mockResolvedValue({ imdbId: 'tt1', title: 'Movie', mediaType: 'movie' }),
@@ -35,6 +37,7 @@ function buildStubs(job: DownloadJobEntity, ticket: { category: TicketCategory; 
     },
     placement: { move: jest.fn().mockResolvedValue(undefined) },
     tickets: { get: jest.fn().mockResolvedValue(ticket) },
+    parking: { shouldPark: jest.fn().mockResolvedValue(false) },
   };
 }
 
@@ -47,6 +50,7 @@ function buildPipeline(
     stubs.identification as unknown as MediaIdentifierService,
     stubs.placement as unknown as MediaLabelizerService,
     stubs.tickets as unknown as TicketsRepository,
+    stubs.parking,
     exists,
   );
 }
@@ -132,6 +136,47 @@ describe('PostDownloadPipeline season packs', () => {
     await buildPipeline(stubs, stillDownloaded).retryAs('j1', designated);
 
     expect(stubs.placement.move.mock.calls.map(([file]) => file)).toEqual([episode(2), episode(3)]);
+    expect(stubs.downloadJobs.updateStatus).toHaveBeenLastCalledWith('j1', DownloadJobStatus.Completed);
+  });
+});
+
+describe('PostDownloadPipeline manual numbering', () => {
+  const episode = (episodeNumber: number) => ({
+    imdbId: 'tt3121722',
+    title: 'PAW Patrol',
+    mediaType: 'episode',
+    seasonNumber: 8,
+    episodeNumber,
+  });
+
+  it('leaves the episodes of a show numbered by hand in the download folder, waiting for the admin', async () => {
+    const job = {
+      ...buildJob({ imdbid: 'tt3121722' }),
+      sourcePaths: ['/downloads/P/PAW.S08E01.mkv', '/downloads/P/PAW.S08E02.mkv'],
+    };
+    const stubs = buildStubs(job, null);
+    stubs.identification.identifyWithImdbId.mockResolvedValueOnce(episode(1)).mockResolvedValueOnce(episode(2));
+    stubs.parking.shouldPark.mockResolvedValue(true);
+
+    await buildPipeline(stubs).processJob('j1');
+
+    expect(stubs.placement.move).not.toHaveBeenCalled();
+    expect(stubs.downloadJobs.park).toHaveBeenCalledWith('j1', 'tt3121722', job.sourcePaths);
+    expect(stubs.downloadJobs.updateStatus).not.toHaveBeenCalledWith('j1', DownloadJobStatus.Completed);
+  });
+
+  it('still places movies and the shows numbered by the catalog', async () => {
+    const stubs = buildStubs(buildJob({ imdbid: 'tt1234567' }), null);
+    stubs.identification.identifyWithImdbId.mockResolvedValue({
+      imdbId: 'tt1234567',
+      title: 'Movie',
+      mediaType: 'movie',
+    });
+    stubs.parking.shouldPark.mockResolvedValue(true);
+
+    await buildPipeline(stubs).processJob('j1');
+
+    expect(stubs.placement.move).toHaveBeenCalledTimes(1);
     expect(stubs.downloadJobs.updateStatus).toHaveBeenLastCalledWith('j1', DownloadJobStatus.Completed);
   });
 });

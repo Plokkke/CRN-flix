@@ -15,7 +15,9 @@ export const SEASON_REMAP_CSS = `
   th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 6px; border-bottom: 1px solid var(--border); }
   td { padding: 6px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
   td.name { word-break: break-all; }
+  tr.pending td { background: var(--tone-warning-bg); }
   tr.changed td { background: var(--tone-info-bg); }
+  form.manual { margin: 0 0 8px 0; }
   tr.target td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   input.ep { width: 60px; padding: 4px 6px; margin: 0; font-size: 14px; }
   .tag { font-family: monospace; font-size: 13px; white-space: nowrap; }

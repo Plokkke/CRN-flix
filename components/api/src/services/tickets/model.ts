@@ -26,6 +26,8 @@ export enum TicketCategory {
   PolicyAppeal = 'policy-appeal',
   /** A title on a shared shelf now breaks a rule for everyone; it stays there until an admin decides. */
   PolicyAnomaly = 'policy-anomaly',
+  /** A download of a show numbered by hand waits for the admin to tell which episodes each file holds. */
+  EpisodeMapping = 'episode-mapping',
 }
 
 export enum TicketStatus {
@@ -94,6 +96,14 @@ export type TicketPayloadMap = {
     shelf: string;
     refusals: { ruleId: string | null; ruleName: string; summary: string }[];
   };
+  [TicketCategory.EpisodeMapping]: {
+    jobId: string;
+    imdbId: string;
+    title: string;
+    fileNames: string[];
+    /** The episodes page of the show, where the files are classified. */
+    pageUrl: string;
+  };
 };
 
 export type TicketEntity<C extends TicketCategory = TicketCategory> = {
@@ -140,6 +150,7 @@ export const OPERATIONS_BY_CATEGORY: Record<TicketCategory, TicketOperationKind[
   [TicketCategory.IntegrationFailure]: ['resolveManually'],
   [TicketCategory.PolicyAppeal]: ['grantExemption', 'excludeTitle', 'reject', 'reply'],
   [TicketCategory.PolicyAnomaly]: ['excludeTitle', 'unpublish'],
+  [TicketCategory.EpisodeMapping]: ['resolveManually'],
 };
 
 export type OperationOutcome =

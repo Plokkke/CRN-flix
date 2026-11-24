@@ -5,10 +5,15 @@ import * as path from 'path';
 import { Catalog, MetadataSource, Player } from '@crn-flix/contracts';
 import { JellyfinLayout } from '@crn-flix/layout-jellyfin';
 
+import { DownloadJobsRepository, DownloadJobStatus } from '@/services/database/download-jobs';
 import { LibraryTitlesRepository } from '@/services/database/library';
+import { ManualNumberingRepository } from '@/services/database/manual-numbering';
 import { MediasRepository } from '@/services/database/medias';
+import { ParkedDownloads } from '@/services/downloads/parked';
 import { LibraryPaths } from '@/services/library/paths';
 import { RemapRefusedError, SeasonRemapService } from '@/services/library/season-remap';
+import { MediaLabelizerService } from '@/services/media-labelizer';
+import { TicketService } from '@/services/tickets/ticket.service';
 
 const IMDB = 'tt7678620';
 const FOLDER = 'Bluey.(2018).[imdbid-tt7678620]';
@@ -19,6 +24,12 @@ describe('SeasonRemapService', () => {
   let season: string;
   let refreshLibrary: jest.Mock;
   let service: SeasonRemapService;
+  let jobs: {
+    listAwaitingMapping: jest.Mock;
+    get: jest.Mock;
+    updateStatus: jest.Mock;
+    updateSourcePaths: jest.Mock;
+  };
 
   const listSeason = async (): Promise<string[]> => (await fs.readdir(season)).sort();
 
@@ -32,6 +43,12 @@ describe('SeasonRemapService', () => {
       ),
     );
     refreshLibrary = jest.fn().mockResolvedValue(undefined);
+    jobs = {
+      listAwaitingMapping: jest.fn().mockResolvedValue([]),
+      get: jest.fn(),
+      updateStatus: jest.fn().mockResolvedValue(undefined),
+      updateSourcePaths: jest.fn().mockResolvedValue(undefined),
+    };
     service = new SeasonRemapService(
       new LibraryPaths({
         mediasPath: media,
@@ -51,6 +68,23 @@ describe('SeasonRemapService', () => {
       { displayTitlesOf: async () => new Map([[IMDB, 'Bluey']]) } as unknown as MediasRepository,
       new JellyfinLayout(),
       { refreshLibrary } as unknown as Player,
+      new ParkedDownloads(
+        jobs as unknown as DownloadJobsRepository,
+        {} as ManualNumberingRepository,
+        {} as MediasRepository,
+        new MediaLabelizerService(
+          {
+            downloads: path.join(media, 'downloads'),
+            movies: path.join(media, 'store', 'movies'),
+            series: path.join(media, 'store', 'series'),
+          },
+          { describe: async () => ({ title: 'Bluey', year: 2018 }) } as unknown as MetadataSource,
+          new JellyfinLayout(),
+        ),
+        {} as TicketService,
+        'https://crn-flix.example',
+      ),
+      { isManual: async () => true } as unknown as ManualNumberingRepository,
       media,
     );
   });
@@ -120,5 +154,43 @@ describe('SeasonRemapService', () => {
       name('S02E05-E06'),
     ]);
     expect((await service.page(IMDB, 2))?.files.map((file) => file.tag?.season)).toEqual([2]);
+  });
+
+  it('places a waiting download where the admin says, then completes its job', async () => {
+    const download = path.join(media, 'downloads', 'PAW', 'Bluey.S08E02.FRENCH.mkv');
+    await fs.mkdir(path.dirname(download), { recursive: true });
+    await fs.writeFile(download, 'x');
+    const job = { id: 'j1', packageName: 'PAW', status: DownloadJobStatus.AwaitingMapping, sourcePaths: [download] };
+    jobs.listAwaitingMapping.mockResolvedValue([job]);
+    jobs.get.mockResolvedValue(job);
+
+    const page = await service.page(IMDB, 1);
+    expect(page?.manual).toBe(true);
+    expect(page?.files[0]).toMatchObject({
+      relativePath: 'pending:j1/Bluey.S08E02.FRENCH.mkv',
+      tag: null,
+      pendingFrom: 'PAW',
+    });
+    expect(page?.files[0].diskPath).toBe(path.join('downloads', 'PAW', 'Bluey.S08E02.FRENCH.mkv'));
+
+    await service.apply(IMDB, [{ relativePath: 'pending:j1/Bluey.S08E02.FRENCH.mkv', season: 1, start: 5, end: 6 }]);
+
+    expect(await listSeason()).toContain(name('S01E05-E06'));
+    await expect(fs.access(download)).rejects.toThrow();
+    expect(jobs.updateStatus).toHaveBeenCalledWith('j1', DownloadJobStatus.Completed);
+  });
+
+  it('refuses to give a waiting file an episode another file holds', async () => {
+    const download = path.join(media, 'downloads', 'PAW', 'other.mkv');
+    await fs.mkdir(path.dirname(download), { recursive: true });
+    await fs.writeFile(download, 'x');
+    jobs.listAwaitingMapping.mockResolvedValue([
+      { id: 'j1', packageName: 'PAW', status: DownloadJobStatus.AwaitingMapping, sourcePaths: [download] },
+    ]);
+
+    await expect(
+      service.apply(IMDB, [{ relativePath: 'pending:j1/other.mkv', season: 1, start: 2, end: 2 }]),
+    ).rejects.toThrow('S01E02 revendiqué par 2 fichiers');
+    await expect(fs.access(download)).resolves.toBeUndefined();
   });
 });

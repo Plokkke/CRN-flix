@@ -12,6 +12,9 @@ import { isVideoFile } from './video-files';
 
 type Identify = (videoFile: string) => Promise<IdentificationResult | null>;
 
+/** Shows numbered by hand: their episodes are not placed, they wait for the admin. */
+export type Parking = { shouldPark(imdbId: string): Promise<boolean> };
+
 const fileExists = (filePath: string): Promise<boolean> =>
   fs.access(filePath).then(
     () => true,
@@ -28,6 +31,7 @@ export class PostDownloadPipeline {
     private readonly identification: MediaIdentifierService,
     private readonly placement: MediaLabelizerService,
     private readonly tickets: TicketsRepository,
+    private readonly parking: Parking,
     private readonly exists: (filePath: string) => Promise<boolean> = fileExists,
   ) {}
 
@@ -65,12 +69,14 @@ export class PostDownloadPipeline {
   /**
    * Places every video still waiting in the download folder. A file already placed by an earlier
    * attempt is gone from it and simply skipped, so a retry resumes where the last one stopped.
-   * On failure, the job keeps only the files left to place: that is what the ticket shows.
+   * On failure, the job keeps only the files left to place: that is what the ticket shows. An
+   * episode of a show numbered by hand is left where it is; the job then waits for the admin.
    */
   private async placeAll(job: DownloadJobEntity, identify: Identify): Promise<void> {
     await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Identifying);
     const pending = await this.pendingVideos(job);
     PostDownloadPipeline.logger.log(`Job ${job.id} — ${pending.length} video file(s) to place`);
+    const parked: { file: string; imdbId: string }[] = [];
 
     for (const [index, videoFile] of pending.entries()) {
       try {
@@ -78,15 +84,35 @@ export class PostDownloadPipeline {
         if (!identity) {
           throw new Error(`Identification failed for ${path.basename(videoFile)}`);
         }
+        if (await this.parks(identity)) {
+          parked.push({ file: videoFile, imdbId: identity.imdbId });
+          continue;
+        }
         await this.placement.move(videoFile, identity);
       } catch (error) {
-        await this.fail(job, pending.slice(index), describeError(error));
+        await this.fail(job, [...parked.map(({ file }) => file), ...pending.slice(index)], describeError(error));
         return;
       }
     }
+    await this.finish(job, parked);
+  }
 
-    await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Completed);
-    PostDownloadPipeline.logger.log(`Job ${job.id} completed successfully`);
+  private async parks(identity: IdentificationResult): Promise<boolean> {
+    return identity.mediaType === 'episode' && this.parking.shouldPark(identity.imdbId);
+  }
+
+  private async finish(job: DownloadJobEntity, parked: { file: string; imdbId: string }[]): Promise<void> {
+    if (parked.length === 0) {
+      await this.downloadJobs.updateStatus(job.id, DownloadJobStatus.Completed);
+      PostDownloadPipeline.logger.log(`Job ${job.id} completed successfully`);
+      return;
+    }
+    PostDownloadPipeline.logger.log(`Job ${job.id} — ${parked.length} file(s) wait for the admin (manual numbering)`);
+    await this.downloadJobs.park(
+      job.id,
+      parked[0].imdbId,
+      parked.map(({ file }) => file),
+    );
   }
 
   private async pendingVideos(job: DownloadJobEntity): Promise<string[]> {

@@ -3,7 +3,7 @@ import * as path from 'path';
 import { CatalogEpisode } from '@crn-flix/contracts';
 import { escapeHtml } from '@crn-flix/design-system';
 
-import { episodeKey, EpisodeTag } from '@/services/library/episode-remap';
+import { episodeKey, EpisodeTag, parseEpisodeTag } from '@/services/library/episode-remap';
 import { PageFile, SeasonPage } from '@/services/library/season-remap';
 import { adminPage } from '@/web/templates/admin-page';
 import { SEASON_REMAP_CSS, SEASON_REMAP_JS } from '@/web/templates/admin-season-remap-assets';
@@ -21,14 +21,22 @@ const displayTitle = (episode: CatalogEpisode): string => episode.frenchTitle ??
 const field = (name: string, value: number | undefined, label: string, min: number): string =>
   `<input class="ep" type="number" min="${min}" name="${name}" value="${value ?? ''}" aria-label="${label}" />`;
 
+/** What the release name claims, for information only: it is the numbering being corrected. */
+const releaseHint = (name: string): string => {
+  const tag = parseEpisodeTag(name);
+  return tag ? ` (release : ${tagLabel(tag)})` : '';
+};
+
 function fileRow(file: PageFile, season: number): string {
   const name = path.basename(file.relativePath);
   const tag = file.tag;
   const initial = tag ? `${tag.season}:${tag.start}-${tag.end}` : '';
-  return `<tr data-file data-name="${escapeHtml(name)}" data-initial="${initial}" data-disk-path="${escapeHtml(file.diskPath)}">
-    <td class="name">${escapeHtml(name)}<div class="hint">${escapeHtml(path.dirname(file.relativePath))}</div>
+  const where = file.pendingFrom ? `En attente · ${file.pendingFrom}` : path.dirname(file.relativePath);
+  const current = file.pendingFrom ? `à classer${releaseHint(name)}` : tagLabel(tag);
+  return `<tr data-file data-name="${escapeHtml(name)}" data-initial="${initial}" data-disk-path="${escapeHtml(file.diskPath)}"${file.pendingFrom ? ' class="pending"' : ''}>
+    <td class="name">${escapeHtml(name)}<div class="hint">${escapeHtml(where)}</div>
       <input type="hidden" name="file" value="${escapeHtml(file.relativePath)}" /></td>
-    <td class="tag">${tagLabel(tag)}</td>
+    <td class="tag">${escapeHtml(current)}</td>
     <td>${field('season', tag?.season ?? season, 'Saison', 0)}</td>
     <td>${field('start', tag?.start, 'Premier épisode', 1)}</td>
     <td>${field('end', tag && tag.end > tag.start ? tag.end : undefined, 'Dernier épisode', 1)}</td>
@@ -36,6 +44,24 @@ function fileRow(file: PageFile, season: number): string {
     <td class="play"><button type="button" class="link" data-play title="Ouvrir dans VLC">▶ VLC</button>
       <button type="button" class="link" data-copy title="Copier le lien">Lien</button></td>
   </tr>`;
+}
+
+function manualToggle(page: SeasonPage, action: string): string {
+  const [label, next, hint] = page.manual
+    ? [
+        'Revenir à la numérotation du catalogue',
+        'off',
+        'Numérotation manuelle : les téléchargements de cette série attendent ici au lieu d’être rangés.',
+      ]
+    : [
+        'Passer en numérotation manuelle',
+        'on',
+        'Les téléchargements de cette série sont rangés selon le nom de la release.',
+      ];
+  return `<form method="POST" action="${action}/manual" class="actions manual">
+    <input type="hidden" name="manual" value="${next}" /><input type="hidden" name="season" value="${page.season}" />
+    <span class="hint">${hint}</span><button type="submit" class="secondary">${label}</button>
+  </form>`;
 }
 
 function episodeItem(episode: CatalogEpisode): string {
@@ -113,6 +139,7 @@ export const adminSeasonRemapTemplate = ({
     <p><a href="/admin/library?type=series">← Bibliothèque</a></p>
     <h2>🎞️ ${escapeHtml(page.title)} — épisodes</h2>
     <p class="hint">Indiquez la saison et les épisodes que contient chaque fichier (le dernier seulement s’il en contient plusieurs), dans la numérotation du catalogue. Les fichiers sont renommés dans leur dossier, sous-titres compris, puis Jellyfin réanalyse la bibliothèque.</p>
+    ${manualToggle(page, action)}
     ${seasonTabs(page)}
     ${flash(flashMessage, flashError)}
     ${previewSettings}
